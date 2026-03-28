@@ -8,6 +8,7 @@ from app.integrations.azure import build_moderation_provider
 from app.schemas.common import JobAcceptedResponse
 from app.schemas.projects import ScriptVersionResponse
 from app.schemas.scripts import ScriptPatchRequest
+from app.services.content_planning_service import ContentPlanningService
 from app.services.generation_service import GenerationService
 
 router = APIRouter()
@@ -54,3 +55,14 @@ def patch_script(
     settings=Depends(get_settings_dep),
 ):
     return GenerationService(db, settings).patch_script(auth, project_id, script_version_id, payload)
+
+
+@router.post("/{project_id}/scripts/{script_version_id}:approve", response_model=ScriptVersionResponse)
+def approve_script(
+    project_id: str,
+    script_version_id: str,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return ContentPlanningService(db, settings).approve_script(auth, project_id, script_version_id)

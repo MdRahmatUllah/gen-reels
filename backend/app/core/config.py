@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     minio_bucket_quarantine: str = "reels-quarantine"
     minio_bucket_temp: str = "reels-temp"
     minio_bucket_models: str = "reels-models"
+    local_storage_root: str = ".local-storage"
     jwt_private_key: str | None = None
     jwt_public_key: str | None = None
     jwt_access_token_ttl_minutes: int = 15
@@ -68,6 +69,8 @@ class Settings(BaseSettings):
     password_reset_ttl_minutes: int = 60
     idempotency_retention_hours: int = 24
     planning_job_timeout_minutes: int = 30
+    render_job_timeout_minutes: int = 120
+    allow_export_without_music: bool = True
     use_stub_providers: bool = False
 
     @computed_field

@@ -588,6 +588,7 @@ class GenerationService:
         self.db.add(script)
         self.db.flush()
         project.active_script_version_id = script.id
+        project.active_scene_plan_id = None
         project.stage = ProjectStage.script
         provider_run.status = ProviderRunStatus.completed
         provider_run.response_payload = output

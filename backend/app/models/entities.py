@@ -48,6 +48,7 @@ class JobKind(str, enum.Enum):
     script_generation = "script_generation"
     scene_plan_generation = "scene_plan_generation"
     prompt_pair_generation = "prompt_pair_generation"
+    render_generation = "render_generation"
 
 
 class StepKind(str, enum.Enum):
@@ -55,6 +56,14 @@ class StepKind(str, enum.Enum):
     script_generation = "script_generation"
     scene_plan_generation = "scene_plan_generation"
     prompt_pair_generation = "prompt_pair_generation"
+    frame_pair_generation = "frame_pair_generation"
+    video_generation = "video_generation"
+    audio_normalization = "audio_normalization"
+    narration_generation = "narration_generation"
+    music_preparation = "music_preparation"
+    subtitle_generation = "subtitle_generation"
+    clip_retime = "clip_retime"
+    composition = "composition"
 
 
 class ScriptSource(str, enum.Enum):
@@ -90,6 +99,53 @@ class ProviderErrorCategory(str, enum.Enum):
 class ModerationDecision(str, enum.Enum):
     allowed = "allowed"
     blocked = "blocked"
+
+
+class ModerationReviewStatus(str, enum.Enum):
+    none = "none"
+    pending = "pending"
+    released = "released"
+    rejected = "rejected"
+
+
+class SubscriptionStatus(str, enum.Enum):
+    not_configured = "not_configured"
+    checkout_pending = "checkout_pending"
+    trialing = "trialing"
+    active = "active"
+    past_due = "past_due"
+    cancelled = "cancelled"
+
+
+class CreditLedgerEntryKind(str, enum.Enum):
+    provider_run = "provider_run"
+    export_event = "export_event"
+    manual_adjustment = "manual_adjustment"
+    reconciliation = "reconciliation"
+
+
+class AssetType(str, enum.Enum):
+    image = "image"
+    video_clip = "video_clip"
+    narration = "narration"
+    music = "music"
+    subtitle = "subtitle"
+    export = "export"
+    reference_image = "reference_image"
+    upload = "upload"
+
+
+class AssetRole(str, enum.Enum):
+    scene_start_frame = "scene_start_frame"
+    scene_end_frame = "scene_end_frame"
+    continuity_anchor = "continuity_anchor"
+    raw_video_clip = "raw_video_clip"
+    silent_video_clip = "silent_video_clip"
+    retimed_video_clip = "retimed_video_clip"
+    narration_track = "narration_track"
+    music_bed = "music_bed"
+    subtitle_file = "subtitle_file"
+    final_export = "final_export"
 
 
 class TimestampMixin:
@@ -350,17 +406,23 @@ class RenderJob(Base, TimestampMixin):
     workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    script_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("script_versions.id"))
+    scene_plan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scene_plans.id"))
+    consistency_pack_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("consistency_packs.id"))
+    voice_preset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("voice_presets.id"))
     job_kind: Mapped[JobKind] = mapped_column(sa.Enum(JobKind), nullable=False)
     queue_name: Mapped[str] = mapped_column(sa.String(64), default="planning", nullable=False)
     status: Mapped[JobStatus] = mapped_column(sa.Enum(JobStatus), default=JobStatus.queued)
     idempotency_key: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     request_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    allow_export_without_music: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
     error_code: Mapped[str | None] = mapped_column(sa.String(64))
     error_message: Mapped[str | None] = mapped_column(sa.Text)
     retry_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
 class RenderStep(Base, TimestampMixin):
@@ -369,14 +431,96 @@ class RenderStep(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     render_job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("render_jobs.id"), nullable=False, index=True)
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    scene_segment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scene_segments.id"))
     step_kind: Mapped[StepKind] = mapped_column(sa.Enum(StepKind), nullable=False)
     step_index: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
     status: Mapped[JobStatus] = mapped_column(sa.Enum(JobStatus), default=JobStatus.queued)
+    is_stale: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    retry_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    retry_history: Mapped[list[dict[str, object]]] = mapped_column(json_type(), default=list, nullable=False)
+    recovery_source_step_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_steps.id"))
+    checkpoint_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    last_checkpoint_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     input_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     output_payload: Mapped[dict[str, object] | None] = mapped_column(json_type())
     error_code: Mapped[str | None] = mapped_column(sa.String(64))
     error_message: Mapped[str | None] = mapped_column(sa.Text)
     started_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class Asset(Base, TimestampMixin):
+    __tablename__ = "assets"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    render_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_jobs.id"))
+    render_step_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_steps.id"))
+    scene_segment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scene_segments.id"))
+    parent_asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assets.id"))
+    provider_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("provider_runs.id"))
+    consistency_pack_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("consistency_packs.id")
+    )
+    asset_type: Mapped[AssetType] = mapped_column(sa.Enum(AssetType), nullable=False)
+    asset_role: Mapped[AssetRole] = mapped_column(sa.Enum(AssetRole), nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(32), default="completed", nullable=False)
+    bucket_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    object_name: Mapped[str] = mapped_column(sa.String(1024), nullable=False, unique=True)
+    file_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    duration_ms: Mapped[int | None] = mapped_column(sa.Integer)
+    width: Mapped[int | None] = mapped_column(sa.Integer)
+    height: Mapped[int | None] = mapped_column(sa.Integer)
+    frame_rate: Mapped[float | None] = mapped_column(sa.Float)
+    quarantine_bucket_name: Mapped[str | None] = mapped_column(sa.String(255))
+    quarantine_object_name: Mapped[str | None] = mapped_column(sa.String(1024))
+    quarantined_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    released_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    has_audio_stream: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    source_audio_policy: Mapped[str] = mapped_column(
+        sa.String(32), default="request_silent", nullable=False
+    )
+    timing_alignment_strategy: Mapped[str] = mapped_column(
+        sa.String(32), default="none", nullable=False
+    )
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
+
+
+class AssetVariant(Base):
+    __tablename__ = "asset_variants"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id"), nullable=False, index=True)
+    variant_asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id"), nullable=False)
+    variant_kind: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
+class ExportRecord(Base, TimestampMixin):
+    __tablename__ = "exports"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    render_job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("render_jobs.id"), nullable=False)
+    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id"), nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(32), default="completed", nullable=False)
+    file_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    format: Mapped[str] = mapped_column(sa.String(32), default="mp4", nullable=False)
+    bucket_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    object_name: Mapped[str] = mapped_column(sa.String(1024), nullable=False, unique=True)
+    duration_ms: Mapped[int | None] = mapped_column(sa.Integer)
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
     completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
@@ -398,6 +542,11 @@ class ProviderRun(Base):
     request_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     response_payload: Mapped[dict[str, object] | None] = mapped_column(json_type())
     latency_ms: Mapped[int | None] = mapped_column(sa.Integer)
+    external_request_id: Mapped[str | None] = mapped_column(sa.String(255))
+    normalized_cost_cents: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    currency: Mapped[str] = mapped_column(sa.String(8), default="USD", nullable=False)
+    billable_quantity: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    continuity_mode: Mapped[str | None] = mapped_column(sa.String(64))
     error_category: Mapped[ProviderErrorCategory | None] = mapped_column(
         sa.Enum(ProviderErrorCategory)
     )
@@ -415,10 +564,19 @@ class ModerationEvent(Base):
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
     workspace_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("workspaces.id"), index=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    related_asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assets.id"), index=True)
     target_type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     target_id: Mapped[str | None] = mapped_column(sa.String(64))
     input_text: Mapped[str] = mapped_column(sa.Text, nullable=False)
     decision: Mapped[ModerationDecision] = mapped_column(sa.Enum(ModerationDecision), nullable=False)
+    review_status: Mapped[ModerationReviewStatus] = mapped_column(
+        sa.Enum(ModerationReviewStatus),
+        default=ModerationReviewStatus.none,
+        nullable=False,
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    review_notes: Mapped[str | None] = mapped_column(sa.Text)
     provider_name: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     severity_summary: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     response_payload: Mapped[dict[str, object] | None] = mapped_column(json_type())
@@ -447,6 +605,51 @@ class AuditEvent(Base):
     target_type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     target_id: Mapped[str | None] = mapped_column(sa.String(64))
     payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
+class Subscription(Base, TimestampMixin):
+    __tablename__ = "subscriptions"
+    __table_args__ = (UniqueConstraint("workspace_id", name="uq_subscription_workspace"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    provider_name: Mapped[str] = mapped_column(sa.String(128), default="stub_billing", nullable=False)
+    provider_customer_id: Mapped[str | None] = mapped_column(sa.String(255))
+    provider_subscription_id: Mapped[str | None] = mapped_column(sa.String(255))
+    plan_name: Mapped[str] = mapped_column(sa.String(100), default="Studio", nullable=False)
+    status: Mapped[SubscriptionStatus] = mapped_column(
+        sa.Enum(SubscriptionStatus),
+        default=SubscriptionStatus.not_configured,
+        nullable=False,
+    )
+    monthly_credit_allowance: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    current_period_start_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    current_period_end_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    cancel_at_period_end: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+
+
+class CreditLedgerEntry(Base):
+    __tablename__ = "credit_ledger_entries"
+    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_credit_ledger_idempotency_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    render_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_jobs.id"), index=True)
+    render_step_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_steps.id"))
+    provider_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("provider_runs.id"), index=True)
+    export_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("exports.id"), index=True)
+    kind: Mapped[CreditLedgerEntryKind] = mapped_column(sa.Enum(CreditLedgerEntryKind), nullable=False)
+    billable_unit: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    quantity: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    credits_delta: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    amount_cents: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    currency: Mapped[str] = mapped_column(sa.String(8), default="USD", nullable=False)
+    balance_after: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
 
 

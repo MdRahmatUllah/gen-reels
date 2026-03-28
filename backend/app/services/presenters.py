@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from app.models.entities import (
+    Asset,
     IdeaCandidate,
     IdeaSet,
     JobStatus,
     Project,
     ProjectBrief,
     RenderJob,
+    RenderStep,
     ScenePlan,
     SceneSegment,
     ScriptVersion,
     VisualPreset,
     VoicePreset,
+    ExportRecord,
 )
 
 
@@ -192,11 +195,101 @@ def voice_preset_to_dict(preset: VoicePreset) -> dict[str, object]:
 def job_to_dict(job: RenderJob) -> dict[str, object]:
     return {
         "id": job.id,
+        "workspace_id": job.workspace_id,
+        "project_id": job.project_id,
+        "created_by_user_id": job.created_by_user_id,
+        "script_version_id": job.script_version_id,
+        "scene_plan_id": job.scene_plan_id,
+        "consistency_pack_id": job.consistency_pack_id,
+        "voice_preset_id": job.voice_preset_id,
         "job_kind": job.job_kind.value,
+        "queue_name": job.queue_name,
         "status": job.status.value if isinstance(job.status, JobStatus) else str(job.status),
+        "idempotency_key": job.idempotency_key,
+        "request_hash": job.request_hash,
+        "payload": job.payload,
+        "allow_export_without_music": job.allow_export_without_music,
         "error_code": job.error_code,
         "error_message": job.error_message,
+        "retry_count": job.retry_count,
+        "started_at": job.started_at,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
         "completed_at": job.completed_at,
+        "cancelled_at": job.cancelled_at,
+    }
+
+
+def render_step_to_dict(step: RenderStep) -> dict[str, object]:
+    return {
+        "id": step.id,
+        "render_job_id": step.render_job_id,
+        "project_id": step.project_id,
+        "scene_segment_id": step.scene_segment_id,
+        "step_kind": step.step_kind.value,
+        "step_index": step.step_index,
+        "status": step.status.value if isinstance(step.status, JobStatus) else str(step.status),
+        "is_stale": step.is_stale,
+        "input_payload": step.input_payload,
+        "output_payload": step.output_payload,
+        "error_code": step.error_code,
+        "error_message": step.error_message,
+        "started_at": step.started_at,
+        "completed_at": step.completed_at,
+        "created_at": step.created_at,
+        "updated_at": step.updated_at,
+    }
+
+
+def asset_to_dict(asset: Asset, *, download_url: str | None = None) -> dict[str, object]:
+    return {
+        "id": asset.id,
+        "workspace_id": asset.workspace_id,
+        "project_id": asset.project_id,
+        "render_job_id": asset.render_job_id,
+        "render_step_id": asset.render_step_id,
+        "scene_segment_id": asset.scene_segment_id,
+        "parent_asset_id": asset.parent_asset_id,
+        "provider_run_id": asset.provider_run_id,
+        "consistency_pack_snapshot_id": asset.consistency_pack_snapshot_id,
+        "asset_type": asset.asset_type.value,
+        "asset_role": asset.asset_role.value,
+        "status": asset.status,
+        "bucket_name": asset.bucket_name,
+        "object_name": asset.object_name,
+        "file_name": asset.file_name,
+        "content_type": asset.content_type,
+        "size_bytes": asset.size_bytes,
+        "duration_ms": asset.duration_ms,
+        "width": asset.width,
+        "height": asset.height,
+        "frame_rate": asset.frame_rate,
+        "has_audio_stream": asset.has_audio_stream,
+        "source_audio_policy": asset.source_audio_policy,
+        "timing_alignment_strategy": asset.timing_alignment_strategy,
+        "metadata_payload": asset.metadata_payload,
+        "download_url": download_url,
+        "created_at": asset.created_at,
+        "updated_at": asset.updated_at,
+    }
+
+
+def export_to_dict(export: ExportRecord, *, download_url: str | None = None) -> dict[str, object]:
+    return {
+        "id": export.id,
+        "workspace_id": export.workspace_id,
+        "project_id": export.project_id,
+        "render_job_id": export.render_job_id,
+        "asset_id": export.asset_id,
+        "status": export.status,
+        "file_name": export.file_name,
+        "format": export.format,
+        "bucket_name": export.bucket_name,
+        "object_name": export.object_name,
+        "duration_ms": export.duration_ms,
+        "metadata_payload": export.metadata_payload,
+        "download_url": download_url,
+        "completed_at": export.completed_at,
+        "created_at": export.created_at,
+        "updated_at": export.updated_at,
     }

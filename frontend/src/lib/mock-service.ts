@@ -133,7 +133,22 @@ interface MockState {
   briefs: Map<string, BriefData>;
   ideaSets: Map<string, IdeaSet>;
   scripts: Map<string, ScriptData>;
+  scenePlanSets: Map<string, ScenePlanSet>;
+  visualPresets: VisualPreset[];
+  voicePresets: VoicePreset[];
 }
+
+const seedVisualPresets: VisualPreset[] = [
+  { id: "vp_editorial", name: "Editorial Clean", description: "Cool daylight, matte surfaces, negative space", category: "Beauty", style: "editorial", palette: "Frosted cobalt / ivory", lighting: "Cool daylight, diffused" },
+  { id: "vp_cinematic", name: "Warm Cinematic", description: "Golden hour tones with filmic grain and depth", category: "Lifestyle", style: "cinematic", palette: "Amber / deep shadow", lighting: "Golden hour, directional" },
+  { id: "vp_minimal", name: "Minimal Studio", description: "Pure white backdrop with sharp product focus", category: "Product", style: "minimal", palette: "White / charcoal accent", lighting: "Even studio, high-key" },
+];
+
+const seedVoicePresets: VoicePreset[] = [
+  { id: "voice_confident", name: "Confident Narrator", description: "Clear, authoritative, measured pacing", tone: "authoritative", pacing: "measured", accent: "neutral" },
+  { id: "voice_warm", name: "Warm Storyteller", description: "Friendly, conversational, approachable", tone: "warm", pacing: "natural", accent: "neutral" },
+  { id: "voice_editorial", name: "Ava Editorial", description: "Polished, calm, premium feel", tone: "polished", pacing: "calm", accent: "neutral" },
+];
 
 const state: MockState = {
   isAuthenticated: false,
@@ -155,6 +170,9 @@ const state: MockState = {
   ]),
   ideaSets: new Map(),
   scripts: new Map(),
+  scenePlanSets: new Map(),
+  visualPresets: [...seedVisualPresets],
+  voicePresets: [...seedVoicePresets],
 };
 
 /* ─── Idea Generation Templates ───────────────────────────────────────────── */
@@ -533,4 +551,268 @@ export async function mockGetSettings(): Promise<SettingsSection[]> {
   return [
     { title: "Workspace", description: "General workspace configuration", items: [{ label: "Name", value: "North Star Studio" }, { label: "Plan", value: "Pro" }] },
   ];
+}
+
+/* ─── Scene Planning API (Phase 2) ────────────────────────────────────────── */
+
+const WORDS_PER_SECOND = 2.4; // natural reading pace
+const MAX_SEGMENT_DURATION = 8;
+const MIN_TOTAL_DURATION = 60;
+const MAX_TOTAL_DURATION = 120;
+
+function estimateDuration(wordCount: number): number {
+  return Math.round((wordCount / WORDS_PER_SECOND) * 10) / 10;
+}
+
+function durationWarning(durationSec: number, totalDuration?: number): string | null {
+  if (durationSec > MAX_SEGMENT_DURATION) return `Segment exceeds ${MAX_SEGMENT_DURATION}s (est. ${durationSec}s)`;
+  if (totalDuration !== undefined) {
+    if (totalDuration < MIN_TOTAL_DURATION) return `Total duration ${totalDuration}s is below ${MIN_TOTAL_DURATION}s minimum`;
+    if (totalDuration > MAX_TOTAL_DURATION) return `Total duration ${totalDuration}s exceeds ${MAX_TOTAL_DURATION}s maximum`;
+  }
+  return null;
+}
+
+export async function mockGetScenePlan(projectId: string): Promise<ScenePlanSet | null> {
+  await randomDelay(100, 200);
+  return state.scenePlanSets.get(projectId) ?? null;
+}
+
+export async function mockSegmentScript(projectId: string): Promise<SceneSegment[]> {
+  await delay(1500 + Math.random() * 1000);
+
+  const script = state.scripts.get(projectId);
+  if (!script) throw new Error("No script to segment");
+
+  // Group script lines into 5-8 second segments
+  const segments: SceneSegment[] = script.lines.map((line, index) => {
+    const wordCount = line.narration.split(/\s+/).length;
+    const estDuration = estimateDuration(wordCount);
+    return {
+      id: nextId("seg"),
+      index: index + 1,
+      narration: line.narration,
+      caption: line.caption,
+      estimatedDurationSec: estDuration,
+      estimatedWordCount: wordCount,
+      durationWarning: durationWarning(estDuration),
+      sourceLineIds: [line.id],
+    };
+  });
+
+  return segments;
+}
+
+const sceneGenerationData = [
+  { shotType: "Macro hero", motion: "Slow push-in", palette: "Frosted cobalt / ivory", audioCue: "Music enters, narration ducks" },
+  { shotType: "Editorial tabletop", motion: "Parallax drift", palette: "Pale steel / powder blue", audioCue: "Narration drives, music ducks" },
+  { shotType: "Split-screen compare", motion: "Horizontal wipe", palette: "Warm amber / cool blue", audioCue: "Rhythmic transitions on beat" },
+  { shotType: "Real-time demo", motion: "Handheld track", palette: "Natural daylight / warm", audioCue: "Energy builds with voice" },
+  { shotType: "Testimonial montage", motion: "Quick cuts", palette: "Warm neutrals", audioCue: "Warm bed, subtle builds" },
+  { shotType: "Product beauty shot", motion: "Slow dolly", palette: "Gradient glow / dark", audioCue: "Urgent CTA rhythm" },
+  { shotType: "Brand slate", motion: "Static settle", palette: "Brand palette / clean", audioCue: "Music tail sustains" },
+  { shotType: "Overhead vanity", motion: "Top-down glide", palette: "Fog white / soft cobalt", audioCue: "Ambient pause" },
+];
+
+const gradients = [
+  "linear-gradient(145deg, #edf4ff 0%, #c9d8ff 40%, #fdfdff 100%)",
+  "linear-gradient(145deg, #f4f8ff 0%, #d7e2ff 48%, #f7fbff 100%)",
+  "linear-gradient(145deg, #eef5ff 0%, #cfdcff 46%, #ffffff 100%)",
+  "linear-gradient(145deg, #f7faff 0%, #dde8ff 42%, #ffffff 100%)",
+  "linear-gradient(145deg, #fff8f0 0%, #ffe8d0 44%, #fff 100%)",
+  "linear-gradient(145deg, #f0f6ff 0%, #dce7ff 40%, #eef2ff 100%)",
+  "linear-gradient(145deg, #ffffff 0%, #dbe6ff 44%, #f3f7ff 100%)",
+  "linear-gradient(145deg, #eef6ff 0%, #d7e5ff 44%, #f8fbff 100%)",
+];
+
+export async function mockGenerateScenePlan(projectId: string): Promise<ScenePlanSet> {
+  await delay(2000 + Math.random() * 1500);
+
+  const script = state.scripts.get(projectId);
+  if (!script) throw new Error("No script found");
+  const brief = state.briefs.get(projectId);
+
+  // Get or create segments
+  let existingPlan = state.scenePlanSets.get(projectId);
+  let segments = existingPlan?.segments;
+  if (!segments || segments.length === 0) {
+    segments = await mockSegmentScript(projectId);
+  }
+
+  const scenes: ScenePlan[] = segments.map((seg, index) => {
+    const meta = sceneGenerationData[index % sceneGenerationData.length];
+    const beatTitle = script.lines[index]?.beat ?? `Scene ${index + 1}`;
+    return {
+      id: nextId("scene"),
+      index: index + 1,
+      title: beatTitle,
+      beat: seg.narration.substring(0, 60) + (seg.narration.length > 60 ? "…" : ""),
+      shotType: meta.shotType,
+      motion: meta.motion,
+      prompt: `${meta.shotType} shot: ${seg.narration.substring(0, 80)}`,
+      startImagePrompt: `Opening frame — ${meta.shotType.toLowerCase()}, ${brief?.brandNorthStar ?? "premium editorial"}, establishing the scene for: ${seg.narration.substring(0, 50)}`,
+      endImagePrompt: `Closing frame — ${meta.motion.toLowerCase()} completing, transitional composition ready for next scene, ${seg.narration.substring(0, 50)}`,
+      continuityScore: 85 + Math.floor(Math.random() * 15),
+      durationSec: seg.estimatedDurationSec,
+      estimatedWordCount: seg.estimatedWordCount,
+      durationWarning: seg.durationWarning,
+      transitionMode: index === 0 ? "hard_cut" : "crossfade",
+      status: "draft",
+      keyframeStatus: "Awaiting generation",
+      notes: [],
+      palette: meta.palette,
+      audioCue: meta.audioCue,
+      thumbnailLabel: beatTitle.substring(0, 16),
+      gradient: gradients[index % gradients.length],
+      subtitleStatus: "Draft",
+      narration: seg.narration,
+      caption: seg.caption,
+      visualDirection: script.lines[index]?.visualDirection ?? "",
+      voicePacing: script.lines[index]?.voicePacing ?? "",
+    };
+  });
+
+  const totalDuration = scenes.reduce((sum, s) => sum + s.durationSec, 0);
+  const warningsCount = scenes.filter((s) => s.durationWarning).length;
+
+  // Check total duration warning
+  const totalWarning = durationWarning(0, totalDuration);
+  if (totalWarning) {
+    scenes[scenes.length - 1].durationWarning = totalWarning;
+  }
+
+  const planSet: ScenePlanSet = {
+    id: nextId("sceneplan"),
+    projectId,
+    status: "completed",
+    approvalState: "draft",
+    approvedAt: null,
+    scenes,
+    segments,
+    totalDurationSec: totalDuration,
+    warningsCount: warningsCount + (totalWarning ? 1 : 0),
+    visualPresetId: null,
+    voicePresetId: null,
+  };
+
+  state.scenePlanSets.set(projectId, planSet);
+
+  const project = state.projects.get(projectId);
+  if (project) {
+    project.stage = "scenes";
+    project.sceneCount = scenes.length;
+    project.durationSec = totalDuration;
+    project.nextMilestone = "Review and approve scene plan";
+    project.updatedAt = new Date().toISOString();
+    state.projects.set(projectId, project);
+  }
+
+  return planSet;
+}
+
+export async function mockGeneratePromptPairs(projectId: string, sceneId: string): Promise<ScenePlan> {
+  await delay(1200 + Math.random() * 800);
+
+  const planSet = state.scenePlanSets.get(projectId);
+  if (!planSet) throw new Error("No scene plan found");
+
+  const scene = planSet.scenes.find((s) => s.id === sceneId);
+  if (!scene) throw new Error(`Scene ${sceneId} not found`);
+
+  const brief = state.briefs.get(projectId);
+  scene.startImagePrompt = `Opening frame — ${scene.shotType.toLowerCase()}, ${brief?.brandNorthStar ?? "premium editorial"}, setting up: ${scene.narration.substring(0, 60)}`;
+  scene.endImagePrompt = `Closing frame — ${scene.motion.toLowerCase()} completing, ${scene.palette}, transition-ready: ${scene.narration.substring(0, 60)}`;
+  scene.status = "review";
+  scene.keyframeStatus = "Prompts generated";
+
+  state.scenePlanSets.set(projectId, planSet);
+  return scene;
+}
+
+export async function mockUpdateScene(projectId: string, sceneId: string, updates: Partial<ScenePlan>): Promise<ScenePlan> {
+  await randomDelay(200, 400);
+
+  const planSet = state.scenePlanSets.get(projectId);
+  if (!planSet) throw new Error("No scene plan found");
+
+  const sceneIndex = planSet.scenes.findIndex((s) => s.id === sceneId);
+  if (sceneIndex === -1) throw new Error(`Scene ${sceneId} not found`);
+
+  const updated = { ...planSet.scenes[sceneIndex], ...updates };
+
+  // Recalculate duration warning if duration changed
+  if (updates.durationSec !== undefined) {
+    updated.durationWarning = durationWarning(updates.durationSec);
+  }
+
+  planSet.scenes[sceneIndex] = updated;
+  planSet.totalDurationSec = planSet.scenes.reduce((sum, s) => sum + s.durationSec, 0);
+  planSet.warningsCount = planSet.scenes.filter((s) => s.durationWarning).length;
+
+  state.scenePlanSets.set(projectId, planSet);
+  return updated;
+}
+
+export async function mockApproveScenePlan(projectId: string): Promise<ScenePlanSet> {
+  await randomDelay(300, 600);
+
+  const planSet = state.scenePlanSets.get(projectId);
+  if (!planSet) throw new Error("No scene plan found");
+
+  planSet.approvalState = "approved";
+  planSet.approvedAt = new Date().toISOString();
+  planSet.scenes.forEach((s) => { s.status = "approved"; });
+
+  state.scenePlanSets.set(projectId, planSet);
+
+  const project = state.projects.get(projectId);
+  if (project) {
+    project.stage = "renders";
+    project.nextMilestone = "Begin render generation";
+    project.updatedAt = new Date().toISOString();
+    state.projects.set(projectId, project);
+  }
+
+  return planSet;
+}
+
+/* ─── Preset API (Phase 2) ────────────────────────────────────────────────── */
+export async function mockGetVisualPresets(): Promise<VisualPreset[]> {
+  await randomDelay(100, 200);
+  return [...state.visualPresets];
+}
+
+export async function mockGetVoicePresets(): Promise<VoicePreset[]> {
+  await randomDelay(100, 200);
+  return [...state.voicePresets];
+}
+
+export async function mockCreateVisualPreset(preset: Omit<VisualPreset, "id">): Promise<VisualPreset> {
+  await randomDelay(200, 400);
+  const created: VisualPreset = { ...preset, id: nextId("vp") };
+  state.visualPresets.push(created);
+  return created;
+}
+
+export async function mockCreateVoicePreset(preset: Omit<VoicePreset, "id">): Promise<VoicePreset> {
+  await randomDelay(200, 400);
+  const created: VoicePreset = { ...preset, id: nextId("voicep") };
+  state.voicePresets.push(created);
+  return created;
+}
+
+export async function mockSetScenePlanPreset(
+  projectId: string,
+  type: "visual" | "voice",
+  presetId: string,
+): Promise<ScenePlanSet> {
+  await randomDelay(100, 200);
+  const planSet = state.scenePlanSets.get(projectId);
+  if (!planSet) throw new Error("No scene plan found");
+
+  if (type === "visual") planSet.visualPresetId = presetId;
+  else planSet.voicePresetId = presetId;
+
+  state.scenePlanSets.set(projectId, planSet);
+  return planSet;
 }

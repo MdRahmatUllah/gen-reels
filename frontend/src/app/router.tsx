@@ -4,6 +4,7 @@ import { ShellLayout } from "../components/ui";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LoginPage } from "../routes/login-page";
 import { IdeasPage } from "../features/ideas/IdeasPage";
+import { ScenesPage } from "../features/scenes/ScenesPage";
 import {
   BillingPage,
   DashboardPage,
@@ -12,7 +13,6 @@ import {
   ProjectBriefPage,
   ProjectsPage,
   RendersPage,
-  ScenesPage,
   ScriptPage,
   SettingsPage,
   TemplatesPage,

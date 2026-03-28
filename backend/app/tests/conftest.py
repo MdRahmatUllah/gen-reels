@@ -28,6 +28,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("REDIS_URL", "redis://unused/0")
     monkeypatch.setenv("CELERY_BROKER_URL", "redis://unused/1")
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "redis://unused/2")
+    monkeypatch.setenv("LOCAL_STORAGE_ROOT", str(tmp_path / "storage"))
     monkeypatch.setattr(redis_module.Redis, "from_url", lambda *args, **kwargs: fake_redis)
 
     get_settings.cache_clear()

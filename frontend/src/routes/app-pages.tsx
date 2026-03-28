@@ -13,8 +13,8 @@ import {
   getTemplates,
 } from "../lib/mock-api";
 import { useBrief, useUpdateBrief } from "../hooks/use-briefs";
-import { useProject, useCreateProject } from "../hooks/use-projects";
-import { useScript, useGenerateScript, useUpdateScript, useApproveScript } from "../hooks/use-scripts";
+import { useProject } from "../hooks/use-projects";
+import { useScript, useApproveScript, useGenerateScript } from "../hooks/use-scripts";
 import { GenerationStatusIndicator } from "../components/GenerationStatus";
 import { formatDuration, formatSignedSeconds } from "../lib/format";
 import {
@@ -612,24 +612,84 @@ export function ProjectBriefPage() {
 
 export function ScriptPage() {
   const { bundle, isLoading, projectId } = useProjectData();
+  const approveScript = useApproveScript(projectId);
+  const generateScript = useGenerateScript(projectId);
 
-  if (isLoading || !bundle) {
+  // Get fresh script data from mock-service when available
+  const { data: freshScript, isLoading: isScriptLoading } = useScript(projectId);
+
+  if (isLoading || isScriptLoading || !bundle) {
     return <LoadingPage />;
   }
+
+  // If no fresh script, show empty generation state
+  if (!freshScript && !generateScript.isPending) {
+    return (
+      <div className="scene-empty-state">
+        <div className="scene-empty-state__card">
+          <div className="scene-empty-state__icon">📝</div>
+          <h2>No script generated yet</h2>
+          <p>Generate a script based on your brief and selected idea. The AI will write narration, visual direction, and pacing cues.</p>
+          <button 
+            type="button" 
+            className="button button--primary" 
+            onClick={() => generateScript.mutate()}
+          >
+            Generate script
+          </button>
+          <Link className="button button--secondary" to={`/app/projects/${projectId}/ideas`}>
+            ← Back to ideas
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (generateScript.isPending) {
+    return (
+      <PageFrame
+        eyebrow="Loading"
+        title="Generating script..."
+        description="The AI is drafting the script from your selected idea."
+        inspector={<div className="surface-card shimmer surface-card--loading" />}
+      >
+        <div className="surface-card shimmer surface-card--loading" />
+      </PageFrame>
+    );
+  }
+
+  const scriptData = freshScript;
+  if (!scriptData) return null;
+
+  const isApproved = scriptData.approvalState === "approved";
 
   return (
     <PageFrame
       eyebrow="Script workspace"
-      title={`${bundle.project.title} · ${bundle.script.versionLabel}`}
+      title={`${bundle.project.title} · ${scriptData.versionLabel}`}
       description="Dense but readable script review with clear versioning, per-scene timing, and voice continuity visibility."
       actions={
         <>
-          <Link className="button button--secondary" to={`/app/projects/${projectId}/brief`}>
-            Back to brief
+          <Link className="button button--secondary" to={`/app/projects/${projectId}/ideas`}>
+            ← Ideas
           </Link>
-          <Link className="button button--primary" to={`/app/projects/${projectId}/scenes`}>
-            Promote to scenes
-          </Link>
+          {!isApproved ? (
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => approveScript.mutate()}
+              disabled={approveScript.isPending}
+            >
+              {approveScript.isPending ? "Approving…" : "Approve script ✓"}
+            </button>
+          ) : (
+            <>
+              <span className="approval-badge approval-badge--approved">✓ Approved</span>
+              <Link className="button button--primary" to={`/app/projects/${projectId}/scenes`}>
+                Segment into scenes →
+              </Link>
+            </>
+          )}
         </>
       }
       inspector={
@@ -639,19 +699,19 @@ export function ScriptPage() {
             <div className="inspector-list">
               <div>
                 <span>Approval</span>
-                <strong>{bundle.script.approvalState}</strong>
+                <strong className={isApproved ? "text-success" : ""}>{scriptData.approvalState}</strong>
               </div>
               <div>
                 <span>Word count</span>
-                <strong>{bundle.script.totalWords}</strong>
+                <strong>{scriptData.totalWords}</strong>
               </div>
               <div>
                 <span>Timing</span>
-                <strong>{bundle.script.readingTimeLabel}</strong>
+                <strong>{scriptData.readingTimeLabel}</strong>
               </div>
               <div>
                 <span>Last edited</span>
-                <strong>{bundle.script.lastEdited}</strong>
+                <strong>{scriptData.lastEdited}</strong>
               </div>
             </div>
           </SectionCard>
@@ -661,17 +721,17 @@ export function ScriptPage() {
       <SectionCard className="surface-card--hero" title="Narration direction" subtitle="Editorial tone with consistent voice parameters across every scene">
         <div className="metric-row">
           <MetricCard label="Voice preset" value={bundle.project.voicePreset} detail="Frozen per render job" tone="primary" />
-          <MetricCard label="Approval state" value={bundle.script.approvalState} detail="Ready to gate renders" tone="success" />
+          <MetricCard label="Approval state" value={scriptData.approvalState} detail={isApproved ? "Script locked — ready for segmentation" : "Approve to proceed"} tone={isApproved ? "success" : "warning"} />
         </div>
       </SectionCard>
 
       <SectionCard title="Scene-by-scene script table" subtitle="Alternate row surfaces replace table dividers to match the studio design language">
-        <ScriptTable bundle={bundle} />
+        <ScriptTable bundle={{ ...bundle, script: scriptData }} />
       </SectionCard>
 
       <SectionCard title="Beat handoff cards" subtitle="Each line carries visual direction and pacing cues into the scene planner">
         <div className="artifact-grid artifact-grid--compact">
-          {bundle.script.lines.map((line) => (
+          {scriptData.lines.map((line) => (
             <div className="surface-panel" key={line.id}>
               <div className="inline-meta">
                 <span className="eyebrow">{line.sceneId}</span>

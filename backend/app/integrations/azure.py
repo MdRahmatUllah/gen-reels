@@ -39,6 +39,167 @@ class TextProvider:
     ) -> dict[str, Any]:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def generate_scene_plan(
+        self,
+        *,
+        brief_payload: dict[str, Any],
+        selected_idea: dict[str, Any],
+        script_payload: dict[str, Any],
+        visual_preset: dict[str, Any] | None,
+        voice_preset: dict[str, Any] | None,
+    ) -> dict[str, Any]:  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def generate_prompt_pairs(
+        self,
+        *,
+        scene_plan_payload: dict[str, Any],
+        visual_preset: dict[str, Any] | None,
+    ) -> dict[str, Any]:  # pragma: no cover - interface
+        raise NotImplementedError
+
+
+def _distribute_duration(total_duration: int, parts: int) -> list[int]:
+    base = max(1, total_duration // parts)
+    remainder = total_duration % parts
+    return [base + (1 if index < remainder else 0) for index in range(parts)]
+
+
+def _split_narration(narration: str, parts: int) -> list[str]:
+    words = narration.split()
+    if not words:
+        return [narration.strip()] * parts
+    chunk_size = max(1, (len(words) + parts - 1) // parts)
+    chunks = [
+        " ".join(words[index : index + chunk_size]).strip()
+        for index in range(0, len(words), chunk_size)
+    ]
+    while len(chunks) < parts:
+        chunks.append(chunks[-1] if chunks else narration.strip())
+    return chunks[:parts]
+
+
+def _scene_prompt_strings(
+    *,
+    scene_title: str,
+    beat: str,
+    narration_text: str,
+    visual_direction: str,
+    visual_preset: dict[str, Any] | None,
+) -> dict[str, str]:
+    prefix = str((visual_preset or {}).get("prompt_prefix") or "").strip()
+    style = str((visual_preset or {}).get("style_descriptor") or "").strip()
+    camera = str((visual_preset or {}).get("camera_defaults") or "").strip()
+    palette = str((visual_preset or {}).get("color_palette") or "").strip()
+    visual_prompt = " ".join(
+        part
+        for part in [
+            prefix,
+            f"{scene_title} {beat}".strip(),
+            visual_direction.strip(),
+            camera,
+            palette,
+            style,
+        ]
+        if part
+    ).strip()
+    start_image_prompt = " ".join(
+        part
+        for part in [
+            "Opening frame.",
+            scene_title,
+            narration_text,
+            visual_direction,
+            camera,
+            style,
+        ]
+        if part
+    ).strip()
+    end_image_prompt = " ".join(
+        part
+        for part in [
+            "Closing frame with visible progression from the opening frame.",
+            scene_title,
+            narration_text,
+            visual_direction,
+            palette,
+            style,
+        ]
+        if part
+    ).strip()
+    return {
+        "visual_prompt": visual_prompt,
+        "start_image_prompt": start_image_prompt,
+        "end_image_prompt": end_image_prompt,
+    }
+
+
+def _build_stub_scene_plan(
+    *,
+    selected_idea: dict[str, Any],
+    script_payload: dict[str, Any],
+    visual_preset: dict[str, Any] | None,
+) -> dict[str, Any]:
+    shot_types = ["macro", "wide", "medium", "overhead", "close-up"]
+    motions = ["slow push-in", "locked", "drift", "parallax", "handheld energy"]
+    scenes: list[dict[str, Any]] = []
+    lines = script_payload.get("lines") or []
+    scene_index = 1
+    for line in lines:
+        total_duration = max(1, int(line.get("duration_sec") or 6))
+        parts = max(1, (total_duration + 7) // 8)
+        durations = _distribute_duration(total_duration, parts)
+        narrations = _split_narration(str(line.get("narration") or ""), parts)
+        for part_index, part_duration in enumerate(durations, start=1):
+            scene_title = f"{selected_idea['title']} Scene {scene_index}"
+            beat = str(line.get("beat") or f"Beat {scene_index}")
+            narration_text = narrations[part_index - 1]
+            visual_direction = str(line.get("visual_direction") or "").strip()
+            prompts = _scene_prompt_strings(
+                scene_title=scene_title,
+                beat=beat,
+                narration_text=narration_text,
+                visual_direction=visual_direction,
+                visual_preset=visual_preset,
+            )
+            scenes.append(
+                {
+                    "scene_index": scene_index,
+                    "source_line_ids": [str(line.get("id") or f"line_{scene_index:02d}")],
+                    "title": scene_title,
+                    "beat": beat,
+                    "narration_text": narration_text,
+                    "caption_text": str(line.get("caption") or ""),
+                    "visual_direction": visual_direction,
+                    "shot_type": shot_types[(scene_index - 1) % len(shot_types)],
+                    "motion": motions[(scene_index - 1) % len(motions)],
+                    "target_duration_seconds": part_duration,
+                    "estimated_voice_duration_seconds": part_duration,
+                    "visual_prompt": prompts["visual_prompt"],
+                    "start_image_prompt": prompts["start_image_prompt"],
+                    "end_image_prompt": prompts["end_image_prompt"],
+                    "transition_mode": "hard_cut",
+                    "notes": [],
+                    "validation_warnings": [],
+                }
+            )
+            scene_index += 1
+    total_duration = sum(int(scene["target_duration_seconds"]) for scene in scenes)
+    warnings: list[dict[str, Any]] = []
+    if total_duration < 60 or total_duration > 120:
+        warnings.append(
+            {
+                "code": "total_duration_out_of_range",
+                "message": "Estimated total duration is outside the recommended 60-120 second range.",
+            }
+        )
+    return {
+        "scene_count": len(scenes),
+        "estimated_duration_seconds": total_duration,
+        "validation_warnings": warnings,
+        "scenes": scenes,
+    }
+
 
 class StubModerationProvider(ModerationProvider):
     def moderate_text(self, text: str, *, target_type: str) -> ModerationResult:
@@ -104,6 +265,48 @@ class StubTextProvider(TextProvider):
             "reading_time_label": "72s draft narration",
             "lines": lines,
         }
+
+    def generate_scene_plan(
+        self,
+        *,
+        brief_payload: dict[str, Any],
+        selected_idea: dict[str, Any],
+        script_payload: dict[str, Any],
+        visual_preset: dict[str, Any] | None,
+        voice_preset: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        del brief_payload, voice_preset
+        return _build_stub_scene_plan(
+            selected_idea=selected_idea,
+            script_payload=script_payload,
+            visual_preset=visual_preset,
+        )
+
+    def generate_prompt_pairs(
+        self,
+        *,
+        scene_plan_payload: dict[str, Any],
+        visual_preset: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        regenerated_segments = []
+        for segment in scene_plan_payload.get("segments") or []:
+            prompts = _scene_prompt_strings(
+                scene_title=str(segment.get("title") or f"Scene {segment.get('scene_index') or ''}").strip(),
+                beat=str(segment.get("beat") or "").strip(),
+                narration_text=str(segment.get("narration_text") or "").strip(),
+                visual_direction=str(segment.get("visual_direction") or "").strip(),
+                visual_preset=visual_preset,
+            )
+            regenerated_segments.append(
+                {
+                    "scene_index": int(segment["scene_index"]),
+                    "visual_prompt": prompts["visual_prompt"],
+                    "start_image_prompt": prompts["start_image_prompt"],
+                    "end_image_prompt": prompts["end_image_prompt"],
+                    "validation_warnings": list(segment.get("validation_warnings") or []),
+                }
+            )
+        return {"segments": regenerated_segments}
 
 
 class AzureContentSafetyProvider(ModerationProvider):
@@ -191,6 +394,63 @@ class AzureOpenAITextProvider(TextProvider):
             "Each item must contain title, hook, summary, and tags. The concepts must target a 60-120 second video."
         )
         user_prompt = json.dumps(brief_payload)
+        return self._request_json(
+            [
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": user_prompt},
+            ]
+        )["output"]
+
+    def generate_scene_plan(
+        self,
+        *,
+        brief_payload: dict[str, Any],
+        selected_idea: dict[str, Any],
+        script_payload: dict[str, Any],
+        visual_preset: dict[str, Any] | None,
+        voice_preset: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys scene_count, estimated_duration_seconds, validation_warnings, and scenes. "
+            "scenes must be an ordered list of 5-8 second scene objects based on the approved script. "
+            "Each scene object must include scene_index, source_line_ids, title, beat, narration_text, "
+            "caption_text, visual_direction, shot_type, motion, target_duration_seconds, "
+            "estimated_voice_duration_seconds, visual_prompt, start_image_prompt, end_image_prompt, "
+            "transition_mode, notes, and validation_warnings."
+        )
+        user_prompt = json.dumps(
+            {
+                "brief": brief_payload,
+                "selected_idea": selected_idea,
+                "script": script_payload,
+                "visual_preset": visual_preset,
+                "voice_preset": voice_preset,
+            }
+        )
+        return self._request_json(
+            [
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": user_prompt},
+            ]
+        )["output"]
+
+    def generate_prompt_pairs(
+        self,
+        *,
+        scene_plan_payload: dict[str, Any],
+        visual_preset: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with one key named segments. segments must be an ordered list matching the input scene order. "
+            "Each item must include scene_index, visual_prompt, start_image_prompt, end_image_prompt, and "
+            "validation_warnings. Preserve 5-8 second pacing and make prompt pairs visually consistent."
+        )
+        user_prompt = json.dumps(
+            {
+                "scene_plan": scene_plan_payload,
+                "visual_preset": visual_preset,
+            }
+        )
         return self._request_json(
             [
                 {"role": "system", "content": instruction},

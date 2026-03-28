@@ -19,6 +19,14 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     timezone="UTC",
+    task_routes={
+        "planning.generate_ideas": {"queue": "planning"},
+        "planning.generate_script": {"queue": "planning"},
+        "planning.generate_scene_plan": {"queue": "planning"},
+        "planning.generate_prompt_pairs": {"queue": "planning"},
+        "planning.expire_stale_jobs": {"queue": "planning"},
+        "render.execute_job": {"queue": "render"},
+    },
     beat_schedule={
         "expire-stale-planning-jobs": {
             "task": "planning.expire_stale_jobs",
