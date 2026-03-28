@@ -1,0 +1,31 @@
+Metadata-Version: 2.4
+Name: reels-generation-backend
+Version: 0.1.0
+Summary: Phase 1 FastAPI backend for the Reels Generation platform
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: alembic>=1.14.1
+Requires-Dist: celery[redis]>=5.4.0
+Requires-Dist: cryptography>=44.0.0
+Requires-Dist: email-validator>=2.2.0
+Requires-Dist: fastapi>=0.115.8
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: minio>=7.2.15
+Requires-Dist: passlib[argon2]>=1.7.4
+Requires-Dist: psycopg[binary]>=3.2.4
+Requires-Dist: pydantic>=2.10.6
+Requires-Dist: pydantic-settings>=2.7.1
+Requires-Dist: pyjwt>=2.10.1
+Requires-Dist: python-multipart>=0.0.20
+Requires-Dist: redis>=5.2.1
+Requires-Dist: sqlalchemy>=2.0.38
+Requires-Dist: uvicorn[standard]>=0.34.0
+Provides-Extra: dev
+Requires-Dist: fakeredis>=2.28.1; extra == "dev"
+Requires-Dist: pytest>=8.3.4; extra == "dev"
+Requires-Dist: pytest-cov>=6.0.0; extra == "dev"
+Requires-Dist: ruff>=0.9.5; extra == "dev"
+
+# Reels Generation Backend
+
+Phase 1 FastAPI backend for auth, projects, briefs, idea generation, and script generation.

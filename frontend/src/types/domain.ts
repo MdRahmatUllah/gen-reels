@@ -2,6 +2,7 @@ export type HealthTone = "neutral" | "primary" | "success" | "warning" | "error"
 
 export type WorkflowStage =
   | "brief"
+  | "ideas"
   | "script"
   | "scenes"
   | "renders"
@@ -17,9 +18,24 @@ export type WorkflowStatus =
   | "blocked"
   | "failed";
 
+export type GenerationStatus = "idle" | "queued" | "running" | "completed" | "failed";
+
+/* ─── Auth ────────────────────────────────────────────────────────────────── */
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface AuthSession {
+  user: UserProfile;
+  workspaceId: string;
+}
+
+/* ─── User & Workspace ────────────────────────────────────────────────────── */
 export interface UserProfile {
   id: string;
   name: string;
+  email: string;
   role: string;
   avatarInitials: string;
 }
@@ -34,6 +50,12 @@ export interface WorkspaceSummary {
   monthlyBudget: number;
   queueCount: number;
   notifications: number;
+}
+
+/* ─── Projects ────────────────────────────────────────────────────────────── */
+export interface CreateProjectPayload {
+  title: string;
+  client: string;
 }
 
 export interface ProjectSummary {
@@ -52,8 +74,10 @@ export interface ProjectSummary {
   voicePreset: string;
   objective: string;
   nextMilestone: string;
+  selectedIdeaId: string | null;
 }
 
+/* ─── Briefs ──────────────────────────────────────────────────────────────── */
 export interface BriefData {
   objective: string;
   hook: string;
@@ -65,6 +89,25 @@ export interface BriefData {
   approvalSteps: string[];
 }
 
+/* ─── Ideas ───────────────────────────────────────────────────────────────── */
+export interface IdeaCandidate {
+  id: string;
+  title: string;
+  hook: string;
+  angle: string;
+  tags: string[];
+  viralScore: number;
+}
+
+export interface IdeaSet {
+  id: string;
+  projectId: string;
+  status: GenerationStatus;
+  ideas: IdeaCandidate[];
+  generatedAt: string | null;
+}
+
+/* ─── Scripts ─────────────────────────────────────────────────────────────── */
 export interface ScriptLine {
   id: string;
   sceneId: string;
@@ -78,12 +121,26 @@ export interface ScriptLine {
 }
 
 export interface ScriptData {
+  id: string;
   versionLabel: string;
   approvalState: string;
   lastEdited: string;
   totalWords: number;
   readingTimeLabel: string;
+  fullText: string;
   lines: ScriptLine[];
+}
+
+/* ─── Scenes ──────────────────────────────────────────────────────────────── */
+export interface SceneSegment {
+  id: string;
+  index: number;
+  narration: string;
+  caption: string;
+  estimatedDurationSec: number;
+  estimatedWordCount: number;
+  durationWarning: string | null;
+  sourceLineIds: string[];
 }
 
 export interface ScenePlan {
@@ -94,8 +151,12 @@ export interface ScenePlan {
   shotType: string;
   motion: string;
   prompt: string;
+  startImagePrompt: string;
+  endImagePrompt: string;
   continuityScore: number;
   durationSec: number;
+  estimatedWordCount: number;
+  durationWarning: string | null;
   transitionMode: "hard_cut" | "crossfade";
   status: WorkflowStatus;
   keyframeStatus: string;
@@ -105,8 +166,48 @@ export interface ScenePlan {
   thumbnailLabel: string;
   gradient: string;
   subtitleStatus: string;
+  narration: string;
+  caption: string;
+  visualDirection: string;
+  voicePacing: string;
 }
 
+export type ScenePlanApprovalState = "draft" | "pending" | "approved";
+
+export interface ScenePlanSet {
+  id: string;
+  projectId: string;
+  status: GenerationStatus;
+  approvalState: ScenePlanApprovalState;
+  approvedAt: string | null;
+  scenes: ScenePlan[];
+  segments: SceneSegment[];
+  totalDurationSec: number;
+  warningsCount: number;
+  visualPresetId: string | null;
+  voicePresetId: string | null;
+}
+
+export interface VisualPreset {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  style: string;
+  palette: string;
+  lighting: string;
+}
+
+export interface VoicePreset {
+  id: string;
+  name: string;
+  description: string;
+  tone: string;
+  pacing: string;
+  accent: string;
+}
+
+/* ─── Renders ─────────────────────────────────────────────────────────────── */
 export interface RenderCheck {
   id: string;
   label: string;
@@ -160,6 +261,7 @@ export interface RenderJob {
   };
 }
 
+/* ─── Exports ─────────────────────────────────────────────────────────────── */
 export interface ExportArtifact {
   id: string;
   name: string;
@@ -177,6 +279,7 @@ export interface ExportArtifact {
   ratio: string;
 }
 
+/* ─── Presets ─────────────────────────────────────────────────────────────── */
 export interface PresetCard {
   id: string;
   name: string;
@@ -198,6 +301,7 @@ export interface TemplateCard {
   style: string;
 }
 
+/* ─── Billing ─────────────────────────────────────────────────────────────── */
 export interface BillingBreakdown {
   category: string;
   usage: string;
@@ -213,6 +317,7 @@ export interface InvoiceItem {
   status: string;
 }
 
+/* ─── Settings ────────────────────────────────────────────────────────────── */
 export interface SettingsSection {
   title: string;
   description: string;
@@ -223,6 +328,7 @@ export interface SettingsSection {
   }>;
 }
 
+/* ─── Alerts ──────────────────────────────────────────────────────────────── */
 export interface AlertItem {
   id: string;
   label: string;
@@ -230,6 +336,7 @@ export interface AlertItem {
   tone: HealthTone;
 }
 
+/* ─── Dashboard ───────────────────────────────────────────────────────────── */
 export interface DashboardMetric {
   label: string;
   value: string;
@@ -246,6 +353,7 @@ export interface DashboardData {
   recentProjects: ProjectSummary[];
 }
 
+/* ─── Bundles ─────────────────────────────────────────────────────────────── */
 export interface ProjectBundle {
   project: ProjectSummary;
   brief: BriefData;
@@ -272,6 +380,7 @@ export interface BillingData {
   invoices: InvoiceItem[];
 }
 
+/* ─── Admin ───────────────────────────────────────────────────────────────── */
 export interface AdminQueueItem {
   id: string;
   workspace: string;

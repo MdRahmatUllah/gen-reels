@@ -7,7 +7,8 @@ import {
 } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
-import { defaultProjectId, getShellData } from "../lib/mock-api";
+import { mockGetShellData } from "../lib/mock-service";
+import { useAuth } from "../lib/auth";
 import { formatDuration, formatPercent, titleFromStatus } from "../lib/format";
 import { useStudioUiStore } from "../state/ui-store";
 import type {
@@ -40,6 +41,7 @@ function Icon({ path, size = 16 }: { path: string; size?: number }) {
 
 const icons = {
   dashboard: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10",
+  ideas:     "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
   projects:  "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z",
   presets:   "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
   templates: "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M17 17m-3 0a3 3 0 106 0 3 3 0 00-6 0",
@@ -62,6 +64,7 @@ const navIconMap: Record<string, string> = {
   "Presets":   icons.presets,
   "Templates": icons.templates,
   "Brief":     icons.brief,
+  "Ideas":     icons.ideas,
   "Script":    icons.script,
   "Scenes":    icons.scenes,
   "Renders":   icons.renders,
@@ -76,11 +79,14 @@ const navIconMap: Record<string, string> = {
 
 const workflowRoutes = [
   { key: "brief", label: "Brief" },
+  { key: "ideas", label: "Ideas" },
   { key: "script", label: "Script" },
   { key: "scenes", label: "Scenes" },
   { key: "renders", label: "Renders" },
   { key: "exports", label: "Exports" },
 ];
+
+const defaultProjectId = "project_aurora_serum";
 
 /* ─── Status helpers ──────────────────────────────────────────────────────── */
 function statusClassName(value: string): string {
@@ -142,10 +148,10 @@ function getCurrentWorkflowStep(pathname: string): string | undefined {
 /* ─── Shell Layout ────────────────────────────────────────────────────────── */
 export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
   const location = useLocation();
+  const { logout } = useAuth();
   const { data, isLoading } = useQuery({
     queryKey: ["shell-data"],
-    queryFn: getShellData,
-    staleTime: Infinity,
+    queryFn: mockGetShellData,
   });
   const activeWorkspaceId = useStudioUiStore((state) => state.activeWorkspaceId);
   const activeProjectId = useStudioUiStore((state) => state.activeProjectId);
@@ -253,6 +259,7 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
                 compact
                 items={[
                   { to: `/app/projects/${currentProject.id}/brief`, label: "Brief" },
+                  { to: `/app/projects/${currentProject.id}/ideas`, label: "Ideas" },
                   { to: `/app/projects/${currentProject.id}/script`, label: "Script" },
                   { to: `/app/projects/${currentProject.id}/scenes`, label: "Scenes" },
                   { to: `/app/projects/${currentProject.id}/renders`, label: "Renders" },
@@ -340,6 +347,14 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
                 <p>{data.user.role}</p>
               </div>
             </div>
+            <button
+              className="button button--secondary"
+              onClick={() => logout()}
+              type="button"
+              style={{ fontSize: "0.75rem", padding: "0.35rem 0.75rem" }}
+            >
+              Sign out
+            </button>
           </div>
         </header>
 

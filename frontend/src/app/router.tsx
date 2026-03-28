@@ -1,7 +1,9 @@
 import { Navigate, createBrowserRouter } from "react-router-dom";
 
 import { ShellLayout } from "../components/ui";
+import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LoginPage } from "../routes/login-page";
+import { IdeasPage } from "../features/ideas/IdeasPage";
 import {
   BillingPage,
   DashboardPage,
@@ -32,7 +34,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/app",
-    element: <ShellLayout mode="app" />,
+    element: (
+      <ProtectedRoute>
+        <ShellLayout mode="app" />
+      </ProtectedRoute>
+    ),
     children: [
       {
         index: true,
@@ -49,6 +55,10 @@ export const router = createBrowserRouter([
       {
         path: "projects/:projectId/brief",
         element: <ProjectBriefPage />,
+      },
+      {
+        path: "projects/:projectId/ideas",
+        element: <IdeasPage />,
       },
       {
         path: "projects/:projectId/script",
@@ -86,7 +96,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/admin",
-    element: <ShellLayout mode="admin" />,
+    element: (
+      <ProtectedRoute>
+        <ShellLayout mode="admin" />
+      </ProtectedRoute>
+    ),
     children: [
       {
         index: true,

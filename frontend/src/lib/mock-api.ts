@@ -10,6 +10,7 @@ import type {
   ProjectBundle,
   ProjectSummary,
   RenderJob,
+  ScenePlan,
   SettingsSection,
   ShellData,
   TemplateCard,
@@ -22,11 +23,25 @@ const mockDelay = (duration = 180) =>
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
+/** Enriches a legacy scene object with Phase 2 fields using sensible defaults */
+const enrichScene = (scene: Record<string, unknown>): Record<string, unknown> => ({
+  startImagePrompt: "",
+  endImagePrompt: "",
+  estimatedWordCount: 0,
+  durationWarning: null,
+  narration: "",
+  caption: "",
+  visualDirection: "",
+  voicePacing: "",
+  ...scene,
+});
+
 export const defaultProjectId = "project_aurora_serum";
 
 const currentUser: UserProfile = {
   id: "user_md",
   name: "M. Rahmatullah",
+  email: "alex@studio.io",
   role: "Creative Director",
   avatarInitials: "MR",
 };
@@ -82,6 +97,7 @@ const auroraProject: ProjectSummary = {
   voicePreset: "Ava Editorial",
   objective: "Turn a clinical skincare claim into a premium, scroll-stopping short-form launch asset.",
   nextMilestone: "Approve the master export and social cutdowns.",
+  selectedIdeaId: null,
 };
 
 const opsProject: ProjectSummary = {
@@ -100,6 +116,7 @@ const opsProject: ProjectSummary = {
   voicePreset: "Noah Systems",
   objective: "Explain creator operations workflow clearly enough for agency leads to book a strategy call.",
   nextMilestone: "Lock the final script and promote the keyframe plan.",
+  selectedIdeaId: null,
 };
 
 const midnightProject: ProjectSummary = {
@@ -118,6 +135,7 @@ const midnightProject: ProjectSummary = {
   voicePreset: "Sera Calm",
   objective: "Frame the supplement as a ritual product with a premium but accessible emotional tone.",
   nextMilestone: "Approve the brief guardrails before script generation.",
+  selectedIdeaId: null,
 };
 
 const auroraRenderJobs: RenderJob[] = [
@@ -372,11 +390,13 @@ const projectBundles: Record<string, ProjectBundle> = {
       ],
     },
     script: {
+      id: "script_aurora_v12",
       versionLabel: "v12 approved",
       approvalState: "Approved for render",
       lastEdited: "Today, 10:22 AM",
       totalWords: 108,
       readingTimeLabel: "34s final narration",
+      fullText: "",
       lines: [
         {
           id: "line_01",
@@ -440,7 +460,7 @@ const projectBundles: Record<string, ProjectBundle> = {
         },
       ],
     },
-    scenes: [
+    scenes: ([
       {
         id: "scene_01",
         index: 1,
@@ -561,7 +581,7 @@ const projectBundles: Record<string, ProjectBundle> = {
         gradient: "linear-gradient(145deg, #ffffff 0%, #dbe6ff 44%, #f3f7ff 100%)",
         subtitleStatus: "Ready",
       },
-    ],
+    ] as unknown as ScenePlan[]).map((s) => enrichScene(s as unknown as Record<string, unknown>) as unknown as ScenePlan),
     renderJobs: auroraRenderJobs,
     exports: auroraExports,
   },
@@ -593,11 +613,13 @@ const projectBundles: Record<string, ProjectBundle> = {
       ],
     },
     script: {
+      id: "script_ops_v07",
       versionLabel: "v07 in review",
       approvalState: "Needs script approval",
       lastEdited: "Today, 9:08 AM",
       totalWords: 92,
       readingTimeLabel: "29s draft narration",
+      fullText: "",
       lines: [
         {
           id: "ops_line_01",
@@ -645,7 +667,7 @@ const projectBundles: Record<string, ProjectBundle> = {
         },
       ],
     },
-    scenes: [
+    scenes: ([
       {
         id: "ops_scene_01",
         index: 1,
@@ -730,7 +752,7 @@ const projectBundles: Record<string, ProjectBundle> = {
         gradient: "linear-gradient(145deg, #f7fbff 0%, #d9e5ff 44%, #f0f5ff 100%)",
         subtitleStatus: "Draft",
       },
-    ],
+    ] as unknown as ScenePlan[]).map((s) => enrichScene(s as unknown as Record<string, unknown>) as unknown as ScenePlan),
     renderJobs: [
       {
         id: "render_ops_02",

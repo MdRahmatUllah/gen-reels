@@ -1673,3 +1673,159 @@ button {
     width: 100%;
   }
 }
+
+/* ─── Form Components (Phase 1) ──────────────────────────────────────────── */
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.field-textarea {
+  resize: vertical;
+  min-height: 2.8rem;
+  background-image: none;
+  padding-right: 0.85rem;
+  line-height: 1.6;
+}
+
+.field-input--error {
+  border-color: var(--error-fg);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+
+.form-field__error {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--error-fg);
+}
+
+.form-field__help {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ─── Dialog ──────────────────────────────────────────────────────────────── */
+.studio-dialog {
+  border: none;
+  border-radius: var(--r-xl);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  padding: 0;
+  box-shadow: var(--shadow-lg);
+  max-width: 32rem;
+  width: 90vw;
+  animation: rise-in 280ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.studio-dialog::backdrop {
+  background: var(--bg-overlay);
+  animation: fade-in 200ms ease both;
+}
+
+.studio-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.studio-dialog__header h2 {
+  margin: 0;
+  font-family: "Manrope", "Inter", system-ui, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.studio-dialog__close {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--r-sm);
+  font-size: 1rem;
+  color: var(--text-muted);
+  transition: background var(--t-base), color var(--t-base);
+}
+
+.studio-dialog__close:hover {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.studio-dialog__body {
+  padding: var(--sp-5) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.studio-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-6);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ─── Generation Status ───────────────────────────────────────────────────── */
+.generation-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.generation-status__spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 2.5px solid rgba(47, 109, 246, 0.25);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ─── Login Form (Phase 1) ────────────────────────────────────────────────── */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.login-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--sp-6);
+}
+
+.login-card {
+  max-width: 24rem;
+  width: 100%;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.button:disabled::before {
+  display: none;
+}

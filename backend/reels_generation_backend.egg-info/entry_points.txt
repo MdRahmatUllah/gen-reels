@@ -1,0 +1,3 @@
+[console_scripts]
+reels-api = app.main:run
+reels-cli = app.cli:main

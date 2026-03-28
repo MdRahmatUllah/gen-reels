@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
   defaultProjectId,
@@ -12,6 +12,10 @@ import {
   getSettingsSections,
   getTemplates,
 } from "../lib/mock-api";
+import { useBrief, useUpdateBrief } from "../hooks/use-briefs";
+import { useProject, useCreateProject } from "../hooks/use-projects";
+import { useScript, useGenerateScript, useUpdateScript, useApproveScript } from "../hooks/use-scripts";
+import { GenerationStatusIndicator } from "../components/GenerationStatus";
 import { formatDuration, formatSignedSeconds } from "../lib/format";
 import {
   EmptyState,
@@ -436,10 +440,53 @@ export function ProjectsPage() {
 
 export function ProjectBriefPage() {
   const { bundle, isLoading, projectId } = useProjectData();
+  const navigate = useNavigate();
+  const { data: briefData } = useBrief(projectId);
+  const updateBrief = useUpdateBrief(projectId);
+
+  const [editing, setEditing] = useState(false);
+  const [localBrief, setLocalBrief] = useState({
+    objective: "",
+    hook: "",
+    targetAudience: "",
+    callToAction: "",
+    brandNorthStar: "",
+  });
+
+  // Sync from server data
+  useEffect(() => {
+    if (briefData) {
+      setLocalBrief({
+        objective: briefData.objective,
+        hook: briefData.hook,
+        targetAudience: briefData.targetAudience,
+        callToAction: briefData.callToAction,
+        brandNorthStar: briefData.brandNorthStar,
+      });
+    }
+  }, [briefData]);
+
+  const handleFieldChange = useCallback((field: string, value: string) => {
+    setLocalBrief((prev) => ({ ...prev, [field]: value }));
+    setEditing(true);
+  }, []);
+
+  const handleSave = useCallback(() => {
+    updateBrief.mutate(localBrief);
+    setEditing(false);
+  }, [localBrief, updateBrief]);
+
+  const handleSaveAndContinue = useCallback(() => {
+    updateBrief.mutate(localBrief, {
+      onSuccess: () => navigate(`/app/projects/${projectId}/ideas`),
+    });
+  }, [localBrief, updateBrief, navigate, projectId]);
 
   if (isLoading || !bundle) {
     return <LoadingPage />;
   }
+
+  const brief = briefData ?? bundle.brief;
 
   return (
     <PageFrame
@@ -447,27 +494,83 @@ export function ProjectBriefPage() {
       title={bundle.project.title}
       description="The brief sets the production atmosphere, hard constraints, and approval path before any expensive generation begins."
       actions={
-        <>
-          <Link className="button button--secondary" to={`/app/projects/${projectId}/script`}>
-            Review script
-          </Link>
-          <Link className="button button--primary" to={`/app/projects/${projectId}/scenes`}>
-            Open scenes
-          </Link>
-        </>
+        <div style={{ display: "flex", gap: "0.75rem" }}>
+          {editing ? (
+            <button className="button button--secondary" onClick={handleSave} type="button">
+              {updateBrief.isPending ? "Saving…" : "Save brief"}
+            </button>
+          ) : null}
+          <button
+            className="button button--primary"
+            onClick={handleSaveAndContinue}
+            type="button"
+          >
+            Save & generate ideas →
+          </button>
+        </div>
       }
       inspector={<ProjectInspector project={bundle.project} />}
     >
-      <SectionCard className="surface-card--hero" title="Creative North Star" subtitle={bundle.brief.brandNorthStar}>
-        <p className="body-copy">{bundle.brief.objective}</p>
-        <div className="content-grid content-grid--equal">
-          <div className="surface-panel">
-            <p className="section-heading">Hook</p>
-            <strong>{bundle.brief.hook}</strong>
+      <SectionCard className="surface-card--hero" title="Creative direction" subtitle="Core strategic elements that shape all generation">
+        <div className="form-grid">
+          <div className="form-field">
+            <label className="field-label" htmlFor="brief-objective">Objective</label>
+            <textarea
+              id="brief-objective"
+              className="field-input field-textarea"
+              value={localBrief.objective}
+              onChange={(e) => handleFieldChange("objective", e.target.value)}
+              rows={3}
+              placeholder="What should this video achieve?"
+            />
           </div>
-          <div className="surface-panel">
-            <p className="section-heading">Call to action</p>
-            <strong>{bundle.brief.callToAction}</strong>
+          <div className="content-grid content-grid--equal">
+            <div className="form-field">
+              <label className="field-label" htmlFor="brief-hook">Hook</label>
+              <textarea
+                id="brief-hook"
+                className="field-input field-textarea"
+                value={localBrief.hook}
+                onChange={(e) => handleFieldChange("hook", e.target.value)}
+                rows={2}
+                placeholder="What stops the scroll?"
+              />
+            </div>
+            <div className="form-field">
+              <label className="field-label" htmlFor="brief-cta">Call to action</label>
+              <textarea
+                id="brief-cta"
+                className="field-input field-textarea"
+                value={localBrief.callToAction}
+                onChange={(e) => handleFieldChange("callToAction", e.target.value)}
+                rows={2}
+                placeholder="What should viewers do after watching?"
+              />
+            </div>
+          </div>
+          <div className="content-grid content-grid--equal">
+            <div className="form-field">
+              <label className="field-label" htmlFor="brief-audience">Target audience</label>
+              <textarea
+                id="brief-audience"
+                className="field-input field-textarea"
+                value={localBrief.targetAudience}
+                onChange={(e) => handleFieldChange("targetAudience", e.target.value)}
+                rows={2}
+                placeholder="Who is this for?"
+              />
+            </div>
+            <div className="form-field">
+              <label className="field-label" htmlFor="brief-northstar">Brand north star</label>
+              <textarea
+                id="brief-northstar"
+                className="field-input field-textarea"
+                value={localBrief.brandNorthStar}
+                onChange={(e) => handleFieldChange("brandNorthStar", e.target.value)}
+                rows={2}
+                placeholder="Creative tone and positioning"
+              />
+            </div>
           </div>
         </div>
       </SectionCard>
@@ -475,7 +578,7 @@ export function ProjectBriefPage() {
       <div className="content-grid content-grid--equal">
         <SectionCard title="Guardrails" subtitle="These shape the asset generation prompts and approval review">
           <ul className="bullet-list">
-            {bundle.brief.guardrails.map((item) => (
+            {brief.guardrails.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
@@ -483,7 +586,7 @@ export function ProjectBriefPage() {
 
         <SectionCard title="Must include" subtitle="Non-negotiable creative and commercial details">
           <ul className="bullet-list">
-            {bundle.brief.mustInclude.map((item) => (
+            {brief.mustInclude.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
@@ -492,7 +595,7 @@ export function ProjectBriefPage() {
 
       <SectionCard title="Approval sequence" subtitle="Designed to fit the future gated workflow">
         <div className="approval-lane">
-          {bundle.brief.approvalSteps.map((step, index) => (
+          {brief.approvalSteps.map((step, index) => (
             <div className="approval-step" key={step}>
               <span>{index + 1}</span>
               <div>

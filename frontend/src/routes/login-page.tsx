@@ -1,77 +1,80 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../lib/auth";
+import { FormInput } from "../components/FormField";
 
 export function LoginPage() {
+  const { login, error, isLoading } = useAuth();
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("alex@studio.io");
+  const [password, setPassword] = useState("password123");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await login({ email, password });
+      navigate("/app", { replace: true });
+    } catch {
+      // error is set in auth context
+    }
+  };
+
   return (
-    <main className="login-shell">
-      {/* ── Hero Side ───────────────────────────────────────────────────── */}
-      <section className="login-hero">
-        <div>
-          <p className="eyebrow">Digital Director's Desk</p>
-          <h1>Ship polished reels with studio-grade control.</h1>
-        </div>
-
-        <p>
-          This prototype pairs the documented workflow shell with mock project
-          data so product, creative, and engineering can align before backend
-          integration begins.
-        </p>
-
-        <div className="login-points">
-          <div className="surface-card">
-            <strong>Project orchestration</strong>
-            <p>Brief, script, scene, render, and export workspaces — all in one production view.</p>
-          </div>
-          <div className="surface-card">
-            <strong>Composition-aware UI</strong>
-            <p>Render monitoring exposes timing, loudness, music continuity, and snapshot checks.</p>
-          </div>
-          <div className="surface-card">
-            <strong>Preset system</strong>
-            <p>Reusable voice, look, and motion presets keep visual consistency across projects.</p>
-          </div>
-          <div className="surface-card">
-            <strong>Admin operations</strong>
-            <p>Cross-workspace queue health, provider triage, and workspace fleet visibility.</p>
+    <div className="login-shell">
+      <div className="login-card surface-card">
+        <div className="brand-lockup" style={{ marginBottom: "2rem" }}>
+          <div className="brand-mark" aria-hidden="true" />
+          <div>
+            <p className="eyebrow">Production Atelier</p>
+            <h1>Reels Generation Studio</h1>
           </div>
         </div>
-      </section>
 
-      {/* ── Login Card ──────────────────────────────────────────────────── */}
-      <section className="login-card">
-        <div>
-          <p className="eyebrow">Mock access</p>
-          <h2>North Star Studio</h2>
-        </div>
+        <form onSubmit={handleSubmit} className="login-form">
+          <FormInput
+            id="login-email"
+            label="Email"
+            type="email"
+            value={email}
+            onChange={setEmail}
+            placeholder="email@studio.io"
+            disabled={isLoading}
+          />
 
-        <p>
-          Sign in to review the creator workspace, render operations desk, and
-          mock admin surfaces.
-        </p>
+          <FormInput
+            id="login-password"
+            label="Password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            placeholder="••••••••"
+            disabled={isLoading}
+          />
 
-        <div className="login-actions" style={{ flexDirection: "column", gap: "0.75rem" }}>
-          <Link
+          {error ? (
+            <div className="alert-item" style={{ marginBottom: "1rem" }}>
+              <span className="tone-pill tone-pill--error" />
+              <div>
+                <strong>Login failed</strong>
+                <p>{error}</p>
+              </div>
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
             className="button button--primary"
-            to="/app"
-            style={{ width: "100%", justifyContent: "center", minHeight: "3rem" }}
+            disabled={isLoading}
+            style={{ width: "100%", justifyContent: "center" }}
           >
-            Enter Studio →
-          </Link>
-          <Link
-            className="button button--secondary"
-            to="/admin/queue"
-            style={{ width: "100%", justifyContent: "center", minHeight: "3rem" }}
-          >
-            View Admin Queue
-          </Link>
-        </div>
+            {isLoading ? "Signing in…" : "Sign in"}
+          </button>
 
-        {/* Feature pills */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
-          {["Brief", "Script", "Scenes", "Renders", "Exports", "Billing"].map((f) => (
-            <span className="tag-chip" key={f}>{f}</span>
-          ))}
-        </div>
-      </section>
-    </main>
+          <p className="body-copy" style={{ textAlign: "center", marginTop: "1rem", opacity: 0.6, fontSize: "0.75rem" }}>
+            Demo: alex@studio.io / password123
+          </p>
+        </form>
+      </div>
+    </div>
   );
 }
