@@ -4,65 +4,46 @@
 
 - Segmentation and timing service
 - Scene planning service
+- Prompt-pair generation service
 - Visual preset and voice preset services
 - Consistency pack initialization service
 - Approval status transitions for script and scene plan records
 - Scene planning UI and preset management screens
 
-## Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as React App
-    participant API as FastAPI
-    participant W as Planning Worker
-    participant DB as PostgreSQL
-
-    U->>FE: approve script draft
-    FE->>API: approve script
-    API->>DB: freeze script version
-    U->>FE: generate scene plan
-    FE->>API: request scene planning
-    API->>W: enqueue planning job
-    W->>DB: create scene plan and scene segments
-    U->>FE: review and edit scenes
-    FE->>API: save scene edits and approve plan
-    API->>DB: snapshot consistency pack at approval
-```
-
 ## Duration Estimation
 
 Scene duration estimation uses a two-tier approach:
 
-1. **Word-count heuristic (default):** Estimated duration in seconds = `word_count / 2.2`, which corresponds to approximately 130 words per minute — a standard adult narration pace. This is computed before any TTS has run.
-2. **TTS timing override:** If a narration dry-run is available (Phase 3+), the measured audio duration replaces the heuristic estimate for any scene where narration has been generated.
+1. Word-count heuristic by default
+2. TTS timing override in later phases once narration dry runs are available
 
-Timing warnings surface to users in the scene editor:
-- Warning if an estimated segment duration exceeds 10 seconds (hard limit).
-- Warning if total script duration falls outside 25–65 seconds.
-- These warnings are advisory — they do not block approval.
+Timing warnings surface to users:
+
+- warning if an estimated segment duration exceeds 8 seconds
+- warning if total script duration falls outside 60-120 seconds
 
 ## Data Changes
 
-- Add `scene_plans` and `scene_segments`.
-- Add `visual_presets` and `voice_presets`.
-- Add approval timestamps and approval actor fields to scripts and scene plans.
-- Initialize `consistency_packs` record when a scene plan is approved: snapshot character sheet, style descriptor, prompt prefix, and negative prompt from the selected visual preset.
+- Add `scene_plans` and `scene_segments`
+- Add `visual_presets` and `voice_presets`
+- Add `start_image_prompt` and `end_image_prompt` fields on `scene_segments`
+- Add approval timestamps and approval actor fields to scripts and scene plans
 
 ## API Surface Added
 
 - Segment script endpoint
 - Generate scene plan endpoint
+- Generate prompt pairs endpoint
 - Scene plan fetch and update
-- Script approve endpoint (freezes script version as immutable)
-- Scene plan approve endpoint (triggers consistency pack snapshot)
+- Script approve endpoint
+- Scene plan approve endpoint
 - Preset CRUD endpoints
 
 ## Frontend Structure
 
-- Scene timeline or ordered list workspace
-- Scene editor panel with duration estimate display
+- Scene timeline workspace
+- Scene editor with duration estimate display
+- Start-frame and end-frame prompt editors
 - Visual preset picker
 - Voice preset picker
 - Approval action surfaces
@@ -70,7 +51,5 @@ Timing warnings surface to users in the scene editor:
 ## Risk Controls
 
 - Manual edits must override generated scene suggestions cleanly.
-- Approved records are immutable inputs to later renders. Creating a new draft is always permitted, but it requires an explicit re-approval to become the active version.
-- Timing estimates must be surfaced as transparent advisory warnings, not blocking validation, so users understand the 5–10 second scene constraints without being prevented from continuing.
-
-
+- Approved records are immutable inputs to later renders.
+- Timing estimates must be surfaced as advisory warnings, not blocking validation.

@@ -2,21 +2,17 @@
 
 ## Objective
 
-Convert scripts into a structured, editable, approval-based scene plan that is ready for later asset generation.
-
-## Why This Phase Exists
-
-This is the phase that turns the platform from a text assistant into a controllable production system. It is where pacing, scene boundaries, visual instructions, and reusable presets become explicit instead of implicit.
+Convert scripts into a structured, editable, approval-based scene plan with start-frame and end-frame prompts that is ready for later asset generation.
 
 ## In Scope
 
-- Script segmentation into timing-safe scene units
+- Script segmentation into 5-8 second scene units
 - Scene plan generation
+- Start-frame and end-frame prompt generation per scene
 - Visual presets
 - Voice presets
 - Scene-level editing
 - Approval workflow for scripts and scene plans
-- Draft versus approved planning versions
 
 ## Out Of Scope
 
@@ -31,17 +27,8 @@ This is the phase that turns the platform from a text assistant into a controlla
 - Reusable style and voice setup
 - An approval checkpoint before expensive generation work begins
 
-## Deliverables
-
-- Scene plan domain model
-- Segmentation engine and timing estimates
-- Visual and voice preset management
-- Scene planning UI with edit and approve actions
-- Scene plan generation worker
-
 ## Exit Criteria
 
 - Users can split scripts into scenes and adjust them manually
 - Users can create and reuse presets
-- One approved scene plan is available as a stable input for Phase 3 renders
-
+- One approved scene plan with prompt pairs is available as a stable input for Phase 3 renders

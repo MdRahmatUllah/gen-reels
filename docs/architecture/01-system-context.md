@@ -1,85 +1,144 @@
-# System Context
+# System Context And Architecture
 
 ## Overview
 
-The platform is a web-based application that coordinates user workflows and asynchronous media generation across multiple providers and internal workers. The key design choice is to separate product orchestration from generation execution so the user-facing workflow remains stable even if generation providers change.
+The Reels Generation Platform is a service-oriented SAAS product. It is not a monolith. The first releases will ship as a small set of coordinated services — a web client, an API gateway, background workers, and storage — with the option to scale each layer independently as demand grows.
 
 ## System Context Diagram
 
 ```mermaid
-flowchart LR
-    User["Creator / Team User"] --> FE["React Web App"]
-    FE --> API["FastAPI API"]
-    API --> PG["PostgreSQL"]
-    API --> Redis["Redis"]
-    API --> S3["Object Storage"]
-    API --> Workers["Celery Workers (Hosted)"]
-    Workers --> Providers["Generation Providers"]
-    Workers --> FFmpeg["Assembly Worker"]
-    Workers --> S3
-    Workers --> PG
-    API --> Billing["Billing / Payments"]
-    API --> Observability["Logs / Metrics / Traces"]
-    LocalWorker["Local Worker Agent (Phase 7)"] --> API
-    LocalWorker --> S3
+graph TB
+    Creator["Creator / User"] -- HTTPS --> WebApp["React Web App"]
+    WebApp -- REST / SSE --> API["FastAPI API Service"]
+    API -- "Read/Write" --> DB["PostgreSQL"]
+    API -- "Enqueue Jobs" --> Broker["Redis (Celery Broker)"]
+    Broker -- "Dispatch" --> Workers["Celery Workers"]
+    Workers -- "Direct Write" --> DB
+    Workers -- "Read/Write Assets" --> Storage["MinIO\n(S3-Compatible)"]
+    Workers -- "Generate" --> Providers["Generation Providers"]
+    API -- "Signed URL" --> Storage
+    
+    subgraph Providers["Generation Providers"]
+        AzureOpenAI["Azure OpenAI\n(Image, TTS, Text)"]
+        Veo3["Veo 3 / Vertex AI\n(Video FLF2V / I2V)"]
+        OpenSource["Open-Source Models\n(Wan2.1, FLUX, XTTSv2)\nvia Docker + GPU"]
+    end
+
+    subgraph Infrastructure["Infrastructure"]
+        Docker["Docker Containers"]
+        Compose["Docker Compose\n(Local Dev)"]
+    end
 ```
 
-### Write Path Clarification
+## Service Decomposition
 
-Workers write state through **two distinct paths**:
+| Service | Technology | Purpose |
+|---|---|---|
+| **Web App** | React, TypeScript, Vite, Tailwind CSS | Creator-facing UI |
+| **API Service** | FastAPI, Pydantic, SQLAlchemy | REST endpoints, domain operations, job submission |
+| **Workers** | Celery, Redis | Async generation jobs, composition, audio strip, duration alignment |
+| **Database** | PostgreSQL | Domain data, workflow state, usage records |
+| **Object Storage** | MinIO (S3-compatible) | Media assets, exports, quarantine, model weights |
+| **Broker** | Redis | Celery message broker, SSE buffer, rate limit state, cache |
+| **Composition Worker** | FFmpeg, ffmpeg-python | Video assembly, audio stripping, speed-matching, loudness normalisation |
+| **GPU Workers** | Docker + CUDA | Self-hosted open-source model inference (Wan2.1, FLUX, XTTSv2) |
 
-- **Direct writes to PostgreSQL and S3:** Workers write step completion status, asset references, cost metadata, and provider run records directly to the database and object storage. This is the hot path for all job progress updates.
-- **Coordination through the API:** Workers call the API only when a state transition requires product-level business logic (for example, advancing a render job from `running` to `completed` after all steps succeed, or triggering a user notification). Raw job-step writes bypass the API entirely to avoid a bottleneck.
+## Core Data / Control Flow
 
-This means the diagram arrows from `Workers → PG` and `Workers → S3` are first-class write paths, not exceptional cases.
+```mermaid
+sequenceDiagram
+    participant U as Creator
+    participant W as Web App
+    participant A as API
+    participant Q as Redis / Celery
+    participant WK as Worker
+    participant P as Provider (Azure / Veo3 / OSS)
+    participant DB as PostgreSQL
+    participant S as MinIO
 
-## Logical Subsystems
+    U->>W: Create project, define brief
+    W->>A: POST /projects + brief
+    A->>DB: Store project, brief
+    U->>W: Generate viral ideas
+    W->>A: POST /ideas:generate
+    A->>Q: Enqueue idea generation job
+    Q->>WK: Dispatch to text worker
+    WK->>P: Call text provider (Azure OpenAI)
+    P-->>WK: Return idea set
+    WK->>DB: Store idea set
+    U->>W: Select idea
+    W->>A: POST /ideas/{id}:select
+    U->>W: Generate script (60-120s)
+    W->>A: POST /scripts:generate
+    A->>Q: Enqueue script generation
+    Q->>WK: Dispatch
+    WK->>P: Call text provider
+    P-->>WK: Return script
+    WK->>DB: Store script version
+    U->>W: Approve script, segment, generate prompt pairs
+    Note over WK: Scene segmentation + prompt pair generation
+    U->>W: Start render
+    W->>A: POST /renders
+    A->>DB: Create render job, snapshot consistency pack
+    A->>Q: Enqueue paired image generation (sequential chain)
+    Note over WK: Scene 1: start frame (pack only)
+    WK->>P: Generate start frame
+    P-->>WK: Start frame image
+    WK->>S: Store start frame
+    Note over WK: Scene 1: end frame (start frame ref)
+    WK->>P: Generate end frame
+    P-->>WK: End frame image
+    WK->>S: Store end frame
+    Note over WK: Scene 2: start frame (scene 1 end frame ref)
+    WK->>P: Generate start frame (chained)
+    Note over WK: ...repeat for all scenes...
+    WK->>DB: Update step statuses
+    Note over U: Frame pair review gate
+    U->>W: Approve frame pairs
+    W->>A: POST /steps/{id}:approve-frame-pair
+    A->>Q: Enqueue video generation per scene
+    WK->>P: FLF2V video generation (start + end frames)
+    P-->>WK: Video clip (silent)
+    WK->>S: Store video clip
+    Note over WK: Audio strip + narration + duration alignment
+    WK->>S: Store processed clips
+    Note over WK: Composition
+    WK->>S: Store final export
+    WK->>DB: Mark render complete
+    U->>W: Download export
+    W->>A: GET signed URL
+    A->>S: Generate pre-signed URL
+```
 
-- Product application: authentication, workspaces, projects, drafts, presets, approval state, exports, billing views.
-- Orchestration backend: API endpoints, domain rules, job creation, state transitions, permissions.
-- Worker layer: rendering tasks, provider calls, retries, step checkpoints, FFmpeg composition, subtitle processing.
-- Data and storage: relational entities, usage records, prompt versions, scene assets, exports, and lifecycle metadata.
-- Integration layer: providers for generation, payment processor, email/notifications, and future local worker agents.
+## The Worker Write Path
 
-## Core Data And Control Flow
+The architecture uses a **direct write path** for workers: workers write their results directly to PostgreSQL and MinIO without routing through the API service. This avoids creating a bottleneck at the API layer during heavy generation workloads.
 
-1. The user submits or edits a brief.
-2. The API creates or updates a project draft and enqueues generation for ideas or scripts.
-3. The worker performs the generation step and writes step status, cost, latency, and generated asset references directly to PostgreSQL and object storage.
-4. The user approves a script and scene plan.
-5. The API creates a render job with per-scene steps.
-6. Workers execute each step independently: writing step status, cost, latency, and asset references directly to PostgreSQL and object storage for each step.
-7. After all scene steps complete successfully, the orchestration service transitions the render job state and enqueues the composition step.
-8. FFmpeg workers build the final export and write the export record directly to PostgreSQL and S3.
-9. The API surfaces the export and its metadata to the web app.
+Rules:
+- Workers open their own database sessions (sync, managed directly by worker code, not FastAPI's `Depends`).
+- Workers use the MinIO/S3 SDK directly for asset storage.
+- Workers never call API endpoints to report results — they write directly to the database.
+- The API reads the same database tables to serve status queries to the frontend.
+- SSE events are published by workers to Redis and consumed by the API for delivery to connected clients.
 
-## Bounded Contexts
+## Deployment Units
 
-- Identity and access
-- Workspace and billing
-- Project planning
-- Scene planning and presets
-- Visual consistency and asset memory
-- Asset generation and provider execution
-- Export composition and delivery
-- Content moderation and safety
-- Observability and operations
+| Unit | Container | GPU Required | Autoscaling Signal |
+|---|---|---|---|
+| Web App | `reels-frontend` | No | Request rate |
+| API Service | `reels-api` | No | Request rate / connection count |
+| Planning Workers | `reels-worker-planning` | No | Queue depth (planning queue) |
+| Image Generation Workers | `reels-worker-image` | Optional (GPU for open-source) | Queue depth (image queue) |
+| Video Generation Workers | `reels-worker-video` | Yes (for open-source models) | Queue depth (video queue) |
+| Audio / TTS Workers | `reels-worker-audio` | Optional | Queue depth (audio queue) |
+| Composition Workers | `reels-worker-composition` | No | Queue depth (composition queue) |
+| PostgreSQL | `reels-postgres` | No | N/A (managed or single instance) |
+| Redis | `reels-redis` | No | N/A |
+| MinIO | `reels-minio` | No | N/A |
 
-## Key Invariants
+## Key Constraints
 
-- User-facing state changes that require business logic happen through the API. Step-level progress writes (status, cost, assets) happen directly from workers to the database.
-- Every expensive operation must be representable as a resumable step with a stable identifier.
-- Provider outputs must be normalized into the platform domain model before any downstream step consumes them.
-- Asset storage keys must be deterministic enough to support retries, deduplicating, and cleanup.
-- The consistency pack must be fully resolved before any image or video generation step begins.
-
-## Major Risks Addressed By This Architecture
-
-- Provider churn
-- Long-running job failure
-- Partial render failure
-- Cost opacity
-- Inconsistent product behavior across providers
-- Visual consistency drift across multi-scene exports
-
-
+- **Sequential image generation:** Frame pair generation is sequential across scenes due to reference chaining. Scene N depends on scene N-1's end frame. This is an architectural constraint, not a performance bug.
+- **Provider audio policy:** Video generation must always request silent output or strip audio post-generation. Provider-generated audio must never reach the composition pipeline.
+- **Consistency pack snapshot:** Every render job captures its consistency pack at creation time. Workers always read the snapshot, never the live pack.
+- **Signed URLs for all asset access:** No direct public URLs for any stored assets. All client-facing URLs are pre-signed with short TTL.

@@ -2,145 +2,143 @@
 
 ## Why This Document Exists
 
-Maintaining visual consistency across a multi-clip short-form reel is the hardest technical problem on this platform. Each scene is generated independently, which means character appearance, color grading, environment tone, and spatial framing can drift between clips unless the platform enforces deliberate consistency controls from the moment a project is created.
+Maintaining visual continuity across a multi-clip short-form reel is the hardest technical problem on this platform. Each scene is generated independently unless the platform deliberately passes forward approved visual context.
 
-This document defines the consistency model, the asset memory system, and how both feed into the generation pipeline.
+This document defines the continuity model, the asset memory system, and how both feed into the generation pipeline.
 
-## The Consistency Problem
+## The Continuity Problem
 
-When a 30–60 second reel is split into 5–10 second scene segments:
+When a 60-120 second reel is split into 5-8 second scene segments:
 
 - Each image or video generation call receives only a text prompt unless the system deliberately passes reference context.
-- Without reference anchoring, the same described character will appear differently across frames: face shape, outfit, skin tone, hair, and even proportions vary because generative models do not maintain state across calls.
-- Even minor variations in prompt wording compound over multiple scenes, creating visual incoherence in the final export.
+- Without reference anchoring, the same described character will appear differently across scenes.
+- Even minor prompt variation compounds over multiple scenes, creating visual incoherence.
 
-The solution is not to rely on model behavior for consistency. It is to enforce consistency through the platform's own data structures, stored references, and prompt construction.
+The solution is not to rely on model behavior for continuity. It is to enforce continuity through the platform's own data structures, stored references, and prompt construction.
 
 ## Consistency Pack
 
-A **Consistency Pack** is the set of approved references and parameters that must be attached to every generation call for a given project or character. It is stored as a platform-native record tied to a project and optionally to a visual preset.
+A consistency pack is the set of approved references and parameters that must be attached to every generation call for a given project or character.
 
 ### Consistency Pack Components
 
 | Component | Description |
-|---|---|
-| `reference_images` | One or more approved keyframe images used as visual anchors |
-| `character_sheet` | Structured text describing appearance: face, body type, hair, outfit, skin tone |
+| --- | --- |
+| `reference_images` | Approved images used as visual anchors |
+| `character_sheet` | Structured text describing appearance |
 | `style_descriptor` | Color palette, lighting style, lens type, mood, era |
 | `negative_prompt` | Explicit exclusions to prevent unwanted variation |
 | `seed_family` | A defined seed range or fixed seed used for reproducible generation attempts |
 | `camera_defaults` | Default framing, aspect ratio, shot distance |
-| `prompt_prefix` | A shared opening clause prepended to every visual generation prompt in the project |
+| `prompt_prefix` | A shared opening clause prepended to every visual generation prompt |
 
-### Consistency Pack Lifecycle
+## Frame-Pair Continuity Chain
 
-```mermaid
-flowchart LR
-    Brief["Project Brief"] --> CP["Consistency Pack Created"]
-    CP --> VP["Visual Preset Selected"]
-    VP --> ScenePlan["Scene Plan Approved"]
-    ScenePlan --> Snapshot["Pack Snapshotted at Job Creation"]
-    Snapshot --> ImageGen["Image Generation + Snapshot"]
-    ImageGen --> Moderation["Output Moderation"]
-    Moderation --> KeyframeApproval["Keyframe Approval"]
-    KeyframeApproval --> VideoGen["Video Generation + Snapshot"]
-```
+The platform now uses a frame-pair model per scene:
 
-During Phase 2 (Content Planning), users define or select a visual preset that seeds the initial consistency pack. During Phase 3 (Render MVP), the first approved keyframe image for each scene becomes the reference image for the video generation call that follows.
+- `scene_start_frame`
+- `scene_end_frame`
+
+Continuity is enforced by chaining scenes together:
+
+- Scene 1 start frame uses the consistency pack only.
+- Scene 1 end frame references scene 1 start frame.
+- Scene `N` start frame references scene `N-1` end frame plus the consistency pack.
+- Scene `N` end frame references scene `N` start frame plus the consistency pack.
+
+This means visual continuity is both:
+
+- global, through the consistency pack
+- local, through the previous scene's approved end frame
 
 ## Asset Memory Model
 
-Asset memory is the project-scoped record of all generation inputs and outputs that the system uses to maintain continuity across steps and across re-renders.
+Asset memory is the project-scoped record of all generation inputs and outputs that the system uses to maintain continuity across steps and re-renders.
 
 ### Key Asset Memory Records
 
-- `consistency_packs`: One per project, versioned alongside scene plans.
-- `keyframes`: The approved image output for each scene segment, stored in object storage and referenced in the consistency pack after approval.
-- `prompt_snapshots`: The exact prompt, seed, provider settings, and reference image IDs used for each generation call — stored on the `provider_run` record.
-- `voice_memory`: The selected voice preset, pace, and tone used for narration, ensuring narrator voice stays consistent across scenes.
-- `music_reference`: The selected or generated music track reference tied to the project-level export settings.
+- `consistency_packs`
+- approved start frames and end frames per scene
+- chain edges linking `scene N end -> scene N+1 start`
+- prompt snapshots stored on provider runs
+- voice memory for narration continuity
+- music reference for project-level audio continuity
 
-### Storage Layout Extension
+## Storage Layout Extension
 
 ```text
 workspace/{workspace_id}/project/{project_id}/
   consistency/
-    pack.json              ← versioned consistency pack snapshot
-    reference_images/      ← approved keyframes used as visual anchors
-    character_sheets/      ← text-based character and style definitions
+    pack.json
+    reference_images/
+    character_sheets/
   assets/
-    images/                ← generated scene images
-    videos/                ← generated scene clips
-    ...
+    images/
+      start/
+      end/
+    videos/
+      raw/
+      silent/
+      retimed/
 ```
 
 ## Generation Prompt Construction
 
-Every image and video generation request must be assembled by the platform using the following composition order:
+Every image generation request must be assembled in this order:
 
-1. **Global prompt prefix** from the consistency pack
-2. **Scene-specific narration context** from the scene segment
-3. **Scene-specific visual prompt** from the scene plan
-4. **Style descriptor** from the visual preset
-5. **Camera and framing instruction** from the scene segment or preset
-6. **Negative prompt** from the consistency pack
+1. global prompt prefix from the consistency pack
+2. scene-specific narration context
+3. scene-specific visual prompt
+4. scene-specific start or end frame prompt
+5. style descriptor from the visual preset
+6. camera and framing instruction
+7. previous scene's approved end frame reference when required
+8. negative prompt from the consistency pack
 
-The platform must never pass a raw user-written prompt directly to a provider adapter. Every prompt must be assembled through the prompt construction layer, which injects the consistency pack context.
+The platform must never pass a raw user-written prompt directly to a provider adapter.
 
-### Image-to-Video Priority
+## Video Generation Priority
 
-Whenever an approved keyframe image exists for a scene, the generation pipeline must prefer **image-to-video** over text-to-video for that scene. This is the single most effective technique for reducing inter-scene visual drift.
+Whenever an approved frame pair exists for a scene, the generation pipeline must prefer first/last-frame or start/end-frame video generation over text-to-video. If the provider only supports single-image I2V, the approved start frame is used and the provider run is marked as degraded continuity mode.
 
-```mermaid
-flowchart LR
-    SG["Scene Generation Step"] --> KF{"Approved Keyframe Exists?"}
-    KF -- Yes --> I2V["Image-to-Video Provider"]
-    KF -- No --> T2V["Text-to-Video Provider"]
-    I2V --> Clip["Scene Clip Asset"]
-    T2V --> Clip
-```
+## Frame-Pair Review Step
 
-## Consistency Review Step
+After frame-pair generation but before video generation, the platform must offer a frame-pair review step where the user can:
 
-After image generation but before video generation, the platform must offer a **keyframe review** step where the user can:
+- accept the generated start and end frames
+- regenerate the frame pair with adjusted prompt parameters
+- replace an individual frame with an uploaded reference image
 
-- Accept the generated keyframe and lock it as the reference for video generation.
-- Regenerate the keyframe with adjusted prompt parameters.
-- Replace the keyframe with an uploaded reference image.
+If a frame pair is changed for scene `N`, all later chained scenes are marked stale and require regeneration.
 
-This step prevents consistency failures from propagating into the expensive video generation phase. It is not optional for scenes with named characters or defined style packs.
+## Visual Continuity Score (Phase 5 Forward)
 
-## Visual Consistency Score (Phase 5 Forward)
+In Phase 5, the platform should introduce an optional automated continuity score that compares:
 
-In Phase 5, the platform should introduce an optional automated consistency score that compares:
-
-- Embedding distance between successive keyframe images.
-- Color histogram similarity across scene images.
-- CLIP-based style coherence between generated images and the approved reference.
-
-This score surfaces in the render monitor, allowing creators to identify divergent scenes before triggering the final composition step.
+- embedding distance between successive scene end and next scene start frames
+- color histogram similarity across scene images
+- CLIP-style coherence between generated images and the approved reference set
 
 ## Failure Handling
 
-- If the consistency pack is missing or incomplete when a generation step begins, the step must fail with a clear error: `consistency_pack_required`.
-- If a reference image has expired or been deleted, the system must warn the user and offer to regenerate or re-upload before proceeding.
+- If the consistency pack is missing or incomplete when a generation step begins, the step must fail with `consistency_pack_required`.
+- If a required chain reference has expired or been deleted, the system must warn the user and offer to regenerate or re-upload before proceeding.
 - Prompt construction failures must be treated as deterministic errors and must not retry automatically.
+- Changing an earlier scene in the chain must never silently preserve later scenes that are now continuity-invalid.
 
 ## Interaction With Provider Abstraction
 
-The consistency pack is a platform-native concept. Each provider adapter is responsible for translating consistency pack components into provider-specific parameters:
+The consistency pack is a platform-native concept. Each provider adapter is responsible for translating pack components and chain references into provider-specific parameters:
 
-- For image providers that support reference image input (e.g., ControlNet reference mode, multi-reference API), the adapter passes the keyframe reference.
-- For providers that do not support reference images, the adapter enriches the text prompt with the character sheet and style descriptor instead.
-- The adapter must record in the provider run which consistency inputs were used and in what form.
+- image providers with ordered reference-image input receive the current scene reference set in order
+- video providers with first/last-frame support receive both approved scene frames
+- providers without those capabilities degrade to the best compatible mode and record the loss of fidelity in the provider run
 
 ## Implementation Phasing
 
-| Phase | Consistency Work |
-|---|---|
+| Phase | Continuity Work |
+| --- | --- |
 | Phase 1 | Define consistency pack schema in the database even if not yet populated |
-| Phase 2 | Allow users to define visual presets that seed the consistency pack; store character sheets |
-| Phase 3 | Enforce consistency pack usage in image and video generation; implement keyframe review step |
-| Phase 5 | Introduce consistency scoring and lineage views showing how approved references were used |
-
-
+| Phase 2 | Allow users to define visual presets and prompt pairs; store character sheets |
+| Phase 3 | Enforce chained frame-pair usage in image and video generation; implement frame-pair review |
+| Phase 5 | Introduce continuity scoring and lineage views showing how approved references were used |

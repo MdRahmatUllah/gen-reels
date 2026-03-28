@@ -6,31 +6,32 @@ This roadmap is intentionally staged so the platform becomes usable early, but t
 
 | Phase | Name | Main Goal | What Users Get | Exit Signal |
 | --- | --- | --- | --- | --- |
-| 1 | Foundation | Establish product skeleton and project lifecycle | Auth, workspaces, briefs, idea generation, script generation, saved drafts, input moderation, and baseline rate limiting | Teams can create projects and generate editable scripts safely |
-| 2 | Content Planning | Turn scripts into a controllable pre-render workflow | Scene segmentation, scene plans, style presets, voice presets, approval gates | Users can prepare a render-ready plan without generating media yet |
-| 3 | Render MVP | Deliver end-to-end reel generation | Image and video generation, narration, keyframe review, preview renders, assembly, export library, and output moderation | Users can generate and download a controlled vertical reel |
-| 4 | Reliability And Billing | Make rendering commercially operable | Checkpointing, retries, usage ledger, credits, admin queue visibility, moderation review queue | Renders are recoverable and usage is billable |
-| 5 | Polish And Creator Productivity | Improve publish-readiness and iteration speed | Subtitles, templates, asset library, better audio and export polish, consistency scoring | Creators can reuse winning setups and publish faster |
-| 6 | Collaboration And Studio | Support teams and brand operations | Roles, approvals, shared templates, brand kits, webhooks, API keys, auditability | Agencies and internal teams can collaborate in one workspace |
-| 7 | Local And BYO Expansion | Add flexible execution models | BYO keys, local workers, routing policies, hybrid generation, worker health visibility | Advanced users can reduce cost and choose execution modes |
+| 1 | Foundation | Establish product skeleton and project lifecycle | Auth, workspaces, briefs, viral-style idea generation, idea selection, script generation, saved drafts, input moderation, and baseline rate limiting | Teams can create projects and generate editable scripts from a selected idea safely |
+| 2 | Content Planning | Turn scripts into a controllable pre-render workflow | Scene segmentation, scene plans, start/end prompt pairs, visual presets, voice presets, and approval gates | Users can prepare a paired-frame, render-ready plan without generating media yet |
+| 3 | Render MVP | Deliver end-to-end reel generation | Chained frame-pair generation, video generation, narration, frame-pair review, silent clip normalization, retiming, assembly, export library, and output moderation | Users can generate and download a controlled 9:16 reel from approved planning inputs |
+| 4 | Reliability And Billing | Make rendering commercially operable | Checkpointing, retries, usage ledger, credits, admin queue visibility, moderation review queue, and recalibrated cost controls for paired-image renders | Renders are recoverable and usage is billable |
+| 5 | Polish And Creator Productivity | Improve publish-readiness and iteration speed | Subtitles, templates, asset library, better audio and export polish, continuity scoring, and reuse of prompt pairs and scene chains | Creators can reuse winning setups and publish faster |
+| 6 | Collaboration And Studio | Support teams and brand operations | Roles, approvals, shared templates, brand kits, webhooks, API keys, and auditability | Agencies and internal teams can collaborate in one workspace |
+| 7 | Local And BYO Expansion | Add flexible execution models | BYO keys, local workers, routing policies, hybrid generation, and worker health visibility | Advanced users can reduce cost and choose execution modes |
 
 ## Delivery Logic
 
 - Phase 1 and Phase 2 separate planning from rendering so the product gains a usable workflow before high-cost generation.
-- Phase 3 introduces end-to-end rendering only after the platform can version scripts, plans, and assets.
+- Phase 2 now includes explicit start-frame and end-frame prompt planning, not only scene text planning.
+- Phase 3 introduces end-to-end rendering only after the platform can version scripts, scene plans, prompt pairs, and frame-pair approvals.
 - Phase 4 protects gross margin and operational stability.
-- Phase 5 improves creator retention through reusable templates and better outputs.
+- Phase 5 improves creator retention through reusable templates, prompt-pair reuse, and better outputs.
 - Phase 6 expands the market.
 - Phase 7 lowers cost and unlocks power-user flexibility.
 
 ## Cross-Phase Themes
 
-- Versioning: every script, scene plan, preset, and export is versioned.
+- Versioning: every idea selection, script, scene plan, prompt pair, preset, and export is versioned.
 - Async orchestration: long-running work lives in background jobs, not request-response APIs.
 - Cost visibility: provider usage and asset generation are tracked from the first production render.
 - Controlled extensibility: provider adapters and worker contracts should allow later swap-outs without rewriting the product flow.
 - Safety by default: moderation, auth, and quota controls are part of the platform foundation rather than post-launch patches.
-- Consistency as a platform concern: visual consistency and asset memory are enforced by system design, not left to end users.
+- Continuity as a platform concern: visual continuity and asset memory are enforced by system design, not left to end users.
 
 ## Recommended Implementation Sequence
 
@@ -42,16 +43,17 @@ This roadmap is intentionally staged so the platform becomes usable early, but t
 
 ## Phase Dependencies
 
-- Phase 2 depends on Phase 1 project, script, and draft versioning.
-- Phase 3 depends on Phase 2 scene plans and approval state.
+- Phase 2 depends on Phase 1 project, selected-idea, script, and draft versioning.
+- Phase 3 depends on Phase 2 scene plans, prompt pairs, and approval state.
 - Phase 4 depends on Phase 3 render jobs, provider telemetry, and moderation outcomes.
 - Phase 5 depends on stable render outputs and asset histories.
 - Phase 6 depends on mature workspace and project ownership models plus notification infrastructure.
-- Phase 7 depends on solid provider abstraction and usage governance.
+- Phase 7 depends on solid provider abstraction, usage governance, and worker capability contracts.
 
 ## What To Review Before Starting Any Phase
 
 - Relevant top-level architecture docs
 - The prior phase overview and exit criteria
 - Appendix glossary and API catalog
+- Provider capability matrix
 - Decision log for any changed assumptions

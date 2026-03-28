@@ -4,56 +4,24 @@
 - `Project`: one video production effort with a brief, planning inputs, generated assets, and exports.
 - `Project Brief`: the structured input describing topic, audience, tone, product, or campaign context.
 - `Idea Set`: a generated set of candidate concepts derived from a brief.
+- `Selected Idea`: the single idea currently chosen as the active concept for script generation.
 - `Script Version`: a draft or approved script tied to a project and a generation or edit event.
 - `Scene Plan`: an ordered interpretation of an approved script into renderable segments.
-- `Scene Segment`: one scene with text, estimated duration, prompt inputs, asset references, and generation status.
+- `Scene Segment`: one scene with text, target duration, prompt inputs, asset references, and generation status.
+- `Scene Prompt Pair`: the pair of prompts used to generate a scene's start frame and end frame.
 - `Visual Preset`: reusable visual instructions such as style, framing, color, and prompt defaults.
 - `Voice Preset`: reusable narration settings such as speaker profile, pace, and tone.
-- `Brand Kit`: workspace-level branding assets, colors, typography, and messaging constraints.
-- `Consistency Pack`: the project-level set of approved references and parameters that must be injected into every generation call to maintain visual consistency across scenes. Includes character sheets, reference images, style descriptors, negative prompts, seed families, and prompt prefixes.
-- `Character Sheet`: a structured text description of a character's appearance (face, body, outfit, hair, skin tone) stored as part of the consistency pack.
-- `Style Bible`: the visual style definition for a project (color palette, lighting, lens characteristics, mood) stored as part of the consistency pack.
-- `Keyframe`: the approved image output for a scene segment used as the reference input for image-to-video generation.
-- `Keyframe Review`: the approval gate between image generation and video generation where a user can approve, regenerate, or replace a keyframe.
-- `Asset Memory`: the collective term for all stored generation inputs and outputs that the system uses to maintain continuity across steps and re-renders (consistency packs, keyframes, prompt snapshots, voice memory, music references).
-- `Consistency Score`: a later-phase quality signal comparing scene-to-scene visual similarity to surface likely drift before export.
-- `Prompt Snapshot`: the exact prompt text, seed, provider settings, and reference IDs used for one generation call, stored on the provider run record.
+- `Consistency Pack`: the project-level set of approved references and parameters injected into every generation call.
+- `Start Frame`: the approved starting still image for a scene.
+- `End Frame`: the approved ending still image for a scene.
+- `Continuity Anchor`: the prior scene's approved end frame used as reference for the next scene.
+- `Frame Pair Review`: the approval gate between frame-pair generation and video generation.
 - `Render Job`: a single end-to-end output attempt using approved planning inputs.
 - `Render Step`: one step within a render job, often scene-specific and independently retryable.
-- `Provider Run`: the normalized record of one call to an external or local provider, including input, output, cost, latency, and error if any.
-- `Provider Adapter`: the platform-internal module that translates platform-native generation requests into a specific provider's API contract and normalizes the response back into platform records.
+- `Provider Run`: the normalized record of one call to an external or local provider.
 - `Asset`: any stored intermediate or final media artifact.
-- `Asset Variant`: an alternate version of an asset created through retry or regeneration.
-- `Asset Type`: the discriminator indicating what a stored asset represents: `image`, `video_clip`, `narration`, `music`, `subtitle`, `export`, `reference_image`, or `upload`.
+- `Source Audio Policy`: the rule governing what happens to provider-returned video audio: request silent, strip after generation, or preserve.
+- `Clip Retime`: the process of adjusting a scene clip duration to match narration length.
 - `Export`: a composed deliverable file made available to the user for download or publishing.
-- `Preview Export`: a scene-scoped export generated in preview mode to validate quality before running a full multi-scene render.
-- `Project Template`: a saved project configuration (brief structure, presets, consistency pack defaults) that can be cloned to create new projects without starting from scratch.
-- `Usage Ledger Entry`: a billable or metered record tied to a workspace and operation. The workspace credit balance is always computed from the ledger, never stored as a separate column.
-- `Credit Reservation`: a temporary hold created against a workspace ledger before a paid render begins. Reservations are enforced beginning in Phase 4.
-- `Quota`: the plan-based cap on render count, concurrency, or scene count over a billing period.
-- `Execution Mode`: the method by which a generation step is processed — `hosted` (platform-managed providers), `byo` (workspace-owned external provider credentials), or `local` (workspace-registered local worker agent).
-- `Routing Policy`: the workspace-level configuration that determines which execution mode and which provider are used for each generation modality.
-- `Local Worker Agent`: a software component running on a user-owned machine that registers with the platform, declares its capabilities, polls the control plane for job steps, and returns results.
-- `Registration Token`: the worker-scoped credential issued after local worker registration and used for heartbeat, polling, and result reporting.
-- `Worker Capability`: the modality, model, hardware, and concurrency metadata a local worker advertises during registration.
-- `Dead Letter Job`: a render job or step that has exhausted all automatic retry attempts and cannot be recovered without operator or user intervention. Dead letter jobs are routed to the dead letter queue and visible in the admin UI.
-- `Moderation Event`: a platform record capturing the outcome of a content safety check on an input, output, or export. Moderation events are retained for compliance purposes independent of asset retention.
-- `Moderation Report`: a user-submitted appeal or false-positive report attached to a moderation event for operator review.
-- `Quarantine`: the state of an asset that has been flagged by content moderation and removed from the normal workflow pending operator review.
-- `Notification Event`: a persisted user-facing event such as render completion, failure, invitation, or review request.
-- `Notification Preference`: the user-level configuration that controls which event categories generate email notifications.
-- `Review Request`: a collaboration object representing a pending approval on a scene plan, export, or similar artifact.
-- `Session`: the server-tracked login record backing refresh tokens, revocation, and workspace-aware access token issuance.
-- `Workspace API Key`: a long-lived secret created by a workspace admin for automation, webhook verification, or worker registration flows.
-- `Webhook Endpoint`: a workspace-configured destination that receives signed event deliveries.
-- `Worker Registration`: the platform record representing one local worker machine, its capabilities, health, and workspace ownership.
-- `Signed URL`: a time-limited, cryptographically signed URL granting read or write access to a specific object in object storage without requiring platform credentials.
-- `Music Ducking`: the technique of automatically attenuating background music during narration passages and restoring it during silent sections to maintain a natural-sounding audio mix without abrupt volume jumps.
-- `Loudness Normalisation`: post-processing applied to the final export audio to achieve a consistent integrated loudness target of −14 LUFS with a −1.0 dBTP true peak limit — the delivery standard for TikTok and Instagram Reels.
-- `Scene Transition Mode`: the configured method used when cutting between scene clips in the composition — `hard_cut` (direct cut, default) or `crossfade` (0.25–0.5 second dissolve, Phase 5+).
-- `Voice Continuity`: the architectural requirement that all narration steps within one render job use the same frozen `voice_preset_id`, ensuring the final video sounds like a single unbroken narrator.
-- `Composition Dependency Gate`: the orchestration rule that prevents the composition step from dispatching until all required scene assets (video clips, narration, music) are in a `completed` state.
-- `Asset Stream Probe`: the pre-composition validation step that inspects video and audio file streams using `ffprobe` to confirm uniform resolution, frame rate, and channel configuration before FFmpeg assembly begins.
-- `Composition Provider Run`: the provider run record for the FFmpeg composition step, containing the full command, input asset manifest, exit code, duration, output file size, and loudness measurement.
-- `Export Profile`: the set of output parameters for a composed export — resolution, aspect ratio, video codec, bitrate, audio codec, and loudness target — applied consistently to every export in a render job.
-- `Freeze-Frame Pad`: a composition technique where the final frame of a video clip is held as a still image to extend clip duration when narration audio is longer than the generated clip, avoiding a cut-off narration.
+- `Execution Mode`: the method by which a generation step is processed - `hosted`, `byo`, or `local`.
+- `Routing Policy`: the workspace-level configuration that determines which execution mode and provider are used for each generation modality.

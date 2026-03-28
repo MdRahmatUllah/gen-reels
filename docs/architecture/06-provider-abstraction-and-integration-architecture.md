@@ -1,104 +1,285 @@
 # Provider Abstraction And Integration Architecture
 
-## Goals
+## Why An Adapter Layer
 
-- Avoid coupling product workflows to any single generation vendor.
-- Normalize provider outputs into platform-native records.
-- Preserve room for hosted providers now and local or BYO execution later.
-- Ensure that swapping a provider never requires changes to product or orchestration code, only adapter changes.
+The platform must integrate with multiple AI generation providers — cloud APIs for image, video, and speech, as well as self-hosted open-source models. Providers will change over time as new models become available and pricing shifts. The adapter layer isolates the product domain from provider-specific APIs so the platform can swap, add, or deprecate providers without rewriting domain logic.
 
-## Integration Classes
+## Design Approach
 
-- Text generation
-- Image generation
-- Video generation
-- TTS and narration
-- Music or audio bed generation
-- Moderation and content safety
-- Billing and payment
-- Notifications and email
+Each generation modality is fronted by a platform-defined interface:
 
-## Adapter Pattern
+```python
+class ImageProvider(Protocol):
+    async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult: ...
 
-Each provider must implement a thin adapter interface with:
+class VideoProvider(Protocol):
+    async def generate(self, request: VideoGenerationRequest) -> VideoGenerationResult: ...
 
-- Input normalization
-- Output normalization
-- Error translation
-- Cost extraction
-- Latency capture
-- Idempotency or retry token support when available
+class SpeechProvider(Protocol):
+    async def generate(self, request: SpeechGenerationRequest) -> SpeechGenerationResult: ...
 
-The product calls interfaces such as `TextProvider`, `ImageProvider`, `VideoProvider`, `SpeechProvider`, `MusicProvider`, and `ModerationProvider` rather than provider SDKs directly.
+class TextProvider(Protocol):
+    async def generate(self, request: TextGenerationRequest) -> TextGenerationResult: ...
 
-## Adapter Versioning
+class MusicProvider(Protocol):
+    async def generate(self, request: MusicGenerationRequest) -> MusicGenerationResult: ...
+```
 
-Each adapter implementation carries a `provider_api_version` field that identifies the external API contract it implements. This is recorded in every `provider_run` entry.
+All adapters implement one of these interfaces and must comply with four rules:
 
-**Breaking change rule:** If a provider changes its API contract in a breaking way (request shape, output schema, authentication mechanism), a new adapter class is created rather than modifying the existing one. The old adapter is deprecated and given a sunset date — it is never deleted immediately. Both adapter versions can coexist to allow staged migration.
+1. **Normalise all outputs** into platform-native records (assets with metadata, timing, and provenance).
+2. **Never expose provider-specific domain concepts** to calling code beyond the adapter boundary.
+3. **Return structured errors** from the platform's error taxonomy, not raw HTTP errors or provider exception types.
+4. **Record every call** as a `provider_run` with inputs, outputs, cost, latency, and error details.
 
-**Non-breaking changes** (new optional response fields, rate limit changes, new optional request parameters) are handled in-place with no version bump.
+## Provider Capability Matrix
 
-## Provider Routing Rules
+### Image Generation
 
-- Use one primary provider per expensive modality in the first production release.
-- Keep one backup provider defined in operator config, not in the user-facing UI.
-- Route by workspace plan, feature flag, quota, and provider health in later phases.
-- Record the provider chosen and the reason for the routing decision in every provider run.
-- Routing falls back to the backup provider only if the primary is unavailable or has exceeded its rate limit — never for quality improvement attempts.
+| Provider | Reference Image Input | Multi-Reference | Image Editing / Inpainting | Commercial License | Priority |
+|---|---|---|---|---|---|
+| **Azure OpenAI** (GPT-Image / DALL-E) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes (Enterprise) | Primary hosted |
+| **Gemini 2.5 Flash Image** | ✅ Yes | ✅ Yes (multi-image fusion) | ✅ Yes | ✅ Yes (Vertex AI) | Alternative hosted |
+| **FLUX Kontext** (open-source) | ✅ Yes (Kontext editing) | Limited | ✅ Yes | ⚠️ Non-commercial by default | Open fallback |
+| **Stable Diffusion** (open-source) | Via ControlNet | Limited | Via inpainting | ✅ Yes (permissive variants) | Open fallback |
 
-## Fallback Compatibility Matrix
+### Video Generation
 
-Automatic fallback is only permitted between providers that are **functionally equivalent** for the target operation. Equivalence is defined as:
+| Provider | First-Frame Input | Last-Frame Input | First+Last Frame (FLF2V) | Silent Output | Max Duration | 9:16 Support | Priority |
+|---|---|---|---|---|---|---|---|
+| **Veo 3** (Google Vertex AI) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes (`generateAudio=false`) | 4/6/8 sec | ✅ Yes | Primary hosted |
+| **Wan2.1 FLF2V** (open-source) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes (no audio track) | ~5 sec | ✅ Yes | Primary open-source |
+| **Wan2.1 I2V** (open-source) | ✅ Yes | ❌ No | ❌ No | ✅ Yes | ~5 sec | ✅ Yes | Fallback open-source |
+| **CogVideoX** (open-source) | ✅ Yes | ❌ No | ❌ No | ✅ Yes | ~6 sec | ✅ Yes | Fallback open-source |
 
-| Criterion | Requirement |
-|---|---|
-| Same modality | Both providers must produce the same media type |
-| Resolution compatibility | Fallback provider must support the same or better output resolution |
-| No visible watermark difference | Fallback outputs must not carry provider-identifying watermarks if the primary does not |
-| Same cost class | Fallback must not increase per-unit cost by more than 50% without an operator alert |
-| Same content policy behavior | If primary filters a category of content, the fallback must apply equivalent filtering |
+### Audio / TTS
 
-If a candidate fallback fails any of these criteria, it is not an automatic fallback option. The render step fails with the primary's error, and the user decides how to proceed.
+| Provider | Voice Cloning | Multi-Language | Streaming | Per-Scene Duration | Priority |
+|---|---|---|---|---|---|
+| **Azure OpenAI TTS** (gpt-4o-mini-tts) | ❌ No | ✅ Multilingual | ✅ Yes | ✅ Yes | Primary hosted |
+| **XTTSv2** (open-source) | ✅ Yes | ✅ Multilingual | ✅ Yes | ✅ Yes | Primary open-source |
+| **Kokoro** (open-source) | ❌ No | Limited (English) | ✅ Yes | ✅ Yes | Lightweight fallback |
+| **CosyVoice** (open-source) | ✅ Yes | ✅ Multilingual | ✅ Yes | ✅ Yes | Alternative open-source |
 
-## Contract Requirements
+### Music Generation
 
-- Structured prompts and generation settings must be versioned (stored on the consistency pack and provider run).
-- Adapters must return normalized metadata including duration, resolution, cost, and provider request identifiers.
-- All binary outputs must be written to object storage and referenced by asset records — adapters must never return binary content directly to the orchestration layer.
+| Provider | Text-Conditioned | Duration Control | Local Feasibility | Priority |
+|---|---|---|---|---|
+| **Curated royalty-free library** | N/A (selection) | Full track | ✅ Bundled | Phase 3 default |
+| **ACE-Step v1.5** (open-source) | ✅ Yes | ✅ Yes | ✅ Low VRAM | Phase 5+ |
+| **Stable Audio Open** (open-source) | ✅ Yes | ✅ Yes | ✅ Yes | Phase 5+ alternative |
 
-## Credential Model
+## Concrete Adapter Specifications
 
-- Hosted credentials live in the cloud provider's native secret manager. No plaintext secrets in environment variables in staging or production.
-- Workspace BYO credentials (Phase 7) are stored encrypted at rest, with scoped decryption only during job execution, and with strict audit events on every access.
-- Local workers receive only the credentials needed for their specific execution policy — never the platform's hosted provider keys.
+### AzureOpenAIImageProvider
 
-## Failure And Failure Category Taxonomy
+```python
+class AzureOpenAIImageProvider(ImageProvider):
+    """Azure OpenAI DALL-E / GPT-Image adapter for image generation with reference input."""
 
-Provider failures must be translated into platform error categories before being stored or surfaced:
+    # Capabilities:
+    # - Text-to-image generation
+    # - Image editing with reference image input
+    # - Multi-reference consistency via image + text input
+    # - 9:16 aspect ratio support
+    #
+    # Required config: azure_endpoint, api_key, api_version, model_deployment
+    # Reference handling: Pass consistency pack references as image inputs
+    # Chain handling: Pass previous scene's end frame as primary reference image
+```
 
-| Platform Error Category | Meaning | Retryable |
+### Veo3VideoProvider
+
+```python
+class Veo3VideoProvider(VideoProvider):
+    """Google Veo 3 adapter for first-frame/last-frame video generation."""
+
+    # Capabilities:
+    # - First-frame + last-frame video interpolation (FLF2V)
+    # - Single-frame image-to-video (I2V)
+    # - Text-to-video (T2V) fallback
+    # - Silent video output (generateAudio=false)
+    # - Duration options: 4, 6, or 8 seconds
+    # - 9:16 aspect ratio support
+    #
+    # Required config: project_id, location, credentials
+    # Frame pair handling: Pass start_image as firstFrame, end_image as lastFrame
+    # Audio policy: Always set generateAudio=false for composition workflow
+    #
+    # Duration constraint: Veo 3 supports 4/6/8 second clips only.
+    # If target segment is 5 or 7 seconds, round to nearest supported duration.
+    # Duration alignment step handles final clip-to-narration matching.
+```
+
+### Wan21VideoProvider
+
+```python
+class Wan21VideoProvider(VideoProvider):
+    """Wan2.1 adapter for local/self-hosted video generation."""
+
+    # Capabilities:
+    # - FLF2V mode: First-frame + last-frame interpolation (Wan2.1-FLF2V-14B)
+    # - I2V mode: Single reference image to video (Wan2.1-I2V-14B)
+    # - T2V mode: Text-only fallback (Wan2.1-T2V-14B)
+    # - No audio track in output
+    # - Consumer GPU support (RTX 3090+ for I2V, RTX 4090 recommended for FLF2V)
+    #
+    # Required config: model_path, device, dtype
+    # Deployment: Docker container with CUDA, model weights volume-mounted
+    # Latency: ~4 min per 5-sec 480p clip on RTX 4090 (without optimizations)
+```
+
+### AzureOpenAISpeechProvider
+
+```python
+class AzureOpenAISpeechProvider(SpeechProvider):
+    """Azure OpenAI TTS adapter for per-scene voiceover generation."""
+
+    # Capabilities:
+    # - Multiple voice profiles
+    # - Per-scene narration generation
+    # - Speed and pitch control
+    # - Streaming output
+    #
+    # Required config: azure_endpoint, api_key, api_version, model (gpt-4o-mini-tts)
+    # Voice continuity: Same voice_preset_id frozen at render job creation
+    # Output: Single audio file per scene in WAV or AAC format
+```
+
+### OpenSourceTTSProvider
+
+```python
+class OpenSourceTTSProvider(SpeechProvider):
+    """Generic adapter for self-hosted open-source TTS models."""
+
+    # Supported models: XTTSv2, Kokoro, CosyVoice, GPT-SoVITS
+    # Capabilities vary by model:
+    # - XTTSv2: Voice cloning, multilingual, inference via Docker
+    # - Kokoro: Lightweight English TTS, fast inference, low VRAM
+    # - CosyVoice: Voice cloning, multilingual
+    #
+    # Required config: model_name, endpoint_url (local Docker container)
+    # Deployment: Docker container, model weights volume-mounted
+```
+
+## VideoGenerationRequest Fields
+
+The video generation request must support the paired-frame workflow:
+
+```python
+@dataclass
+class VideoGenerationRequest:
+    scene_segment_id: str
+    prompt_text: str
+    start_frame_asset_id: str | None  # Primary reference frame
+    end_frame_asset_id: str | None    # End reference frame (for FLF2V)
+    consistency_pack_snapshot_id: str
+    target_duration_seconds: float
+    aspect_ratio: str  # "9:16"
+    generate_audio: bool  # Always False for composition workflow
+    provider_config: dict  # Provider-specific overrides
+```
+
+## ImageGenerationRequest Fields
+
+```python
+@dataclass
+class ImageGenerationRequest:
+    scene_segment_id: str
+    prompt_text: str                    # Assembled prompt from prompt construction layer
+    frame_position: str                 # "start" or "end"
+    reference_image_ids: list[str]      # Ordered: [chain_ref, style_ref, pack_refs...]
+    consistency_pack_snapshot_id: str
+    negative_prompt: str
+    seed: int | None
+    aspect_ratio: str  # "9:16"
+    provider_config: dict
+```
+
+## Error Taxonomy
+
+Provider errors must be classified into four categories:
+
+| Category | Retry | Example |
 |---|---|---|
-| `provider_unavailable` | 5xx or timeout from provider | Yes |
-| `provider_rate_limited` | 429 from provider | Yes (with backoff) |
-| `provider_content_rejection` | Provider's own content policy refusal | No |
-| `provider_invalid_input` | Malformed prompt or unsupported parameters | No |
-| `provider_output_corrupt` | Output received but cannot be read or stored | Yes (limited) |
-| `capability_mismatch` | Worker cannot process the step as specified | No for this worker |
+| `transient` | Yes (automatic backoff) | Provider 5xx, timeout, rate limit, network error |
+| `deterministic_input` | No (requires prompt change) | Invalid prompt, unsupported aspect ratio, content policy violation |
+| `moderation_rejection` | No (requires user action) | Output flagged by safety filter |
+| `internal` | No (requires code fix) | Adapter bug, malformed request |
 
-The orchestration layer uses these categories to decide whether to retry, reroute, surface to the user, or terminate the step.
+## Provider Selection Logic
 
-## Vendor Evaluation Criteria
+Provider routing is determined by:
 
-When evaluating a new provider for any modality:
+1. **Workspace-level routing policy** — which execution mode and provider per modality
+2. **Provider capability match** — the request's required capabilities vs provider support (e.g., FLF2V required → must route to Veo 3 or Wan2.1 FLF2V)
+3. **Provider availability** — health check status and rate limit headroom
+4. **Cost tier** — workspace plan determines access to premium providers
 
-- Output quality and consistency
-- Cost per successful unit
-- Throughput and latency
-- Rate limits and concurrency behavior
-- Commercial terms and output usage licensing
-- Stability of API contracts
-- Observability and request tracing support
-- Content policy compatibility with the platform's moderation requirements
+### Selection Fallback Chain
 
+```mermaid
+flowchart TD
+    Req["Video Generation Request"] --> HasBothFrames{"Has start + end frame?"}
+    HasBothFrames -- Yes --> FLF["FLF2V Provider\n(Veo 3 or Wan2.1 FLF2V)"]
+    HasBothFrames -- No --> HasStartFrame{"Has start frame only?"}
+    HasStartFrame -- Yes --> I2V["I2V Provider\n(Veo 3 I2V or Wan2.1 I2V)"]
+    HasStartFrame -- No --> T2V["T2V Provider\n(Text-to-Video Fallback)"]
+    FLF --> Available1{"Provider available?"}
+    Available1 -- Yes --> Run["Execute"]
+    Available1 -- No --> I2V
+    I2V --> Available2{"Provider available?"}
+    Available2 -- Yes --> Run
+    Available2 -- No --> T2V
+    T2V --> Run
+```
 
+## Provider Run Record
+
+Every generation call creates a `provider_run` record:
+
+- Request payload (prompt, references, parameters, consistency pack snapshot ID, chain reference)
+- Provider name and model version
+- Response metadata (output asset IDs, timing, cost)
+- Latency (start to completion)
+- Error details if failed
+- Retry count
+- Whether silent output was requested (for video)
+- Which frame inputs were used (start only, both, or none)
+
+## Open-Source Model Hosting
+
+Open-source models run in Docker containers with GPU access:
+
+- **Image models** (FLUX, Stable Diffusion): Docker container with CUDA, model weights volume-mounted, exposed via internal REST endpoint
+- **Video models** (Wan2.1, CogVideoX): Docker container with CUDA, high VRAM requirement (16GB+ for I2V, 24GB+ for FLF2V)
+- **TTS models** (XTTSv2, Kokoro): Docker container, CPU or GPU, model weights volume-mounted
+
+All open-source model containers register as internal provider endpoints. The adapter layer treats them identically to cloud API endpoints — same request/response contract, same provider run recording.
+
+## Licensing And Commercial Readiness
+
+Before using any open-source model in production:
+
+| Model | License | Commercial Use Allowed | Action Required |
+|---|---|---|---|
+| FLUX.1 Kontext Dev | Custom (non-commercial by default) | ❌ Without license purchase | Verify BFL commercial license terms |
+| Wan2.1 | Apache 2.0 | ✅ Yes | Safe for production |
+| CogVideoX | Custom | ⚠️ Check per variant | Review per model card |
+| XTTSv2 | CPML (Coqui) | ⚠️ Conditional | Review Coqui CPML terms |
+| Kokoro | Apache 2.0 | ✅ Yes | Safe for production |
+| ACE-Step | Apache 2.0 | ✅ Yes | Safe for production |
+| Stable Audio Open | Stability AI license | ⚠️ Conditional | Review commercial terms |
+
+The decision log must record the licensing review outcome for each model before it enters the production adapter registry.
+
+## Implementation Phasing
+
+| Phase | Provider Work |
+|---|---|
+| Phase 1 | Text provider adapter (Azure OpenAI or equivalent) for idea and script generation |
+| Phase 2 | Image prompt generation uses text provider; image provider interface defined |
+| Phase 3 | Full image, video (FLF2V + I2V + T2V), and speech adapters for primary hosted providers (Azure OpenAI, Veo 3) |
+| Phase 4 | Provider health checks, rate limit tracking, per-provider cost capture |
+| Phase 5 | Music generation adapters (ACE-Step, Stable Audio) |
+| Phase 7 | Open-source / local model adapters (Wan2.1, FLUX, XTTSv2) with Docker deployment |

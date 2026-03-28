@@ -18,18 +18,5 @@
 ## Contract Requirements
 
 - Billing integration must support subscription state, payment status, and usage-triggered credit deduction.
-- Observability integrations must capture job IDs, provider identifiers, and correlation IDs.
+- Usage reconciliation must understand frame-pair image generation as a distinct billable unit.
 - Recovery operations must be auditable.
-- Moderation review actions must preserve the original moderation record and operator decision history.
-
-## Error Strategy
-
-- Payment failures should degrade access gracefully rather than corrupting projects.
-- Usage reconciliation should be replayable if external billing writes fail.
-- Queue alerts should escalate before user-facing latency becomes unacceptable.
-- Moderation release or rejection actions must be idempotent and operator-audited.
-
-## Cost Notes
-
-- This phase is where commercial viability becomes measurable.
-- No provider expansion should happen before cost dashboards and reconciliation logic are trusted.

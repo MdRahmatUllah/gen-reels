@@ -2,16 +2,16 @@
 
 ## Vision
 
-Build a platform that converts a user brief into a publish-ready short-form video by orchestrating idea generation, script creation, scene planning, asset generation, narration, background audio, and final media assembly.
+Build a platform that converts a user brief into a publish-ready short-form vertical video by orchestrating idea generation, idea selection, script creation, scene planning, paired visual frame generation, narration, background music, and final media assembly.
 
-The product should feel like a reliable production workflow rather than a prompt playground. The long-term moat is not a single model provider. It is a predictable, resumable, editable system that produces usable content with good defaults, reusable presets, and cost control.
+The product should feel like a reliable production workflow rather than a prompt playground. The long-term moat is not a single model provider. It is a predictable, resumable, editable system that produces usable content with good defaults, reusable presets, continuity controls, and cost control.
 
 ## Primary Users
 
 ### 1. Faceless Content Creators
 
 - Need fast production of vertical reels and shorts.
-- Care about speed, visual consistency, and reuse of winning styles.
+- Care about speed, visual continuity, narration quality, and reuse of winning styles.
 - Usually operate alone or with a very small team.
 
 ### 2. Agencies And Studio Teams
@@ -25,12 +25,14 @@ The product should feel like a reliable production workflow rather than a prompt
 The platform should let a user go from brief to finished reel through a controlled pipeline:
 
 1. Create a project from a topic, product, or campaign brief.
-2. Generate and edit ideas and scripts.
-3. Split the script into timing-safe segments.
-4. Build a scene plan with reusable visual and voice presets.
-5. Generate assets through async jobs.
-6. Assemble a final export with subtitles, music, and narration.
-7. Retry only the failing scenes or assets instead of restarting the entire render.
+2. Generate multiple viral-style ideas and select one as the active concept.
+3. Generate and edit a 60-120 second master script.
+4. Split the script into 5-8 second scene segments.
+5. Build a scene plan with reusable visual and voice presets plus start-frame and end-frame prompts per segment.
+6. Generate scene frame pairs through a continuity chain where each scene can inherit the previous scene's approved end frame.
+7. Generate video clips, narration, and supporting assets through async jobs.
+8. Normalize source video audio, retime clips to narration where needed, and assemble a final export with subtitles, music, and narration.
+9. Retry only the failing scenes or assets instead of restarting the entire render.
 
 ## What The Product Is Not
 
@@ -46,6 +48,7 @@ The platform should let a user go from brief to finished reel through a controll
 - Every output is versioned and retryable.
 - One clear happy path for creators before broader studio capability.
 - Commercial realism: heavy generation is usage-metered and observable.
+- Continuity is a system concern, not something the user must solve manually scene by scene.
 
 ## Core Workflows
 
@@ -53,9 +56,11 @@ The platform should let a user go from brief to finished reel through a controll
 
 - Create project
 - Define brief
-- Generate ideas
-- Pick or edit a script
-- Approve scene plan
+- Generate viral-style ideas
+- Select one idea
+- Generate or edit a master script
+- Approve segmented scene plan with start/end prompts
+- Review generated frame pairs
 - Render reel
 - Review assets and retry weak scenes
 - Download final export
@@ -68,13 +73,31 @@ The platform should let a user go from brief to finished reel through a controll
 - Approve exports
 - Track usage and cost by client or workspace
 
+## Canonical Creator Pipeline
+
+The canonical creator pipeline for the MVP is:
+
+1. Generate a set of candidate ideas from the brief.
+2. Select a single idea as the active concept.
+3. Generate a 60-120 second script.
+4. Segment the script into 5-8 second scenes.
+5. Create start-frame and end-frame prompts for each scene.
+6. Generate the first scene's start frame.
+7. Generate the first scene's end frame using the start frame as reference.
+8. Generate later scene frame pairs using the previous scene's approved end frame as a continuity anchor.
+9. Generate a video clip for each scene from the scene text and frame pair.
+10. Generate narration for each scene.
+11. Strip or ignore provider-generated clip audio.
+12. Retime the silent clip to the narration if needed.
+13. Compose the full export with music, subtitles, and narration.
+
 ## System Components
 
 - Web application for creators, editors, and admins
 - API service for product workflows and domain operations
 - Background orchestration layer for generation and assembly work
-- Media generation adapters for image, video, voice, and music
-- Asset storage and export library
+- Media generation adapters for text, image, video, and narration
+- Asset storage and export library backed by MinIO-compatible object storage
 - Billing, usage, and observability services
 - Local or BYO execution agents in later phases
 
@@ -118,7 +141,8 @@ reels-platform/
 ## Constraints And Assumptions
 
 - Launch output is one primary format: 9:16 vertical reel.
-- The first usable release should prioritize consistency and control over maximum automation.
+- Launch target duration is 60-120 seconds with 5-8 second scene segments.
+- The first usable release should prioritize continuity and control over maximum automation.
 - The architecture must support hosted providers now and alternate providers later.
 - Stored assets, prompts, and usage metadata are first-class product records, not disposable logs.
 - A small engineering team should be able to implement the first releases without creating a distributed systems burden that is too heavy to operate.

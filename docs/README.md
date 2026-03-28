@@ -5,7 +5,7 @@ This documentation package turns the idea and discussion notes in this folder in
 ## Product Direction
 
 - Launch shape: hybrid SaaS with hosted infrastructure first.
-- Initial target user: faceless content creators producing short-form vertical video.
+- Initial target user: faceless content creators producing 9:16 short-form video in the 60-120 second range.
 - Expansion path: agencies, studio teams, collaboration, and local or bring-your-own-provider execution.
 - Commercial guardrail: video generation is a metered product, not an unlimited feature.
 
@@ -13,9 +13,18 @@ This documentation package turns the idea and discussion notes in this folder in
 
 - Frontend: React, TypeScript, Vite, React Router, TanStack Query, Tailwind CSS, and a reusable component library.
 - Backend: FastAPI, Pydantic, SQLAlchemy, Alembic, Celery, and Redis.
-- Data layer: PostgreSQL for domain data and S3-compatible object storage for media assets.
-- Media pipeline: provider adapters for generation services plus FFmpeg-based assembly workers.
+- Data layer: PostgreSQL for domain data and MinIO-backed S3-compatible object storage for media assets.
+- Media pipeline: provider adapters for text, image, video, and narration services plus FFmpeg-based assembly workers.
+- Render model: idea selection, 5-8 second scene segmentation, prompt pairs, chained start/end frame generation, silent clip normalization, narration sync, and FFmpeg-based final export.
 - Operations: job-based asynchronous orchestration, checkpointing, retries, resumability, and usage telemetry.
+
+## Reference Stack
+
+- Hosted text and image path: Azure OpenAI plus reference-aware image providers such as Gemini 2.5 Flash Image ("nano banana") through provider adapters.
+- Hosted video path: Veo 3.1 class provider for first/last-frame video generation.
+- Hosted narration path: Azure OpenAI TTS class provider.
+- Local or BYO path: open-source image, video, and TTS models behind the same adapter contracts.
+- Storage and containers: MinIO and Docker in local development, with production deployment retaining the same logical service split.
 
 ## Reading Order
 
@@ -33,21 +42,24 @@ This documentation package turns the idea and discussion notes in this folder in
 7. [Job Orchestration And Render Pipeline](./architecture/05-job-orchestration-and-render-pipeline.md)
 8. [Provider Abstraction And Integration Architecture](./architecture/06-provider-abstraction-and-integration-architecture.md)
 9. [Deployment, Observability, And Security](./architecture/07-deployment-observability-and-security.md)
-10. [Visual Consistency And Asset Memory](./architecture/08-visual-consistency-and-asset-memory.md) ⭐ *Read before any image or video generation work*
+10. [Visual Consistency And Asset Memory](./architecture/08-visual-consistency-and-asset-memory.md)
 11. [Content Moderation And Safety](./architecture/09-content-moderation-and-safety.md)
 12. [Notifications And Webhooks](./architecture/10-notifications-and-webhooks.md)
 13. [Rate Limiting And Quota Enforcement](./architecture/11-rate-limiting-and-quota-enforcement.md)
-14. [Authentication And Identity](./architecture/12-authentication-and-identity.md) ⭐ *Read before Phase 1 implementation*
-15. [Local Worker Agent Protocol](./architecture/13-local-worker-agent-protocol.md) *(Phase 7 focused, review before Phase 3 to ensure stub endpoints)*
-16. [Composition And Audio-Visual Consistency](./architecture/14-composition-and-av-consistency.md) ⭐ *Read before Phase 3 composition worker implementation*
+14. [Authentication And Identity](./architecture/12-authentication-and-identity.md)
+15. [Local Worker Agent Protocol](./architecture/13-local-worker-agent-protocol.md)
+16. [Composition And Audio-Visual Consistency](./architecture/14-composition-and-av-consistency.md)
+17. [Scene Frame Pair And Reference Chain](./architecture/15-scene-frame-pair-and-reference-chain.md)
+18. [Containerization And Docker Strategy](./architecture/16-containerization-and-docker-strategy.md)
+19. [MinIO Storage Configuration](./architecture/17-minio-storage-configuration.md)
 
 ### Phase Documents
 
-16. Phase folders under `docs/phases`
+20. Phase folders under `docs/phases`
 
 ### Appendices
 
-17. Appendices under `docs/appendices`
+21. Appendices under `docs/appendices`
 
 ## Folder Layout
 
@@ -71,6 +83,9 @@ docs/
     12-authentication-and-identity.md
     13-local-worker-agent-protocol.md
     14-composition-and-av-consistency.md
+    15-scene-frame-pair-and-reference-chain.md
+    16-containerization-and-docker-strategy.md
+    17-minio-storage-configuration.md
   phases/
     phase-1-foundation/
     phase-2-content-planning/
@@ -84,24 +99,27 @@ docs/
     02-domain-glossary.md
     03-risk-register.md
     04-decision-log.md
+    05-provider-capability-matrix.md
+    06-python-media-tooling-and-service-selection.md
 ```
 
 ## How To Use These Docs
 
 - Use the top-level overview and architecture documents as the source of truth for cross-cutting decisions.
 - Use each phase folder to scope delivery, estimate work, and hand off implementation slices.
-- Use the appendices when building APIs, defining schemas, or reviewing risk and architecture decisions.
+- Use the appendices when building APIs, defining schemas, reviewing provider capability, or checking tooling decisions.
 - Keep the earlier `project-idea.md` and `discussion-*.md` files as raw source notes, not the final specification.
 
 ## Priority Reading Before Coding Begins
 
 Before any team member writes production code, these documents must be read in full:
 
-1. `12-authentication-and-identity.md` — every API and session decision depends on this.
-2. `08-visual-consistency-and-asset-memory.md` — the most technically complex platform concern.
-3. `14-composition-and-av-consistency.md` — defines composition gate, music ducking, duration sync, loudness, and voice continuity rules.
-4. `04-data-model-and-storage.md` — the schema decisions constrain all other work.
-5. `11-rate-limiting-and-quota-enforcement.md` — commercial viability depends on this being right from Phase 1.
+1. `12-authentication-and-identity.md` - every API and session decision depends on this.
+2. `08-visual-consistency-and-asset-memory.md` - the most technically complex platform concern.
+3. `15-scene-frame-pair-and-reference-chain.md` - defines the start/end frame workflow and chained continuity rules.
+4. `14-composition-and-av-consistency.md` - defines silent clip policy, retiming, music ducking, loudness, and voice continuity rules.
+5. `04-data-model-and-storage.md` - the schema decisions constrain all other work.
+6. `11-rate-limiting-and-quota-enforcement.md` - commercial viability depends on this being right from Phase 1.
 
 ## Documentation Standards
 
@@ -109,6 +127,4 @@ Before any team member writes production code, these documents must be read in f
 - Every architecture document describes component boundaries, data flow, failure handling, and rollout implications.
 - Every implementation plan should be actionable by frontend, backend, infra, and QA contributors without needing extra scoping.
 - Every integration document names the integration type, credential model, contract shape, error strategy, and cost implications.
-- Every decision that materially changes architecture, schema, or pricing must be recorded in `04-decision-log.md` in the same change.
-
-
+- Every decision that materially changes architecture, schema, provider selection, or pricing must be recorded in `04-decision-log.md` in the same change.

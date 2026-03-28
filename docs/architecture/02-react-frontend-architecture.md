@@ -27,10 +27,11 @@ This stack keeps the frontend fast to build, straightforward to operate, and cle
 
 - Dashboard
 - Project creation and brief intake
-- Idea and script workspace
-- Scene planning workspace
+- Idea generation and idea selection workspace
+- Script workspace
+- Scene planning and prompt-pair workspace
 - Preset library
-- Render monitor
+- Render monitor and frame-pair review
 - Export library
 - Workspace settings and billing
 
@@ -43,6 +44,7 @@ src/
   features/
     auth/
     dashboard/
+    ideas/
     projects/
     scripts/
     scenes/
@@ -58,20 +60,13 @@ src/
   types/
 ```
 
-- `app/` owns providers, routing bootstrap, and app shell wiring.
-- `routes/` defines route modules and route-level loaders if used.
-- `features/` groups domain behavior by product area.
-- `components/` stores shared UI components that are not feature-specific.
-- `hooks/` and `lib/` hold reusable client logic.
-- `state/` holds lightweight client stores and UI-only state.
-- `types/` holds frontend domain types and API-facing view models when not shared from a generated client.
-
 ## Route Map
 
 - `/login`
 - `/app`
 - `/app/projects`
 - `/app/projects/:projectId/brief`
+- `/app/projects/:projectId/ideas`
 - `/app/projects/:projectId/script`
 - `/app/projects/:projectId/scenes`
 - `/app/projects/:projectId/renders`
@@ -94,12 +89,10 @@ Admin routes are available only to users with the `admin` system role and are ex
 Zustand is strictly limited to ephemeral client-side state. Do not store server-authoritative data in Zustand.
 
 | State Type | Owner | Examples |
-|---|---|---|
-| Server state | TanStack Query cache | Projects, scripts, scenes, assets, jobs, exports, usage, presets |
-| Ephemeral UI state | Zustand | Wizard step progress, selected variants, filter/sort state, editor UI mode, unsaved draft edits |
-| Realtime state | TanStack Query + SSE subscription | Render step events, progress updates, retry availability |
-
-**Rule:** Render status, job progress, and any approval state are **never** stored in Zustand. They live in the TanStack Query cache and are refreshed via the render event subscription or polling fallback. Divergence between Zustand and the server model is a bug, not a feature.
+| --- | --- | --- |
+| Server state | TanStack Query cache | Projects, ideas, scripts, scenes, prompt pairs, assets, jobs, exports, usage, presets |
+| Ephemeral UI state | Zustand | Wizard step progress, selected variants, filter and sort state, editor mode, unsaved draft edits |
+| Realtime state | TanStack Query + SSE subscription | Render step events, progress updates, retry availability, frame-pair review status |
 
 ## SSE And Polling Strategy
 
@@ -107,24 +100,21 @@ Render progress uses Server-Sent Events (SSE) for real-time updates.
 
 ### Reconnect Strategy
 
-SSE connections can drop due to proxy timeouts or network interruptions. The frontend must:
+The frontend must:
 
-1. **Automatic reconnect:** Use the browser's built-in SSE reconnect with `Last-Event-ID`. On reconnect, the server replays events since the last received event (up to 50 events per render job).
-2. **Backoff:** Reconnect attempts back off with intervals: 2s, 4s, 8s, 16s, capped at 30s.
-3. **Polling fallback:** After 3 failed reconnect attempts, switch to polling `GET /renders/{render_job_id}` every 5 seconds.
-4. **Stale detection:** If no SSE event arrives for 30 consecutive seconds and a render is expected to be progressing, trigger a poll to confirm status.
-5. **Resumption:** Once SSE reconnects successfully, stop polling and resume event stream consumption.
-
-### No Separate Polling Endpoint
-
-The polling fallback uses the same `GET /renders/{render_job_id}` status endpoint. No special polling endpoint is needed. The response model is identical whether the data arrives via SSE or polling.
+1. Reconnect automatically with `Last-Event-ID`.
+2. Back off at 2s, 4s, 8s, 16s, capped at 30s.
+3. Switch to polling `GET /renders/{render_job_id}` every 5 seconds after 3 failed reconnect attempts.
+4. Trigger a poll if no event arrives for 30 consecutive seconds while a render is expected to be progressing.
+5. Stop polling once SSE resumes.
 
 ## UI Principles
 
 - Every async operation should expose status, timestamps, and the next available action.
 - Users should always know whether they are editing a draft, reviewing an approved version, or viewing a generated result.
 - Retry actions should target the smallest unit possible, usually a scene or asset.
-- Phase-gated features should already fit the final navigation model so the information architecture does not need a redesign later.
+- Prompt-pair and frame-pair review should show continuity context, including the prior scene's approved end frame.
+- The render monitor should make it obvious when a change to scene `N` invalidates downstream chained scenes.
 
 ## Component Boundaries
 
@@ -133,18 +123,17 @@ The polling fallback uses the same `GET /renders/{render_job_id}` status endpoin
 - Presentational components remain reusable and stateless where possible.
 - Editors should use schema-driven forms and a shared validation layer.
 
-## Rendering Progress UX
+## Key Workflow Surfaces
 
-- Use SSE for server-to-client progress updates with polling fallback as described above.
-- Show high-level render status plus per-scene step progress.
-- Preserve job history so users can inspect failures after a refresh.
-- Expose retry, cancel, and duplicate render actions from the same UI surface.
+- Idea list with "select active idea" action
+- Scene planning workspace with `start_image_prompt` and `end_image_prompt` per scene
+- Frame-pair review surface with start frame, end frame, and continuity anchor preview
+- Render monitor with per-scene step breakdown including source-audio stripping and clip retiming
+- Export library with preview vs full export distinction
 
 ## Frontend Testing
 
 - Unit tests for utility and validation logic
-- Component tests for editors and job status widgets
+- Component tests for idea selection, prompt-pair editors, and job status widgets
 - End-to-end tests for the creator happy path and retry flows
 - End-to-end tests for admin queue visibility and role-gated access
-
-
