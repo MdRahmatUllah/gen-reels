@@ -459,3 +459,25 @@ export interface AdminRenderRow {
   issue: string;
   snapshot: string;
 }
+
+/* ─── Phase 7: Local & BYO ────────────────────────────────────────────────── */
+export type ExecutionMode = "hosted" | "byo" | "local";
+
+export interface ProviderKey {
+  id: string;
+  provider: "openai" | "stability" | "elevenlabs" | "runway";
+  keyPrefix: string;
+  createdAt: string;
+}
+
+export interface LocalWorker {
+  id: string;
+  name: string;
+  status: "online" | "offline" | "busy";
+  lastHeartbeat: string;
+  capabilities: {
+    orderedReferenceImages: boolean;
+    localTTS: boolean;
+    videoFrames: boolean;
+  };
+}

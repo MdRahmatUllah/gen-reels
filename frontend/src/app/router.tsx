@@ -19,6 +19,8 @@ import { TemplatesPage } from "../features/templates/TemplatesPage";
 import { AssetsPage } from "../features/assets/AssetsPage";
 import { BrandKitPage } from "../features/settings/BrandKitPage";
 import { TeamSettingsPage } from "../features/settings/TeamSettingsPage";
+import { ProviderSettingsPage } from "../features/settings/ProviderSettingsPage";
+import { LocalWorkersPage } from "../features/settings/LocalWorkersPage";
 import { AdminQueuePage } from "../features/admin/AdminQueuePage";
 import { AdminRendersPage } from "../features/admin/AdminRendersPage";
 import { AdminWorkspacesPage } from "../features/admin/AdminWorkspacesPage";
@@ -95,6 +97,14 @@ export const router = createBrowserRouter([
       {
         path: "settings/team",
         element: <TeamSettingsPage />,
+      },
+      {
+        path: "settings/providers",
+        element: <ProviderSettingsPage />,
+      },
+      {
+        path: "settings/workers",
+        element: <LocalWorkersPage />,
       },
       {
         path: "billing",

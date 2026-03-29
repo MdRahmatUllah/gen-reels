@@ -285,6 +285,8 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
               items={[
                 { to: "/app/settings/brand", label: "Brand Kits" },
                 { to: "/app/settings/team", label: "Team Settings" },
+                { to: "/app/settings/providers", label: "API Keys" },
+                { to: "/app/settings/workers", label: "Local Workers" },
                 { to: "/app/billing", label: "Billing" },
                 { to: "/admin/queue", label: "Admin Queue" },
               ]}

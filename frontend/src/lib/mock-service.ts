@@ -38,6 +38,8 @@ import type {
   AdminQueueItem,
   AdminWorkspaceRow,
   AdminRenderRow,
+  ProviderKey,
+  LocalWorker,
 } from "../types/domain";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -156,6 +158,8 @@ interface MockState {
   templates: TemplateCard[];
   brandKits: BrandKit[];
   comments: Comment[];
+  providerKeys: ProviderKey[];
+  localWorkers: LocalWorker[];
 }
 
 const seedTemplates: TemplateCard[] = [
@@ -219,6 +223,25 @@ const state: MockState = {
     { id: "bk_1", name: "Aurora Global", brandNorthStar: "Luminous, premium, accessible luxury", primaryPalette: "#003366, #F2F2F2", fontFamily: "Inter" }
   ],
   comments: [],
+  providerKeys: [
+    { id: "pk_1", provider: "openai", keyPrefix: "sk-...d92k", createdAt: new Date(Date.now() - 86400000).toISOString() },
+  ],
+  localWorkers: [
+    {
+      id: "lw_mac_studio",
+      name: "Office Mac Studio M2",
+      status: "online",
+      lastHeartbeat: new Date().toISOString(),
+      capabilities: { orderedReferenceImages: true, localTTS: true, videoFrames: false }
+    },
+    {
+      id: "lw_rtx_4090",
+      name: "Render Rig Alpha (4090)",
+      status: "offline",
+      lastHeartbeat: new Date(Date.now() - 3600000).toISOString(),
+      capabilities: { orderedReferenceImages: true, localTTS: false, videoFrames: true }
+    }
+  ],
 };
 
 /* ─── Idea Generation Templates ───────────────────────────────────────────── */
@@ -1154,7 +1177,9 @@ export async function mockGetBilling(): Promise<BillingData> {
     creditsTotal: ws.creditsTotal,
     projectedSpend: "$" + ((totalUsage / 100) * 1.5).toFixed(2), // purely mock math
     usageBreakdown: [
-      { category: "Image frame-pairs", usage: `${state.usageRecords.length} calls`, unitCost: "5 credits", total: `${totalUsage} credits` },
+      { category: "Hosted Generation", usage: `${state.usageRecords.length} calls`, unitCost: "5 credits", total: `${totalUsage} credits` },
+      { category: "BYO Key (API Call)", usage: "12 calls", unitCost: "1 credit", total: "12 credits" },
+      { category: "Local Worker (Edge)", usage: "85 tasks", unitCost: "0 credits", total: "0 credits" },
     ],
     invoices: state.invoices,
   };
@@ -1323,4 +1348,34 @@ export async function mockResolveComment(commentId: string): Promise<void> {
   if (comment) {
     comment.resolved = true;
   }
+}
+
+/* ─── Phase 7: Local & BYO ────────────────────────────────────────────────── */
+
+export async function mockGetProviderKeys(): Promise<ProviderKey[]> {
+  await randomDelay(200, 400);
+  return state.providerKeys;
+}
+
+export async function mockAddProviderKey(provider: ProviderKey["provider"], key: string): Promise<ProviderKey> {
+  await randomDelay(500, 800);
+  // Security constraint: The actual API key is never returned or stored in readable form by the mock.
+  const newKey: ProviderKey = {
+    id: nextId("pk"),
+    provider,
+    keyPrefix: `sk-...${key.slice(-4)}`,
+    createdAt: new Date().toISOString(),
+  };
+  state.providerKeys.push(newKey);
+  return newKey;
+}
+
+export async function mockDeleteProviderKey(id: string): Promise<void> {
+  await randomDelay(300, 600);
+  state.providerKeys = state.providerKeys.filter((k) => k.id !== id);
+}
+
+export async function mockGetLocalWorkers(): Promise<LocalWorker[]> {
+  await randomDelay(200, 400);
+  return state.localWorkers;
 }
