@@ -12,8 +12,11 @@ import {
   mockGetTemplates,
 } from "../lib/mock-service";
 import { useBrief, useUpdateBrief } from "../hooks/use-briefs";
+import { useQuickCreateStatus } from "../hooks/use-projects";
 
 import { useScript, useApproveScript, useGenerateScript } from "../hooks/use-scripts";
+import { QuickCreateProjectModal } from "../features/projects/QuickCreateProjectModal";
+import { QuickStartStatusBanner } from "../features/projects/quick-start";
 
 import { formatDuration } from "../lib/format";
 import {
@@ -29,6 +32,7 @@ import { useStudioUiStore } from "../state/ui-store";
 import type {
   ProjectBundle,
   ProjectSummary,
+  QuickCreateStatus,
   ScenePlan,
   SettingsSection,
 } from "../types/domain";
@@ -39,6 +43,7 @@ function useProjectData(): { projectId: string; bundle?: ProjectBundle; isLoadin
   const { data, isLoading } = useQuery({
     queryKey: ["project-bundle", projectId],
     queryFn: () => mockGetProjectBundle(projectId),
+    refetchInterval: 2000,
   });
 
   return { projectId, bundle: data, isLoading };
@@ -55,6 +60,10 @@ function LoadingPage() {
       <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />
     </PageFrame>
   );
+}
+
+function activeQuickStart(status: QuickCreateStatus | undefined): QuickCreateStatus | null {
+  return status && (status.isActive || status.hasFailed) ? status : null;
 }
 
 function ProjectInspector({ project }: { project: ProjectSummary }) {
@@ -161,6 +170,7 @@ export function DashboardPage() {
     queryKey: ["dashboard"],
     queryFn: mockGetDashboardData,
   });
+  const [isQuickCreateOpen, setQuickCreateOpen] = useState(false);
 
   if (isLoading || !data) {
     return <LoadingPage />;
@@ -175,6 +185,13 @@ export function DashboardPage() {
       description="A creator-first production shell that keeps project state, composition quality, and business guardrails visible in one place."
       actions={
         <>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
+            onClick={() => setQuickCreateOpen(true)}
+          >
+            Create new project
+          </button>
           <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${focusProject.id}/brief`}>
             Open brief
           </Link>
@@ -280,6 +297,10 @@ export function DashboardPage() {
           </div>
         </SectionCard>
       </div>
+      <QuickCreateProjectModal
+        open={isQuickCreateOpen}
+        onClose={() => setQuickCreateOpen(false)}
+      />
     </PageFrame>
   );
 }
@@ -289,6 +310,7 @@ export function ProjectsPage() {
     queryKey: ["projects"],
     queryFn: mockGetProjects,
   });
+  const [isQuickCreateOpen, setQuickCreateOpen] = useState(false);
 
   if (isLoading || !data) {
     return <LoadingPage />;
@@ -300,9 +322,18 @@ export function ProjectsPage() {
       title="All active productions"
       description="Projects keep the same shell shape from brief through exports so the information architecture can survive later phases."
       actions={
-        <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${data[0]?.id ?? "project_aurora_serum"}/brief`}>
-          Open default project
-        </Link>
+        <>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+            onClick={() => setQuickCreateOpen(true)}
+          >
+            Create New Project
+          </button>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${data[0]?.id ?? "project_aurora_serum"}/brief`}>
+            Open latest project
+          </Link>
+        </>
       }
       inspector={
         <div className="inspector-stack">
@@ -349,6 +380,10 @@ export function ProjectsPage() {
           </SectionCard>
         ))}
       </div>
+      <QuickCreateProjectModal
+        open={isQuickCreateOpen}
+        onClose={() => setQuickCreateOpen(false)}
+      />
     </PageFrame>
   );
 }
@@ -357,6 +392,7 @@ export function ProjectBriefPage() {
   const { bundle, isLoading, projectId } = useProjectData();
   const navigate = useNavigate();
   const { data: briefData } = useBrief(projectId);
+  const { data: quickCreateStatus } = useQuickCreateStatus(projectId);
   const updateBrief = useUpdateBrief(projectId);
 
   const [editing, setEditing] = useState(false);
@@ -402,6 +438,9 @@ export function ProjectBriefPage() {
   }
 
   const brief = briefData ?? bundle.brief;
+  const quickCreateBanner = activeQuickStart(quickCreateStatus);
+  const isQuickCreateLocked = quickCreateStatus?.isActive ?? false;
+  const isBriefEmpty = !brief.objective && !brief.hook && !brief.targetAudience && !brief.callToAction;
 
   return (
     <PageFrame
@@ -409,7 +448,7 @@ export function ProjectBriefPage() {
       title={bundle.project.title}
       description="The brief sets the production atmosphere, hard constraints, and approval path before any expensive generation begins."
       actions={
-        <div style={{ display: "flex", gap: "0.75rem" }}>
+        quickCreateBanner?.isActive ? null : <div style={{ display: "flex", gap: "0.75rem" }}>
           {editing ? (
             <button className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={handleSave} type="button">
               {updateBrief.isPending ? "Saving…" : "Save brief"}
@@ -426,6 +465,14 @@ export function ProjectBriefPage() {
       }
       inspector={<ProjectInspector project={bundle.project} />}
     >
+      {quickCreateBanner ? <QuickStartStatusBanner status={quickCreateBanner} compact /> : null}
+      {isQuickCreateLocked && isBriefEmpty ? (
+        <SectionCard className="surface-card--hero" title="Synthesizing the project brief" subtitle="The quick-start flow is still turning your idea into a structured brief.">
+          <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">
+            This screen stays read-only until the bootstrap reaches the next step. You can follow the progress from the banner above.
+          </p>
+        </SectionCard>
+      ) : null}
       <SectionCard className="surface-card--hero" title="Creative direction" subtitle="Core strategic elements that shape all generation">
         <div className="form-grid">
           <div className="form-field">
@@ -437,6 +484,7 @@ export function ProjectBriefPage() {
               onChange={(e) => handleFieldChange("objective", e.target.value)}
               rows={3}
               placeholder="What should this video achieve?"
+              disabled={isQuickCreateLocked}
             />
           </div>
           <div className="content-grid content-grid--equal">
@@ -449,6 +497,7 @@ export function ProjectBriefPage() {
                 onChange={(e) => handleFieldChange("hook", e.target.value)}
                 rows={2}
                 placeholder="What stops the scroll?"
+                disabled={isQuickCreateLocked}
               />
             </div>
             <div className="form-field">
@@ -460,6 +509,7 @@ export function ProjectBriefPage() {
                 onChange={(e) => handleFieldChange("callToAction", e.target.value)}
                 rows={2}
                 placeholder="What should viewers do after watching?"
+                disabled={isQuickCreateLocked}
               />
             </div>
           </div>
@@ -473,6 +523,7 @@ export function ProjectBriefPage() {
                 onChange={(e) => handleFieldChange("targetAudience", e.target.value)}
                 rows={2}
                 placeholder="Who is this for?"
+                disabled={isQuickCreateLocked}
               />
             </div>
             <div className="form-field">
@@ -484,6 +535,7 @@ export function ProjectBriefPage() {
                 onChange={(e) => handleFieldChange("brandNorthStar", e.target.value)}
                 rows={2}
                 placeholder="Creative tone and positioning"
+                disabled={isQuickCreateLocked}
               />
             </div>
           </div>
@@ -529,6 +581,7 @@ export function ScriptPage() {
   const { bundle, isLoading, projectId } = useProjectData();
   const approveScript = useApproveScript(projectId);
   const generateScript = useGenerateScript(projectId);
+  const { data: quickCreateStatus } = useQuickCreateStatus(projectId);
   const [queuedGeneration, setQueuedGeneration] = useState(false);
 
   // Get fresh script data from mock-service when available
@@ -544,8 +597,11 @@ export function ScriptPage() {
     return <LoadingPage />;
   }
 
+  const quickCreateBanner = activeQuickStart(quickCreateStatus);
+  const isQuickCreateLocked = quickCreateStatus?.isActive ?? false;
+
   // If no fresh script, show empty generation state
-  if (!freshScript && !generateScript.isPending && !queuedGeneration) {
+  if (!freshScript && !generateScript.isPending && !queuedGeneration && !isQuickCreateLocked) {
     return (
       <div className="scene-empty-state">
         <div className="scene-empty-state__card">
@@ -570,7 +626,12 @@ export function ScriptPage() {
     );
   }
 
-  if (generateScript.isPending || queuedGeneration || freshScript?.approvalState === "queued") {
+  if (
+    generateScript.isPending ||
+    queuedGeneration ||
+    freshScript?.approvalState === "queued" ||
+    (!freshScript && isQuickCreateLocked)
+  ) {
     return (
       <PageFrame
         eyebrow="Loading"
@@ -578,6 +639,7 @@ export function ScriptPage() {
         description="The AI is drafting the script from your selected idea."
         inspector={<div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />}
       >
+        {quickCreateBanner ? <QuickStartStatusBanner status={quickCreateBanner} /> : null}
         <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />
       </PageFrame>
     );
@@ -598,7 +660,7 @@ export function ScriptPage() {
           <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/ideas`}>
             ← Ideas
           </Link>
-          {!isApproved ? (
+          {isQuickCreateLocked ? null : !isApproved ? (
             <button
               type="button"
               className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
@@ -643,6 +705,7 @@ export function ScriptPage() {
         </div>
       }
     >
+      {quickCreateBanner ? <QuickStartStatusBanner status={quickCreateBanner} compact /> : null}
       <SectionCard className="surface-card--hero" title="Narration direction" subtitle="Editorial tone with consistent voice parameters across every scene">
         <div className="metric-row">
           <MetricCard label="Voice preset" value={bundle.project.voicePreset} detail="Frozen per render job" tone="primary" />

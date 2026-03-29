@@ -11,6 +11,7 @@ from app.services.content_planning_service import ContentPlanningService
 from app.services.generation_service import GenerationService
 from app.services.billing_service import BillingService
 from app.services.notification_service import NotificationService
+from app.services.quick_start_service import QuickStartService
 from app.services.routing_service import RoutingService
 from app.services.render_service import RenderService
 from app.services.workspace_service import WorkspaceService
@@ -94,6 +95,26 @@ def generate_prompt_pairs_task(self, job_id: str) -> None:
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception("unexpected_prompt_pair_task_failure job_id=%s", job_id)
         service.mark_job_failed(job_id, AdapterError("internal", "unexpected_error", str(exc)))
+        raise
+    finally:
+        session.close()
+
+
+@celery_app.task(bind=True, max_retries=3, name="planning.bootstrap_project")
+def bootstrap_project_task(self, job_id: str) -> None:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    service = QuickStartService(session, settings)
+    try:
+        service.execute_quick_start_job(job_id)
+    except AdapterError as error:
+        if error.category == "transient" and self.request.retries < self.max_retries:
+            service.mark_quick_start_retry(job_id, error)
+            raise self.retry(exc=error, countdown=30 * (2**self.request.retries))
+        service.mark_quick_start_failed(job_id, error)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.exception("unexpected_quick_start_task_failure job_id=%s", job_id)
+        service.mark_quick_start_failed(job_id, AdapterError("internal", "unexpected_error", str(exc)))
         raise
     finally:
         session.close()

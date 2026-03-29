@@ -44,6 +44,7 @@ class JobStatus(str, enum.Enum):
 
 
 class JobKind(str, enum.Enum):
+    project_bootstrap = "project_bootstrap"
     idea_generation = "idea_generation"
     script_generation = "script_generation"
     scene_plan_generation = "scene_plan_generation"
@@ -52,6 +53,7 @@ class JobKind(str, enum.Enum):
 
 
 class StepKind(str, enum.Enum):
+    brief_generation = "brief_generation"
     idea_generation = "idea_generation"
     script_generation = "script_generation"
     scene_plan_generation = "scene_plan_generation"

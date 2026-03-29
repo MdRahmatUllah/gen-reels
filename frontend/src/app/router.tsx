@@ -24,6 +24,7 @@ import { LocalWorkersPage } from "../features/settings/LocalWorkersPage";
 import { AdminQueuePage } from "../features/admin/AdminQueuePage";
 import { AdminRendersPage } from "../features/admin/AdminRendersPage";
 import { AdminWorkspacesPage } from "../features/admin/AdminWorkspacesPage";
+import { QuickStartProgressPage } from "../features/projects/QuickStartProgressPage";
 
 export const router = createBrowserRouter([
   {
@@ -57,6 +58,10 @@ export const router = createBrowserRouter([
       {
         path: "projects/:projectId/brief",
         element: <ProjectBriefPage />,
+      },
+      {
+        path: "projects/:projectId/quick-start",
+        element: <QuickStartProgressPage />,
       },
       {
         path: "projects/:projectId/ideas",

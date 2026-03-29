@@ -58,6 +58,57 @@ export interface CreateProjectPayload {
   client: string;
 }
 
+export type QuickCreateStarterMode = "studio_default" | "template";
+
+export interface QuickCreateProjectPayload {
+  ideaPrompt: string;
+  starterMode: QuickCreateStarterMode;
+  templateId?: string | null;
+}
+
+export interface QuickCreateJobSummary {
+  id: string;
+  jobKind: string;
+  status: "queued" | "running" | "completed" | "failed";
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface QuickCreateStepStatus {
+  stepKind: string;
+  stepIndex: number;
+  status: "queued" | "running" | "completed" | "failed";
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface QuickCreateProjectResponse {
+  projectId: string;
+  projectTitle: string;
+  redirectPath: string;
+  job: QuickCreateJobSummary;
+}
+
+export interface QuickCreateStatus {
+  projectId: string;
+  projectTitle: string;
+  projectStage: WorkflowStage;
+  job: QuickCreateJobSummary;
+  steps: QuickCreateStepStatus[];
+  currentStep: string | null;
+  completedSteps: string[];
+  redirectPath: string;
+  recoveryPath: string;
+  isActive: boolean;
+  isCompleted: boolean;
+  hasFailed: boolean;
+}
+
 export interface ProjectSummary {
   id: string;
   title: string;

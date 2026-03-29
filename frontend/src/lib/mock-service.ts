@@ -15,6 +15,9 @@ import type {
   IdeaCandidate,
   IdeaSet,
   LoginCredentials,
+  QuickCreateProjectPayload,
+  QuickCreateProjectResponse,
+  QuickCreateStatus,
   RenderJob,
   RenderStep,
   ExportArtifact,
@@ -63,6 +66,7 @@ import {
   liveDeleteProviderCredential,
   liveDeleteProviderKey,
   liveGenerateIdeas,
+  liveGetQuickCreateStatus,
   liveGeneratePromptPairs,
   liveGenerateScenePlan,
   liveGenerateScript,
@@ -95,6 +99,7 @@ import {
   liveCloneTemplate,
   liveLogin,
   liveLogout,
+  liveQuickCreateProject,
   liveResolveComment,
   liveRetryRenderStep,
   liveSaveBrandKit,
@@ -234,6 +239,7 @@ interface MockState {
   providerCredentials: ProviderCredentialRecord[];
   executionPolicy: WorkspaceExecutionPolicy;
   localWorkers: LocalWorker[];
+  quickCreateStatuses: Map<string, QuickCreateStatus>;
 }
 
 const seedTemplates: TemplateCard[] = [
@@ -383,6 +389,7 @@ const state: MockState = {
       capabilities: { orderedReferenceImages: true, localTTS: false, videoFrames: true }
     }
   ],
+  quickCreateStatuses: new Map(),
 };
 
 /* ─── Idea Generation Templates ───────────────────────────────────────────── */
@@ -589,6 +596,323 @@ export async function mockCreateProject(payload: CreateProjectPayload): Promise<
 }
 
 /* ─── Brief API ───────────────────────────────────────────────────────────── */
+const quickCreateStepOrder = [
+  "brief_generation",
+  "idea_generation",
+  "script_generation",
+  "scene_plan_generation",
+  "prompt_pair_generation",
+] as const;
+
+function quickCreateFailureRecoveryPath(projectId: string, stepKind: string | null): string {
+  if (stepKind === "idea_generation") return `/app/projects/${projectId}/ideas`;
+  if (stepKind === "script_generation") return `/app/projects/${projectId}/script`;
+  if (stepKind === "scene_plan_generation" || stepKind === "prompt_pair_generation") {
+    return `/app/projects/${projectId}/scenes`;
+  }
+  return `/app/projects/${projectId}/brief`;
+}
+
+function fallbackProjectTitleFromIdea(ideaPrompt: string): string {
+  const cleaned = ideaPrompt.trim().replace(/\s+/g, " ");
+  if (!cleaned) {
+    return "Untitled Project";
+  }
+  return cleaned
+    .split(" ")
+    .slice(0, 7)
+    .join(" ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function synthesizeQuickCreateBrief(
+  ideaPrompt: string,
+  starterLabel: string,
+): { title: string; brief: BriefData } {
+  const normalized = ideaPrompt.trim();
+  const shortIdea = normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+  return {
+    title: fallbackProjectTitleFromIdea(normalized),
+    brief: {
+      objective: `Create a high-performing short-form video about ${shortIdea}.`,
+      hook: normalized,
+      targetAudience: "Short-form viewers likely to engage with a clear, emotionally resonant concept.",
+      callToAction: "Prompt the viewer to take the next obvious step after watching.",
+      brandNorthStar:
+        starterLabel === "Studio Default"
+          ? "Confident, premium, conversion-minded storytelling."
+          : `Use ${starterLabel} as the creative starting frame while tailoring the story to the new concept.`,
+      guardrails: [
+        "Keep the message specific and easy to understand in the first few seconds.",
+        "Avoid cluttered visuals or claims that cannot be supported.",
+        "Preserve a clear narrative arc from hook to CTA.",
+      ],
+      mustInclude: [
+        "A strong first-frame visual hook",
+        "One memorable proof point or transformation beat",
+        "A clear final CTA",
+      ],
+      approvalSteps: ["Script review", "Visual sign-off", "Final export approval"],
+    },
+  };
+}
+
+function buildMockQuickCreateStatus(projectId: string): QuickCreateStatus {
+  const existing = state.quickCreateStatuses.get(projectId);
+  if (existing) {
+    return existing;
+  }
+  const project = state.projects.get(projectId);
+  if (!project) {
+    throw new Error(`Project ${projectId} not found`);
+  }
+  return {
+    projectId,
+    projectTitle: project.title,
+    projectStage: project.stage,
+    job: {
+      id: nextId("quickstart"),
+      jobKind: "project_bootstrap",
+      status: "queued",
+      errorCode: null,
+      errorMessage: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completedAt: null,
+    },
+    steps: quickCreateStepOrder.map((stepKind, index) => ({
+      stepKind,
+      stepIndex: index + 1,
+      status: "queued",
+      errorCode: null,
+      errorMessage: null,
+      startedAt: null,
+      completedAt: null,
+    })),
+    currentStep: quickCreateStepOrder[0],
+    completedSteps: [],
+    redirectPath: `/app/projects/${projectId}/scenes`,
+    recoveryPath: `/app/projects/${projectId}/brief`,
+    isActive: true,
+    isCompleted: false,
+    hasFailed: false,
+  };
+}
+
+function updateMockQuickCreateStatus(
+  projectId: string,
+  mutate: (status: QuickCreateStatus) => QuickCreateStatus,
+): QuickCreateStatus {
+  const status = mutate(buildMockQuickCreateStatus(projectId));
+  state.quickCreateStatuses.set(projectId, status);
+  return status;
+}
+
+async function runMockQuickCreate(
+  projectId: string,
+  payload: QuickCreateProjectPayload,
+  starterLabel: string,
+): Promise<void> {
+  const runStep = async (
+    stepKind: (typeof quickCreateStepOrder)[number],
+    action: () => Promise<void>,
+  ) => {
+    updateMockQuickCreateStatus(projectId, (current) => ({
+      ...current,
+      projectTitle: state.projects.get(projectId)?.title ?? current.projectTitle,
+      projectStage: state.projects.get(projectId)?.stage ?? current.projectStage,
+      job: {
+        ...current.job,
+        status: "running",
+        updatedAt: new Date().toISOString(),
+      },
+      currentStep: stepKind,
+      recoveryPath: quickCreateFailureRecoveryPath(projectId, stepKind),
+      steps: current.steps.map((step) =>
+        step.stepKind === stepKind
+          ? {
+              ...step,
+              status: "running",
+              startedAt: step.startedAt ?? new Date().toISOString(),
+              errorCode: null,
+              errorMessage: null,
+            }
+          : step,
+      ),
+      isActive: true,
+      isCompleted: false,
+      hasFailed: false,
+    }));
+
+    try {
+      await action();
+      updateMockQuickCreateStatus(projectId, (current) => ({
+        ...current,
+        projectTitle: state.projects.get(projectId)?.title ?? current.projectTitle,
+        projectStage: state.projects.get(projectId)?.stage ?? current.projectStage,
+        currentStep:
+          quickCreateStepOrder[quickCreateStepOrder.indexOf(stepKind) + 1] ?? null,
+        completedSteps: current.completedSteps.includes(stepKind)
+          ? current.completedSteps
+          : [...current.completedSteps, stepKind],
+        steps: current.steps.map((step) =>
+          step.stepKind === stepKind
+            ? {
+                ...step,
+                status: "completed",
+                completedAt: new Date().toISOString(),
+              }
+            : step,
+        ),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Quick-create failed.";
+      updateMockQuickCreateStatus(projectId, (current) => ({
+        ...current,
+        projectTitle: state.projects.get(projectId)?.title ?? current.projectTitle,
+        projectStage: state.projects.get(projectId)?.stage ?? current.projectStage,
+        job: {
+          ...current.job,
+          status: "failed",
+          errorCode: "mock_quick_create_failed",
+          errorMessage: message,
+          updatedAt: new Date().toISOString(),
+        },
+        currentStep: stepKind,
+        recoveryPath: quickCreateFailureRecoveryPath(projectId, stepKind),
+        steps: current.steps.map((step) =>
+          step.stepKind === stepKind
+            ? {
+                ...step,
+                status: "failed",
+                errorCode: "mock_quick_create_failed",
+                errorMessage: message,
+                completedAt: new Date().toISOString(),
+              }
+            : step,
+        ),
+        isActive: false,
+        isCompleted: false,
+        hasFailed: true,
+      }));
+      throw error;
+    }
+  };
+
+  try {
+    await runStep("brief_generation", async () => {
+      const synthesized = synthesizeQuickCreateBrief(payload.ideaPrompt, starterLabel);
+      await mockUpdateBrief(projectId, synthesized.brief);
+      const project = state.projects.get(projectId);
+      if (project) {
+        project.title = synthesized.title;
+        project.nextMilestone = "Generating ranked ideas from the synthesized brief";
+        project.updatedAt = new Date().toISOString();
+        state.projects.set(projectId, project);
+      }
+    });
+
+    await runStep("idea_generation", async () => {
+      const ideaSet = await mockGenerateIdeas(projectId);
+      const selectedIdea = ideaSet.ideas[0];
+      if (selectedIdea) {
+        await mockSelectIdea(projectId, selectedIdea.id);
+      }
+    });
+
+    await runStep("script_generation", async () => {
+      await mockGenerateScript(projectId);
+      await mockApproveScript(projectId);
+    });
+
+    await runStep("scene_plan_generation", async () => {
+      await mockGenerateScenePlan(projectId);
+    });
+
+    await runStep("prompt_pair_generation", async () => {
+      const planSet = state.scenePlanSets.get(projectId);
+      if (!planSet) {
+        throw new Error("Scene plan missing during quick-create.");
+      }
+      for (const scene of planSet.scenes) {
+        await mockGeneratePromptPairs(projectId, scene.id);
+      }
+      await mockApproveScenePlan(projectId);
+    });
+
+    updateMockQuickCreateStatus(projectId, (current) => ({
+      ...current,
+      projectTitle: state.projects.get(projectId)?.title ?? current.projectTitle,
+      projectStage: state.projects.get(projectId)?.stage ?? current.projectStage,
+      job: {
+        ...current.job,
+        status: "completed",
+        errorCode: null,
+        errorMessage: null,
+        updatedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      },
+      currentStep: null,
+      recoveryPath: current.redirectPath,
+      isActive: false,
+      isCompleted: true,
+      hasFailed: false,
+    }));
+  } catch {
+    return;
+  }
+}
+
+export async function mockQuickCreateProject(
+  payload: QuickCreateProjectPayload,
+): Promise<QuickCreateProjectResponse> {
+  if (!isMockMode()) {
+    return liveQuickCreateProject(payload);
+  }
+
+  const starterTemplate = payload.templateId
+    ? state.templates.find((template) => template.id === payload.templateId)
+    : null;
+  const starterLabel = starterTemplate?.name ?? "Studio Default";
+  const created = await mockCreateProject({
+    title: fallbackProjectTitleFromIdea(payload.ideaPrompt),
+    client: "",
+  });
+
+  if (starterTemplate) {
+    created.tags = Array.from(new Set([...created.tags, starterTemplate.style.toLowerCase()]));
+    created.nextMilestone = `Applying ${starterTemplate.name} starter defaults`;
+    created.updatedAt = new Date().toISOString();
+    state.projects.set(created.id, created);
+  }
+
+  const queued = updateMockQuickCreateStatus(created.id, (current) => current);
+  void runMockQuickCreate(created.id, payload, starterLabel);
+
+  return {
+    projectId: created.id,
+    projectTitle: created.title,
+    redirectPath: `/app/projects/${created.id}/quick-start`,
+    job: queued.job,
+  };
+}
+
+export async function mockGetQuickCreateStatus(projectId: string): Promise<QuickCreateStatus> {
+  if (!isMockMode()) {
+    return liveGetQuickCreateStatus(projectId);
+  }
+  await randomDelay(120, 240);
+  const status = state.quickCreateStatuses.get(projectId);
+  if (!status) {
+    throw new Error("No quick-create job exists for this project.");
+  }
+  return {
+    ...status,
+    projectTitle: state.projects.get(projectId)?.title ?? status.projectTitle,
+    projectStage: state.projects.get(projectId)?.stage ?? status.projectStage,
+  };
+}
+
 export async function mockGetBrief(projectId: string): Promise<BriefData> {
   if (!isMockMode()) {
     return liveGetBrief(projectId);

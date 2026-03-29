@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_db_dep, get_settings_dep, require_auth
@@ -12,9 +12,13 @@ from app.schemas.projects import (
     ProjectCreateRequest,
     ProjectDetailResponse,
     ProjectResponse,
+    QuickStartCreateRequest,
+    QuickStartCreateResponse,
+    QuickStartStatusResponse,
     ProjectUpdateRequest,
 )
 from app.services.project_service import ProjectService
+from app.services.quick_start_service import QuickStartService
 from app.services.routing_service import RoutingService
 
 router = APIRouter()
@@ -37,6 +41,21 @@ def create_project(
     return ProjectService(db).create_project(auth, payload)
 
 
+@router.post(":quick-start", response_model=QuickStartCreateResponse)
+def quick_start_project(
+    payload: QuickStartCreateRequest,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return QuickStartService(db, settings).queue_quick_start(
+        auth,
+        payload,
+        idempotency_key=idempotency_key,
+    )
+
+
 @router.get("/{project_id}", response_model=ProjectDetailResponse)
 def get_project(
     project_id: str,
@@ -44,6 +63,16 @@ def get_project(
     db: Session = Depends(get_db_dep),
 ):
     return ProjectService(db).get_project_detail(auth, project_id)
+
+
+@router.get("/{project_id}/quick-start-status", response_model=QuickStartStatusResponse)
+def get_project_quick_start_status(
+    project_id: str,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return QuickStartService(db, settings).get_quick_start_status(auth, project_id)
 
 
 @router.get("/{project_id}/lineage", response_model=ProjectLineageResponse)

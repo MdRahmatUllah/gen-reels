@@ -17,6 +17,12 @@ class ProjectCreateRequest(BaseModel):
     brand_kit_id: str | None = None
 
 
+class QuickStartCreateRequest(BaseModel):
+    idea_prompt: str = Field(min_length=1, max_length=4000)
+    starter_mode: str = Field(default="studio_default", pattern="^(studio_default|template)$")
+    template_id: str | None = None
+
+
 class ProjectUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     client: str | None = Field(default=None, max_length=255)
@@ -146,6 +152,32 @@ class ProjectDetailResponse(BaseModel):
     script_versions: list[ScriptVersionResponse]
     scene_plans: list[dict[str, Any]]
     recent_jobs: list[JobSummary]
+
+
+class QuickStartStepResponse(BaseModel):
+    step_kind: str
+    step_index: int
+    status: str
+    error_code: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class QuickStartCreateResponse(BaseModel):
+    project: ProjectResponse
+    job: JobSummary
+    redirect_path: str
+
+
+class QuickStartStatusResponse(BaseModel):
+    project: ProjectResponse
+    job: JobSummary
+    steps: list[QuickStartStepResponse]
+    current_step: str | None = None
+    completed_steps: list[str] = Field(default_factory=list)
+    redirect_path: str
+    recovery_path: str
 
 
 class PromptHistoryResponse(BaseModel):

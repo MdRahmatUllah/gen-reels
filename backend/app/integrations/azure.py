@@ -28,6 +28,14 @@ class ModerationProvider:
 
 
 class TextProvider:
+    def synthesize_brief(
+        self,
+        *,
+        idea_prompt: str,
+        starter_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:  # pragma: no cover - interface
+        raise NotImplementedError
+
     def generate_ideas(self, brief_payload: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover - interface
         raise NotImplementedError
 
@@ -201,6 +209,14 @@ def _build_stub_scene_plan(
     }
 
 
+def _stub_project_title(idea_prompt: str) -> str:
+    cleaned = " ".join(idea_prompt.strip().split())
+    if not cleaned:
+        return "Untitled Project"
+    words = cleaned.split()
+    return " ".join(words[:8]).title()[:80]
+
+
 class StubModerationProvider(ModerationProvider):
     def moderate_text(self, text: str, *, target_type: str) -> ModerationResult:
         lowered = text.lower()
@@ -215,6 +231,40 @@ class StubModerationProvider(ModerationProvider):
 
 
 class StubTextProvider(TextProvider):
+    def synthesize_brief(
+        self,
+        *,
+        idea_prompt: str,
+        starter_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        starter_name = str((starter_context or {}).get("starter_name") or "Studio Default")
+        tone = str((starter_context or {}).get("starter_description") or "creator-first short-form production")
+        subject = " ".join(idea_prompt.strip().split()) or "a short-form concept"
+        title = _stub_project_title(subject)
+        return {
+            "title": title,
+            "brief": {
+                "objective": f"Create a polished short-form video about {subject}.",
+                "hook": f"Open with a striking first beat that makes viewers stop for {title}.",
+                "target_audience": "Social-first viewers who respond to clear benefits, pace, and visual clarity.",
+                "call_to_action": "Invite the viewer to take the next clear step immediately after the payoff.",
+                "brand_north_star": f"{starter_name} tone with {tone}.",
+                "guardrails": [
+                    "Keep the narration concise and scroll-stopping.",
+                    "Avoid unsupported claims and distracting side plots.",
+                ],
+                "must_include": [
+                    "A concrete payoff within the first few beats.",
+                    "A visually specific direction for the core idea.",
+                ],
+                "approval_steps": [
+                    "Script review",
+                    "Visual sign-off",
+                    "Final export approval",
+                ],
+            },
+        }
+
     def generate_ideas(self, brief_payload: dict[str, Any]) -> dict[str, Any]:
         hook = brief_payload["hook"]
         objective = brief_payload["objective"]
@@ -405,6 +455,32 @@ class AzureOpenAITextProvider(TextProvider):
             logger.exception("azure_openai_parse_failure")
             raise AdapterError("internal", "azure_openai_parse_failure", "Failed to parse Azure response.") from exc
         return {"output": parsed, "raw": payload}
+
+    def synthesize_brief(
+        self,
+        *,
+        idea_prompt: str,
+        starter_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys title and brief. title must be a concise project title under 80 characters. "
+            "brief must be an object with objective, hook, target_audience, call_to_action, brand_north_star, "
+            "guardrails, must_include, and approval_steps. guardrails, must_include, and approval_steps must be arrays "
+            "of short strings. Use the idea prompt as the primary source of truth and use starter metadata only as style "
+            "guidance. Do not mention internal system names."
+        )
+        user_prompt = json.dumps(
+            {
+                "idea_prompt": idea_prompt,
+                "starter_context": starter_context or {},
+            }
+        )
+        return self._request_json(
+            [
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": user_prompt},
+            ]
+        )["output"]
 
     def generate_ideas(self, brief_payload: dict[str, Any]) -> dict[str, Any]:
         instruction = (

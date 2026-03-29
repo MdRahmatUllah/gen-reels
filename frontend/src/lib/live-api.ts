@@ -31,6 +31,11 @@ import type {
   ProviderKey,
   ProviderModality,
   ProviderValidationStatus,
+  QuickCreateProjectPayload,
+  QuickCreateProjectResponse,
+  QuickCreateStatus,
+  QuickCreateStepStatus,
+  QuickCreateJobSummary,
   RenderCheck,
   RenderEvent,
   RenderJob,
@@ -77,6 +82,32 @@ type BackendProject = {
   duration_target_sec: number;
   stage: string;
   selected_idea_id: string | null;
+  updated_at: string;
+};
+
+type BackendProjectResponse = {
+  id: string;
+  workspace_id: string;
+  owner_user_id: string;
+  source_template_version_id: string | null;
+  brand_kit_id: string | null;
+  title: string;
+  client: string | null;
+  aspect_ratio: string;
+  duration_target_sec: number;
+  subtitle_style_profile: Record<string, unknown>;
+  export_profile: Record<string, unknown>;
+  audio_mix_profile: Record<string, unknown>;
+  stage: string;
+  active_brief_id: string | null;
+  selected_idea_id: string | null;
+  active_script_version_id: string | null;
+  active_scene_plan_id: string | null;
+  default_visual_preset_id: string | null;
+  default_voice_preset_id: string | null;
+  archived_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
   updated_at: string;
 };
 
@@ -368,6 +399,43 @@ type BackendExecutionPolicy = {
   image: BackendExecutionPolicyRoute;
   video: BackendExecutionPolicyRoute;
   speech: BackendExecutionPolicyRoute;
+};
+
+type BackendQuickStartJob = {
+  id: string;
+  job_kind: string;
+  status: "queued" | "running" | "completed" | "failed";
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+type BackendQuickStartStep = {
+  step_kind: string;
+  step_index: number;
+  status: "queued" | "running" | "completed" | "failed";
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+type BackendQuickStartCreateResponse = {
+  project: BackendProjectResponse;
+  job: BackendQuickStartJob;
+  redirect_path: string;
+};
+
+type BackendQuickStartStatusResponse = {
+  project: BackendProjectResponse;
+  job: BackendQuickStartJob;
+  steps: BackendQuickStartStep[];
+  current_step: string | null;
+  completed_steps: string[];
+  redirect_path: string;
+  recovery_path: string;
 };
 
 const sceneGradients = [
@@ -922,6 +990,59 @@ function mapProjectSummary(detail: BackendProjectDetail): ProjectSummary {
   };
 }
 
+function mapQuickCreateJob(job: BackendQuickStartJob): QuickCreateJobSummary {
+  return {
+    id: job.id,
+    jobKind: job.job_kind,
+    status: job.status,
+    errorCode: job.error_code,
+    errorMessage: job.error_message,
+    createdAt: job.created_at,
+    updatedAt: job.updated_at,
+    completedAt: job.completed_at,
+  };
+}
+
+function mapQuickCreateStep(step: BackendQuickStartStep): QuickCreateStepStatus {
+  return {
+    stepKind: step.step_kind,
+    stepIndex: step.step_index,
+    status: step.status,
+    errorCode: step.error_code,
+    errorMessage: step.error_message,
+    startedAt: step.started_at,
+    completedAt: step.completed_at,
+  };
+}
+
+function mapQuickCreateStatus(response: BackendQuickStartStatusResponse): QuickCreateStatus {
+  const steps = response.steps.map(mapQuickCreateStep);
+  const job = mapQuickCreateJob(response.job);
+  return {
+    projectId: response.project.id,
+    projectTitle: response.project.title,
+    projectStage: stageFromProject({
+      id: response.project.id,
+      title: response.project.title,
+      client: response.project.client,
+      aspect_ratio: response.project.aspect_ratio,
+      duration_target_sec: response.project.duration_target_sec,
+      stage: response.project.stage,
+      selected_idea_id: response.project.selected_idea_id,
+      updated_at: response.project.updated_at,
+    }),
+    job,
+    steps,
+    currentStep: response.current_step,
+    completedSteps: response.completed_steps,
+    redirectPath: response.redirect_path,
+    recoveryPath: response.recovery_path,
+    isActive: job.status === "queued" || job.status === "running",
+    isCompleted: job.status === "completed",
+    hasFailed: job.status === "failed",
+  };
+}
+
 function mapAlerts(notifications: BackendNotification[]): AlertItem[] {
   return notifications.slice(0, 6).map((notification) => ({
     id: notification.id,
@@ -1090,6 +1211,33 @@ export async function liveCreateProject(payload: CreateProjectPayload): Promise<
     client: payload.client,
   });
   return liveGetProject(project.id);
+}
+
+export async function liveQuickCreateProject(
+  payload: QuickCreateProjectPayload,
+): Promise<QuickCreateProjectResponse> {
+  const created = await api.post<BackendQuickStartCreateResponse>(
+    "/projects:quick-start",
+    {
+      idea_prompt: payload.ideaPrompt,
+      starter_mode: payload.starterMode,
+      ...(payload.templateId ? { template_id: payload.templateId } : {}),
+    },
+    idempotencyHeaders(),
+  );
+  return {
+    projectId: created.project.id,
+    projectTitle: created.project.title,
+    redirectPath: created.redirect_path,
+    job: mapQuickCreateJob(created.job),
+  };
+}
+
+export async function liveGetQuickCreateStatus(projectId: string): Promise<QuickCreateStatus> {
+  const status = await api.get<BackendQuickStartStatusResponse>(
+    `/projects/${projectId}/quick-start-status`,
+  );
+  return mapQuickCreateStatus(status);
 }
 
 export async function liveGetProjectBundle(projectId: string): Promise<ProjectBundle> {

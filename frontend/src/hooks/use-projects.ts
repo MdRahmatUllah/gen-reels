@@ -3,13 +3,20 @@ import {
   mockGetProjects,
   mockGetProject,
   mockCreateProject,
+  mockQuickCreateProject,
+  mockGetQuickCreateStatus,
 } from "../lib/mock-service";
 import {
   liveGetProjects,
   liveGetProject,
   liveCreateProject,
+  liveQuickCreateProject,
+  liveGetQuickCreateStatus,
 } from "../lib/live-api";
-import type { CreateProjectPayload } from "../types/domain";
+import type {
+  CreateProjectPayload,
+  QuickCreateProjectPayload,
+} from "../types/domain";
 import { isMockMode } from "../lib/config";
 
 export function useProjects() {
@@ -38,6 +45,32 @@ export function useCreateProject() {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["shell-data"] });
+    },
+  });
+}
+
+export function useQuickCreateProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: QuickCreateProjectPayload) =>
+      isMockMode() ? mockQuickCreateProject(payload) : liveQuickCreateProject(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["shell-data"] });
+    },
+  });
+}
+
+export function useQuickCreateStatus(projectId: string) {
+  return useQuery({
+    queryKey: ["quick-create-status", projectId],
+    queryFn: () =>
+      isMockMode() ? mockGetQuickCreateStatus(projectId) : liveGetQuickCreateStatus(projectId),
+    enabled: !!projectId,
+    refetchInterval: (query) => {
+      const status = query.state.data as { isActive?: boolean } | undefined;
+      return status?.isActive ? 1500 : false;
     },
   });
 }

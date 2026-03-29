@@ -2,11 +2,13 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useScenePlan, useGenerateScenePlan, useGeneratePromptPairs, useUpdateScene, useApproveScenePlan, useSetScenePlanPreset } from "../../hooks/use-scenes";
 import { useVisualPresets, useVoicePresets } from "../../hooks/use-presets";
+import { useQuickCreateStatus } from "../../hooks/use-projects";
 import type { ScenePlan, ScenePlanSet } from "../../types/domain";
 import { CommentThread } from "../../components/CommentThread";
 import { ConflictResolutionModal } from "../../components/ConflictResolutionModal";
 import { mockUpdateScene } from "../../lib/mock-service";
 import { isMockMode } from "../../lib/config";
+import { QuickStartStatusBanner } from "../projects/quick-start";
 
 /* ─── Shimmer placeholder ─────────────────────────────────────────────────── */
 function SceneShimmer() {
@@ -375,6 +377,7 @@ export function ScenesPage() {
   const { data: planSet, isLoading } = useScenePlan(projectId);
   const generatePlan = useGenerateScenePlan(projectId);
   const approvePlan = useApproveScenePlan(projectId);
+  const { data: quickCreateStatus } = useQuickCreateStatus(projectId);
 
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
   const [queuedGeneration, setQueuedGeneration] = useState(false);
@@ -399,6 +402,11 @@ export function ScenesPage() {
 
   const isApproved = planSet?.approvalState === "approved";
   const hasPlan = planSet && planSet.scenes.length > 0;
+  const quickCreateBanner =
+    quickCreateStatus && (quickCreateStatus.isActive || quickCreateStatus.hasFailed)
+      ? quickCreateStatus
+      : null;
+  const isQuickCreateLocked = quickCreateStatus?.isActive ?? false;
 
   const handleGenerate = useCallback(() => {
     setQueuedGeneration(true);
@@ -424,7 +432,7 @@ export function ScenesPage() {
   }, [planSet, projectId]);
 
   /* ─── Empty state ─────────────────────────────────────────────────────── */
-  if (!isLoading && !hasPlan && !generatePlan.isPending && !queuedGeneration) {
+  if (!isLoading && !hasPlan && !generatePlan.isPending && !queuedGeneration && !isQuickCreateLocked) {
     return (
       <div className="scene-empty-state">
         <div className="scene-empty-state__card">
@@ -443,9 +451,16 @@ export function ScenesPage() {
   }
 
   /* ─── Loading state ───────────────────────────────────────────────────── */
-  if (isLoading || generatePlan.isPending || queuedGeneration || planSet?.status === "running") {
+  if (
+    isLoading ||
+    generatePlan.isPending ||
+    queuedGeneration ||
+    planSet?.status === "running" ||
+    (!hasPlan && isQuickCreateLocked)
+  ) {
     return (
       <div className="flex flex-col gap-6 px-7 py-6 pb-12 w-full max-w-7xl mx-auto animate-fade-in-up">
+        {quickCreateBanner ? <QuickStartStatusBanner status={quickCreateBanner} /> : null}
         <SceneShimmer />
       </div>
     );
@@ -470,7 +485,7 @@ export function ScenesPage() {
           <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/script`}>
             ← Script
           </Link>
-          {!isApproved ? (
+          {isQuickCreateLocked ? null : !isApproved ? (
             <>
               {isMockMode() ? (
                 <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={triggerGhostEdit}>
@@ -489,6 +504,8 @@ export function ScenesPage() {
           )}
         </div>
       </div>
+
+      {quickCreateBanner ? <QuickStartStatusBanner status={quickCreateBanner} compact /> : null}
 
       {/* Three-column layout */}
       <div className="scene-workspace">
