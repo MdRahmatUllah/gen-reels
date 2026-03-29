@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { PageFrame, LoadingPage } from "../../components/ui";
+import { useEffect, useState } from "react";
+
 import { FormInput } from "../../components/FormField";
+import { LoadingPage, PageFrame, SectionCard } from "../../components/ui";
 import { useBrandKits } from "../../hooks/use-brandkits";
 import type { BrandKit } from "../../types/domain";
 
@@ -14,15 +15,20 @@ export function BrandKitPage() {
     }
   }, [brandKits]);
 
-  if (isLoading || !brandKits) return <LoadingPage />;
+  if (isLoading || !brandKits) {
+    return <LoadingPage />;
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeKit.name || !activeKit.primaryPalette) return;
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!activeKit.name || !activeKit.primaryPalette) {
+      return;
+    }
+
     try {
       await saveKit(activeKit as BrandKit);
       alert("Brand Kit saved successfully!");
-    } catch (err) {
+    } catch {
       alert("Failed to save brand kit");
     }
   };
@@ -34,37 +40,37 @@ export function BrandKitPage() {
       description="Define the core visual identity for this workspace. When templates are cloned or new scenes generated, the orchestrator will pull from these brand settings to enforce structural consistency."
       inspector={
         <div className="inspector-stack">
-          <div className="surface-card">
-            <h3 className="section-heading">Why use a Brand Kit?</h3>
-            <p className="body-copy" style={{ color: "var(--color-ink-lighter)" }}>
-              Brand kits ensure your prompts are automatically enriched with your specific lighting, tone, and hexadecimal colors. Keep your creators aligned without micromanaging.
+          <SectionCard title="Why use a Brand Kit?">
+            <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">
+              Brand kits ensure your prompts are automatically enriched with your specific lighting,
+              tone, and hexadecimal colors. Keep your creators aligned without micromanaging.
             </p>
-          </div>
+          </SectionCard>
         </div>
       }
     >
       <div className="surface-card limit-width">
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
           <FormInput
             id="name"
             label="Brand Name"
             value={activeKit.name || ""}
-            onChange={(val) => setActiveKit({ ...activeKit, name: val })}
+            onChange={(value) => setActiveKit({ ...activeKit, name: value })}
           />
 
           <FormInput
             id="northStar"
             label="Brand North Star"
-            help="A short phrase defining your brand's mood (e.g., 'Luxurious, dark, ASMR'). Appended to AI generation prompts."
+            help="A short phrase defining your brand's mood. This gets appended to generation prompts."
             value={activeKit.brandNorthStar || ""}
-            onChange={(val) => setActiveKit({ ...activeKit, brandNorthStar: val })}
+            onChange={(value) => setActiveKit({ ...activeKit, brandNorthStar: value })}
           />
 
           <FormInput
             id="palette"
             label="Primary Palette"
             value={activeKit.primaryPalette || ""}
-            onChange={(val) => setActiveKit({ ...activeKit, primaryPalette: val })}
+            onChange={(value) => setActiveKit({ ...activeKit, primaryPalette: value })}
             placeholder="e.g. Cobalt blue and ivory (#003366, #fffff0)"
           />
 
@@ -72,12 +78,16 @@ export function BrandKitPage() {
             id="fontFamily"
             label="Font Family"
             value={activeKit.fontFamily || ""}
-            onChange={(val) => setActiveKit({ ...activeKit, fontFamily: val })}
-            placeholder="e.g. Inter, Roboto, Arial"
+            onChange={(value) => setActiveKit({ ...activeKit, fontFamily: value })}
+            placeholder="e.g. Inter, Manrope"
           />
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button type="submit" className="button button--primary" disabled={isSaving}>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center rounded-xl bg-accent-gradient px-4 py-3 text-sm font-semibold text-on-accent shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-accent disabled:opacity-60"
+              disabled={isSaving}
+            >
               {isSaving ? "Saving..." : "Save Brand Kit"}
             </button>
           </div>

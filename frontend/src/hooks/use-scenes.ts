@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ScenePlan, ScenePlanSet } from "../types/domain";
+import type { ScenePlan } from "../types/domain";
 import {
   mockGetScenePlan,
   mockGenerateScenePlan,

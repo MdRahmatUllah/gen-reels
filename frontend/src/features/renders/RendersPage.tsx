@@ -39,7 +39,7 @@ function RenderSummaryCard({ render }: { render: RenderJob }) {
       title={render.label}
       subtitle={`Consistency snapshot ${render.consistencyPackSnapshotId}`}
     >
-      <div className="inline-meta">
+      <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={render.status} />
         <span>{render.transitionMode === "crossfade" ? "Crossfade" : "Hard cut"}</span>
         <span>{render.musicTrack}</span>
@@ -82,18 +82,18 @@ function RenderStepTable({ steps, onRetry }: { steps: RenderStep[], onRetry: (id
                 <StatusBadge status={step.status as any} />
               </td>
               <td>{formatSignedSeconds(step.durationDeltaSec)}</td>
-              <td style={{ color: "var(--color-ink-lighter)" }}>
+              <td className="text-secondary">
                 {step.status === "completed" ? `${step.creditCost || 5} cr` : "--"}
               </td>
               <td>{step.clipStatus}</td>
               <td>{step.narrationStatus}</td>
               <td>
                 {step.status === "failed" ? (
-                  <button className="button button--secondary" onClick={() => onRetry(step.id)} style={{ padding: '4px 8px', fontSize: '12px', minHeight: 'unset' }}>
+                  <button className="inline-flex items-center justify-center rounded-lg border border-border-subtle bg-glass px-3 py-1.5 text-xs font-semibold text-primary transition-all duration-200 hover:border-border-active hover:bg-glass-hover" onClick={() => onRetry(step.id)}>
                     Retry
                   </button>
                 ) : step.status === "blocked" ? (
-                  <span style={{ fontSize: '11px', color: 'var(--color-warning-dark)', fontWeight: 'var(--font-weight-medium)' }}>
+                  <span className="text-[11px] font-medium text-warning">
                     Admin review required
                   </span>
                 ) : (
@@ -143,7 +143,7 @@ export function RendersPage() {
       description="The monitor surfaces job health, composition gates, SSE state, and per-scene timing so users always know the next available action."
       actions={
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <div className="filter-row">
+          <div className="flex flex-wrap items-center gap-2">
             {(["all", "running", "blocked", "completed"] as const).map((filter) => (
               <button
                 key={filter}
@@ -157,7 +157,7 @@ export function RendersPage() {
           </div>
           {!activeRender && (
              <button
-               className="button button--primary"
+               className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
                onClick={() => setShowSettingsModal(true)}
                disabled={isStarting}
              >
@@ -166,7 +166,7 @@ export function RendersPage() {
           )}
           {activeRender && activeRender.status === "running" && (
              <button
-               className="button button--secondary"
+               className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
                onClick={() => cancelRender()}
              >
                Cancel render
@@ -251,7 +251,7 @@ export function RendersPage() {
                   <div className="event-item" key={event.id}>
                     <span className={`tone-pill tone-pill--${event.tone}`} />
                     <div>
-                      <div className="inline-meta">
+                      <div className="flex flex-wrap items-center gap-2">
                         <strong>{event.label}</strong>
                         <span>{event.time}</span>
                       </div>

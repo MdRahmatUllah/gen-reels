@@ -6,8 +6,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="workspace-shell" style={{ alignItems: "center", justifyContent: "center" }}>
-        <div className="surface-card shimmer surface-card--loading" style={{ maxWidth: "24rem" }} />
+      <div className="flex h-screen w-full items-center justify-center overflow-hidden bg-base px-4 text-primary antialiased">
+        <div className="w-full max-w-sm rounded-2xl border border-border-card bg-card p-6 shadow-card shimmer" />
       </div>
     );
   }

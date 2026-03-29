@@ -16,49 +16,73 @@ export function ConflictResolutionModal({
   };
 
   const handleForceOverwrite = () => {
-    // Provide clientVersion, but bumped to match the server so it succeeds
     onResolve({ ...clientVersion, version: serverVersion.version });
   };
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-content" style={{ maxWidth: "600px", zIndex: 999 }}>
-        <h2 className="section-heading">Conflict Detected</h2>
-        <p className="body-copy">
-          Another user has modified this scene since you started editing.
-          Please resolve the conflict below.
+      <div className="modal-content max-w-3xl">
+        <h2 className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted">
+          Conflict Detected
+        </h2>
+        <p className="mt-2 text-sm text-secondary">
+          Another user has modified this scene since you started editing. Please resolve the
+          conflict below.
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "16px" }}>
-          <div className="surface-card" style={{ background: "var(--color-background-raised)", padding: "16px", border: "none" }}>
-            <h4 style={{ fontSize: "12px", color: "var(--color-ink-lighter)", marginBottom: "8px" }}>Server Version</h4>
-            <div style={{ fontSize: "12px", background: "var(--color-background)", padding: "8px", border: "1px dashed var(--color-border)", borderRadius: "4px" }}>
-              <p><strong>Shot:</strong> {serverVersion.shotType}</p>
-              <p><strong>Motion:</strong> {serverVersion.motion}</p>
-              <p><strong>Duration:</strong> {serverVersion.durationSec}s</p>
-              <p><strong>Start Prompt:</strong> {serverVersion.startImagePrompt?.substring(0, 40)}...</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-border-subtle bg-glass p-4">
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
+              Server Version
+            </h4>
+            <div className="rounded-xl border border-dashed border-border-card bg-card p-3 text-sm text-secondary">
+              <p><strong className="text-primary">Shot:</strong> {serverVersion.shotType}</p>
+              <p><strong className="text-primary">Motion:</strong> {serverVersion.motion}</p>
+              <p><strong className="text-primary">Duration:</strong> {serverVersion.durationSec}s</p>
+              <p>
+                <strong className="text-primary">Start Prompt:</strong>{" "}
+                {serverVersion.startImagePrompt?.substring(0, 40)}...
+              </p>
             </div>
           </div>
-          <div className="surface-card" style={{ background: "var(--color-background-raised)", padding: "16px", border: "none" }}>
-            <h4 style={{ fontSize: "12px", color: "var(--color-ink-lighter)", marginBottom: "8px" }}>Your Edits</h4>
-            <div style={{ fontSize: "12px", background: "var(--color-background)", padding: "8px", border: "1px dashed var(--color-border)", borderRadius: "4px", opacity: 0.9 }}>
-              <p><strong>Shot:</strong> {clientVersion.shotType}</p>
-              <p><strong>Motion:</strong> {clientVersion.motion}</p>
-              <p><strong>Duration:</strong> {clientVersion.durationSec}s</p>
-              <p><strong>Start Prompt:</strong> {clientVersion.startImagePrompt?.substring(0, 40)}...</p>
+
+          <div className="rounded-2xl border border-border-subtle bg-glass p-4">
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
+              Your Edits
+            </h4>
+            <div className="rounded-xl border border-dashed border-border-card bg-card p-3 text-sm text-secondary">
+              <p><strong className="text-primary">Shot:</strong> {clientVersion.shotType}</p>
+              <p><strong className="text-primary">Motion:</strong> {clientVersion.motion}</p>
+              <p><strong className="text-primary">Duration:</strong> {clientVersion.durationSec}s</p>
+              <p>
+                <strong className="text-primary">Start Prompt:</strong>{" "}
+                {clientVersion.startImagePrompt?.substring(0, 40)}...
+              </p>
             </div>
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px" }}>
-          <button className="button button--secondary" onClick={onCancel}>
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <button
+            className="inline-flex items-center justify-center rounded-xl border border-border-subtle bg-glass px-4 py-2 text-sm font-semibold text-primary transition-all duration-200 hover:-translate-y-px hover:border-border-active hover:bg-glass-hover"
+            onClick={onCancel}
+            type="button"
+          >
             Cancel
           </button>
-          <button className="button button--secondary" onClick={handleKeepServer}>
-            Discard My Edits (Keep Server)
+          <button
+            className="inline-flex items-center justify-center rounded-xl border border-border-subtle bg-glass px-4 py-2 text-sm font-semibold text-primary transition-all duration-200 hover:-translate-y-px hover:border-border-active hover:bg-glass-hover"
+            onClick={handleKeepServer}
+            type="button"
+          >
+            Discard My Edits
           </button>
-          <button className="button button--primary" onClick={handleForceOverwrite}>
-            Force Overwrite Server
+          <button
+            className="inline-flex items-center justify-center rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-on-accent shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-accent"
+            onClick={handleForceOverwrite}
+            type="button"
+          >
+            Force Overwrite
           </button>
         </div>
       </div>

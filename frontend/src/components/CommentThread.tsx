@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useComments, useAddComment, useResolveComment } from "../hooks/use-collaboration";
+
+import { useAddComment, useComments, useResolveComment } from "../hooks/use-collaboration";
 
 export function CommentThread({ targetId }: { targetId: string }) {
   const { data: comments, isLoading } = useComments(targetId);
@@ -7,50 +8,68 @@ export function CommentThread({ targetId }: { targetId: string }) {
   const { mutateAsync: resolveComment } = useResolveComment();
   const [newComment, setNewComment] = useState("");
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
+  const handleAdd = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newComment.trim()) {
+      return;
+    }
+
     await addComment({ targetId, text: newComment });
     setNewComment("");
   };
 
-  if (isLoading) return <div style={{ fontSize: "14px", color: "var(--color-ink-lighter)" }}>Loading comments...</div>;
+  if (isLoading) {
+    return <div className="text-sm text-muted">Loading comments...</div>;
+  }
 
   return (
-    <div className="surface-card">
-      <h3 className="section-heading">Comments</h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "12px", maxHeight: "200px", overflowY: "auto" }}>
+    <div className="flex flex-col gap-4 rounded-2xl border border-border-card bg-card p-5 shadow-card">
+      <h3 className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted">Comments</h3>
+
+      <div className="no-scrollbar flex max-h-52 flex-col gap-3 overflow-y-auto">
         {comments?.length === 0 ? (
-          <p className="body-copy" style={{ fontSize: "12px", color: "var(--color-ink-lighter)" }}>No comments yet.</p>
+          <p className="text-sm text-muted">No comments yet.</p>
         ) : (
-          comments?.map((c) => (
-            <div key={c.id} style={{ padding: "8px", background: "var(--color-background)", borderRadius: "4px", border: "1px solid var(--color-border-subtle)", opacity: c.resolved ? 0.6 : 1 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                <strong style={{ fontSize: "11px", color: "var(--color-ink)" }}>{c.authorName}</strong>
-                <span style={{ fontSize: "10px", color: "var(--color-ink-lighter)" }}>{new Date(c.timestamp).toLocaleTimeString()}</span>
+          comments?.map((comment) => (
+            <div
+              key={comment.id}
+              className={`rounded-xl border border-border-subtle bg-glass p-3 ${comment.resolved ? "opacity-60" : ""}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <strong className="text-xs font-semibold text-primary">{comment.authorName}</strong>
+                <span className="text-[10px] text-muted">
+                  {new Date(comment.timestamp).toLocaleTimeString()}
+                </span>
               </div>
-              <p style={{ fontSize: "12px", margin: 0 }}>{c.text}</p>
-              {!c.resolved && (
-                <button 
-                  onClick={() => resolveComment(c.id)}
-                  style={{ background: "transparent", border: "none", color: "var(--color-accent)", fontSize: "11px", padding: 0, marginTop: "6px", cursor: "pointer" }}
+              <p className="mt-2 text-sm text-secondary">{comment.text}</p>
+              {!comment.resolved ? (
+                <button
+                  className="mt-2 text-xs font-semibold text-accent transition hover:text-accent-bright"
+                  onClick={() => resolveComment(comment.id)}
+                  type="button"
                 >
                   Resolve
                 </button>
-              )}
+              ) : null}
             </div>
           ))
         )}
       </div>
-      <form onSubmit={handleAdd} style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
-        <input 
-          type="text" 
+
+      <form className="flex gap-2" onSubmit={handleAdd}>
+        <input
+          className="flex-1 rounded-xl border border-border-card bg-glass px-3 py-2 text-sm text-primary outline-none transition-all duration-200 placeholder:text-muted focus:border-accent"
+          type="text"
           value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          placeholder="@mention or leave a note..." 
-          style={{ flex: 1, padding: "8px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--color-border-subtle)", background: "var(--color-background)", color: "var(--color-ink)" }} 
+          onChange={(event) => setNewComment(event.target.value)}
+          placeholder="@mention or leave a note..."
         />
-        <button type="submit" className="button button--secondary" style={{ padding: "8px 12px", fontSize: "12px" }}>Post</button>
+        <button
+          type="submit"
+          className="inline-flex items-center justify-center rounded-xl border border-border-subtle bg-glass px-4 py-2 text-sm font-semibold text-primary transition-all duration-200 hover:-translate-y-px hover:border-border-active hover:bg-glass-hover"
+        >
+          Post
+        </button>
       </form>
     </div>
   );

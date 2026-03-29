@@ -28,7 +28,7 @@ function ExportCard({ artifact }: { artifact: ExportArtifact }) {
         gradient={artifact.gradient}
       />
       <div className="artifact-card__meta">
-        <div className="inline-meta">
+        <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={artifact.status} />
           <span>{formatDuration(artifact.durationSec)}</span>
           <span>{artifact.sizeMb} MB</span>
@@ -61,10 +61,10 @@ export function ExportsPage() {
       description="Final exports expose delivery metadata, loudness outcomes, and channel-specific readiness so release decisions feel operational, not guessy."
       actions={
         <>
-          <Link className="button button--secondary" to={`/app/projects/${project.id}/renders`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${project.id}/renders`}>
             Back to renders
           </Link>
-          <Link className="button button--primary" to={`/app/projects/${project.id}/brief`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${project.id}/brief`}>
             Review brief context
           </Link>
         </>

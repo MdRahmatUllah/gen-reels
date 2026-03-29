@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { mockGetShellData } from "../lib/mock-service";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 import { formatDuration, formatPercent, titleFromStatus } from "../lib/format";
 import { useStudioUiStore } from "../state/ui-store";
 import type {
@@ -20,12 +21,32 @@ import type {
 
 export function LoadingPage() {
   return (
-    <div className="full-loader" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px' }}>
-      <div className="loader-spinner" style={{ width: '24px', height: '24px', border: '3px solid var(--border-subtle)', borderTopColor: 'var(--text-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-      <style>
-        {`@keyframes spin { to { transform: rotate(360deg); } }`}
-      </style>
+    <div className="flex items-center justify-center h-full min-h-[300px]">
+      <div className="w-6 h-6 border-4 border-border-subtle border-t-primary rounded-full animate-spin"></div>
     </div>
+  );
+}
+
+function AppBackdrop() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 -z-10 bg-base [background-image:radial-gradient(circle_at_top_left,rgba(47,109,246,0.14),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.1),transparent_24%)] dark:[background-image:radial-gradient(circle_at_top_left,rgba(91,140,255,0.22),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.12),transparent_24%),linear-gradient(180deg,rgba(8,17,31,0.85),rgba(8,17,31,1))]"
+    />
+  );
+}
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+
+  return (
+    <button
+      className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-glass px-3 py-1.5 text-xs font-semibold text-primary transition-all duration-200 hover:border-border-active hover:bg-glass-hover"
+      onClick={toggleTheme}
+      type="button"
+    >
+      <span>{theme === "dark" ? "Light" : "Dark"} mode</span>
+    </button>
   );
 }
 
@@ -103,7 +124,7 @@ const defaultProjectId = "project_aurora_serum";
 function statusClassName(value: string): string {
   const normalized = value.toLowerCase().replace(/\s+/g, "_");
 
-const baseBadge = "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border";
+  const baseBadge = "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border transition-colors";
   if (
     normalized.includes("approved") ||
     normalized.includes("completed") ||
@@ -111,7 +132,7 @@ const baseBadge = "inline-flex items-center px-2 py-0.5 rounded text-[10px] font
     normalized.includes("pass") ||
     normalized.includes("healthy")
   ) {
-    return `${baseBadge} bg-emerald-500/10 text-emerald-400 border-emerald-500/20`;
+    return `${baseBadge} bg-success-bg text-success border-success-glow`;
   }
 
   if (
@@ -120,7 +141,7 @@ const baseBadge = "inline-flex items-center px-2 py-0.5 rounded text-[10px] font
     normalized.includes("live") ||
     normalized.includes("primary")
   ) {
-    return `${baseBadge} bg-accent-cyan/10 text-accent-cyan border-accent-cyan/20 shadow-[0_0_10px_rgba(34,211,238,0.2)]`;
+    return `${baseBadge} bg-primary-bg text-primary-fg border-border-active shadow-[0_0_10px_var(--accent-glow-sm)]`;
   }
 
   if (
@@ -130,18 +151,26 @@ const baseBadge = "inline-flex items-center px-2 py-0.5 rounded text-[10px] font
     normalized.includes("pending") ||
     normalized.includes("load")
   ) {
-    return `${baseBadge} bg-yellow-500/10 text-yellow-400 border-yellow-500/20`;
+    return `${baseBadge} bg-warning-bg text-warning border-warning-bg`;
   }
 
   if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("offline")) {
-    return `${baseBadge} bg-accent-coral/10 text-accent-coral border-accent-coral/20`;
+    return `${baseBadge} bg-error-bg text-error border-error-bg`;
   }
 
-  return `${baseBadge} bg-slate-800 text-slate-400 border-slate-700`;
+  return `${baseBadge} bg-neutral-bg text-neutral border-border-subtle`;
 }
 
 function toneClassName(tone: HealthTone): string {
-  return `tone-pill tone-pill--${tone}`;
+  const base = "inline-flex w-[0.55rem] h-[0.55rem] mt-[0.38rem] rounded-full shrink-0";
+  switch(tone) {
+    case 'neutral': return `${base} bg-neutral`;
+    case 'primary': return `${base} bg-accent shadow-[0_0_6px_var(--accent-glow)]`;
+    case 'success': return `${base} bg-success`;
+    case 'warning': return `${base} bg-warning`;
+    case 'error': return `${base} bg-error`;
+    default: return `${base} bg-neutral`;
+  }
 }
 
 function findActiveProject(projects: ProjectSummary[], projectId: string): ProjectSummary {
@@ -183,12 +212,13 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
 
   if (isLoading || !data) {
     return (
-      <div className="flex h-screen w-full bg-slate-950 text-slate-100 antialiased overflow-hidden">
-        <aside className="w-64 flex-shrink-0 border-r border-slate-800/50 bg-slate-900/50 animate-pulse" />
+      <div className="relative flex h-screen w-full overflow-hidden bg-base text-primary antialiased">
+        <AppBackdrop />
+        <aside className="w-64 flex-shrink-0 border-r border-border-subtle bg-surface/80 shimmer" />
         <main className="flex-1 flex flex-col min-w-0">
-          <div className="h-14 w-full bg-slate-900/50 animate-pulse" />
+          <div className="h-14 w-full bg-surface/80 border-b border-border-subtle shimmer" />
           <div className="p-8">
-            <div className="h-64 rounded-xl border border-slate-800 bg-slate-900/40 animate-pulse" />
+            <div className="h-64 rounded-xl border border-border-card bg-card shimmer" />
           </div>
         </main>
       </div>
@@ -203,25 +233,26 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
   const currentWorkflowStep = getCurrentWorkflowStep(location.pathname);
 
   return (
-    <div className="flex h-screen w-full bg-slate-950 text-slate-100 antialiased overflow-hidden">
-      <aside className="w-64 flex-shrink-0 flex flex-col gap-6 overflow-y-auto border-r border-slate-800/50 bg-slate-900/50 p-4 backdrop-blur-md">
+    <div className="relative flex h-screen w-full overflow-hidden bg-base text-primary antialiased">
+      <AppBackdrop />
+      <aside className="no-scrollbar w-64 flex-shrink-0 flex flex-col gap-6 overflow-y-auto border-r border-border-subtle bg-surface/80 p-4 backdrop-blur-md">
         {/* Brand */}
         <div className="flex items-center gap-3 px-2">
-          <div className="h-6 w-6 rounded bg-gradient-to-br from-accent-cyan to-accent-violet flex-shrink-0 shadow-[0_0_10px_rgba(34,211,238,0.4)]" aria-hidden="true" />
+          <div className="h-6 w-6 rounded bg-accent-gradient flex-shrink-0 shadow-accent z-10" aria-hidden="true" />
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Production Atelier</p>
-            <h1 className="text-xs font-semibold tracking-wide text-slate-200">Reels Generation Studio</h1>
+            <p className="text-[0.6rem] font-bold uppercase tracking-widest text-muted mb-0.5">Production Atelier</p>
+            <h1 className="text-xs font-heading font-bold tracking-wide text-primary">Reels Generation Studio</h1>
           </div>
         </div>
 
         {/* Workspace switcher */}
-        <div className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-800/20 p-3">
-          <label className="text-[10px] font-medium text-slate-400 mb-0.5" htmlFor="workspace-select">
+        <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-glass p-3">
+          <label className="text-[0.65rem] font-bold uppercase tracking-wider text-muted mb-0.5" htmlFor="workspace-select">
             Workspace
           </label>
           <select
             id="workspace-select"
-            className="w-full bg-slate-900 border border-slate-700/50 rounded flex-1 py-1.5 px-2 text-xs text-slate-200 outline-none focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan transition-all"
+            className="w-full bg-card border border-border-card rounded flex-1 py-1.5 px-2 text-xs text-primary shadow-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
             value={activeWorkspace.id}
             onChange={(event) => setActiveWorkspaceId(event.target.value)}
           >
@@ -231,16 +262,16 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
               </option>
             ))}
           </select>
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/50 text-[10px] text-slate-400">
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-subtle text-[0.65rem] uppercase tracking-wider text-muted">
             <div className="flex flex-col">
               <span>Credits</span>
-              <strong className="text-slate-200 text-xs">
+              <strong className="text-primary text-[0.82rem] font-semibold normal-case mt-0.5">
                 {activeWorkspace.creditsRemaining} / {activeWorkspace.creditsTotal}
               </strong>
             </div>
             <div className="flex flex-col text-right">
               <span>Queue</span>
-              <strong className="text-slate-200 text-xs">{activeWorkspace.queueCount} active</strong>
+              <strong className="text-primary text-[0.82rem] font-semibold normal-case mt-0.5">{activeWorkspace.queueCount} active</strong>
             </div>
           </div>
         </div>
@@ -259,26 +290,28 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
               ]}
             />
 
-            <div className="flex flex-col gap-2 rounded-lg border border-slate-800/50 bg-slate-800/10 p-3">
-              <p className="section-heading">Active Project</p>
-              <div className="flex flex-col gap-1.5 rounded-md border border-slate-700/50 bg-slate-900 p-3" style={{ marginTop: "0.5rem" }}>
-                <p className="eyebrow">{currentProject.client}</p>
-                <h2>{currentProject.title}</h2>
-                <StatusBadge status={currentProject.renderStatus} />
-                <p>{currentProject.nextMilestone}</p>
+            <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-glass p-3">
+              <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Active Project</p>
+              <div className="flex flex-col gap-1.5 rounded-xl border border-border-card bg-card p-3 shadow-sm mt-1">
+                <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">{currentProject.client}</p>
+                <h2 className="font-heading font-bold text-sm text-primary leading-snug">{currentProject.title}</h2>
+                <div className="mt-1"><StatusBadge status={currentProject.renderStatus} /></div>
+                <p className="text-xs text-secondary mt-1 max-w-[90%] whitespace-nowrap overflow-hidden text-ellipsis">{currentProject.nextMilestone}</p>
               </div>
-              <NavGroup
-                label="Workflow"
-                compact
-                items={[
-                  { to: `/app/projects/${currentProject.id}/brief`, label: "Brief" },
-                  { to: `/app/projects/${currentProject.id}/ideas`, label: "Ideas" },
-                  { to: `/app/projects/${currentProject.id}/script`, label: "Script" },
-                  { to: `/app/projects/${currentProject.id}/scenes`, label: "Scenes" },
-                  { to: `/app/projects/${currentProject.id}/renders`, label: "Renders" },
-                  { to: `/app/projects/${currentProject.id}/exports`, label: "Exports" },
-                ]}
-              />
+              <div className="mt-2">
+                <NavGroup
+                  label="Workflow"
+                  compact
+                  items={[
+                    { to: `/app/projects/${currentProject.id}/brief`, label: "Brief" },
+                    { to: `/app/projects/${currentProject.id}/ideas`, label: "Ideas" },
+                    { to: `/app/projects/${currentProject.id}/script`, label: "Script" },
+                    { to: `/app/projects/${currentProject.id}/scenes`, label: "Scenes" },
+                    { to: `/app/projects/${currentProject.id}/renders`, label: "Renders" },
+                    { to: `/app/projects/${currentProject.id}/exports`, label: "Exports" },
+                  ]}
+                />
+              </div>
             </div>
 
             <NavGroup
@@ -304,12 +337,11 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
               ]}
             />
 
-            <div className="flex flex-col gap-2 rounded-lg border border-slate-800/50 bg-slate-800/10 p-3">
-              <p className="section-heading">Return To Studio</p>
+            <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-glass p-3">
+              <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Return To Studio</p>
               <Link
-                className="button button--secondary"
+                className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px w-full mt-2"
                 to="/app"
-                style={{ marginTop: "0.5rem", width: "100%", justifyContent: "center" }}
               >
                 Open creator workspace
               </Link>
@@ -318,15 +350,15 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
         )}
 
         {/* Recent signals */}
-        <div className="flex flex-col gap-2 rounded-lg border border-slate-800/50 bg-slate-800/10 p-3">
-          <p className="section-heading">Recent signals</p>
-          <div className="alert-stack" style={{ marginTop: "0.5rem" }}>
+        <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-glass p-3">
+          <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Recent signals</p>
+          <div className="flex flex-col gap-3 mt-2">
             {data.alerts.map((alert) => (
-              <div className="alert-item" key={alert.id}>
+              <div className="flex gap-3 items-start" key={alert.id}>
                 <span className={toneClassName(alert.tone)} />
                 <div>
-                  <strong>{alert.label}</strong>
-                  <p>{alert.detail}</p>
+                  <strong className="text-[0.85rem] font-semibold text-primary">{alert.label}</strong>
+                  <p className="text-[0.8rem] text-secondary leading-snug">{alert.detail}</p>
                 </div>
               </div>
             ))}
@@ -334,40 +366,40 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative">
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative no-scrollbar">
         {/* Topbar */}
-        <header className="flex h-14 items-center justify-between border-b border-slate-800/50 bg-slate-950/80 px-6 backdrop-blur-md sticky top-0 z-10">
+        <header className="flex h-14 items-center justify-between border-b border-border-subtle bg-surface/80 px-6 backdrop-blur-md sticky top-0 z-20">
           <div className="flex flex-col">
-            <p className="eyebrow">{mode === "app" ? activeWorkspace.plan : "Admin operations"}</p>
-            <h2>{mode === "app" ? activeWorkspace.name : "Render operations desk"}</h2>
+            <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">{mode === "app" ? activeWorkspace.plan : "Admin operations"}</p>
+            <h2 className="font-heading text-sm font-bold text-primary leading-tight">{mode === "app" ? activeWorkspace.name : "Render operations desk"}</h2>
           </div>
           <div className="flex items-center gap-4">
             <input
-              className="w-64 rounded-full bg-slate-900 border border-slate-700/50 px-4 py-1.5 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan transition-all"
+              className="min-w-[16rem] px-4 py-1.5 rounded-full border border-border-subtle bg-glass text-xs text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)] placeholder:text-muted"
               placeholder="Search projects, renders, presets…"
               readOnly
               aria-label="Search"
             />
-            <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/50 px-3 py-1 text-xs text-slate-300">
+            <ThemeToggle />
+            <div className="flex items-center gap-2 rounded-full border border-border-card bg-glass px-3 py-1 text-xs text-secondary hover:border-border-active transition-colors cursor-default">
               <span>Queue</span>
-              <strong>{activeWorkspace.queueCount} active</strong>
+              <strong className="text-primary font-semibold">{activeWorkspace.queueCount} active</strong>
             </div>
-            <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/50 px-3 py-1 text-xs text-slate-300">
+            <div className="flex items-center gap-2 rounded-full border border-border-card bg-glass px-3 py-1 text-xs text-secondary hover:border-border-active transition-colors cursor-default">
               <span>Alerts</span>
-              <strong>{activeWorkspace.notifications}</strong>
+              <strong className="text-primary font-semibold">{activeWorkspace.notifications}</strong>
             </div>
-            <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-violet/20 text-xs font-bold text-accent-violet ring-1 ring-accent-violet/50" aria-hidden="true">{data.user.avatarInitials}</span>
+            <div className="flex items-center gap-2 pl-3 border-l border-border-subtle py-1">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent-gradient text-xs font-bold text-on-accent shadow-accent" aria-hidden="true">{data.user.avatarInitials}</span>
               <div className="flex flex-col">
-                <strong className="text-xs text-slate-200">{data.user.name}</strong>
-                <p className="text-[10px] text-slate-400">{data.user.role}</p>
+                <strong className="text-[0.85rem] font-semibold text-primary">{data.user.name}</strong>
+                <p className="text-[0.7rem] text-muted">{data.user.role}</p>
               </div>
             </div>
             <button
-              className="button button--secondary"
+              className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded-md font-medium text-[0.75rem] transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active"
               onClick={() => logout()}
               type="button"
-              style={{ fontSize: "0.75rem", padding: "0.35rem 0.75rem" }}
             >
               Sign out
             </button>
@@ -375,10 +407,12 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
         </header>
 
         {mode === "app" && routeProjectId ? (
-          <ProjectContextBar
-            currentStep={currentWorkflowStep}
-            project={currentProject}
-          />
+          <div className="pt-6 px-7">
+            <ProjectContextBar
+              currentStep={currentWorkflowStep}
+              project={currentProject}
+            />
+          </div>
         ) : null}
 
         <Outlet />
@@ -399,22 +433,22 @@ function NavGroup({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 mb-1">{label}</p>
+      <p className="text-[0.65rem] font-bold uppercase tracking-wider text-muted px-2 mb-1">{label}</p>
       <div className={compact ? "flex flex-col gap-0.5" : "flex flex-col gap-1"}>
         {items.map((item) => (
           <NavLink
             key={item.to}
             className={({ isActive }) =>
               isActive 
-                ? "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-accent-cyan bg-accent-cyan/10 transition-colors" 
-                : "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
+                ? "flex items-center gap-3 rounded-md px-3 py-2 text-[0.875rem] font-semibold text-accent-bright bg-primary-bg transition-all duration-200 shadow-[inset_2.5px_0_0_0_var(--accent)]" 
+                : "flex items-center gap-3 rounded-md px-3 py-2 text-[0.875rem] font-medium text-secondary hover:text-primary hover:bg-glass-hover hover:translate-x-0.5 transition-all duration-200"
             }
             to={item.to}
             end={item.to === "/app"}
           >
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2.5">
               {navIconMap[item.label] && (
-                <span className="opacity-70"><Icon path={navIconMap[item.label]} size={14} /></span>
+                <span className="opacity-80"><Icon path={navIconMap[item.label]} size={15} /></span>
               )}
               {item.label}
             </span>
@@ -433,30 +467,32 @@ function ProjectContextBar({
   currentStep?: string;
 }) {
   return (
-    <section className="context-bar">
-      <div className="context-bar__summary">
+    <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4 p-4 lg:px-5 rounded-2xl bg-glass border border-border-subtle shadow-sm animate-fade-in-up">
+      <div className="flex flex-col gap-3">
         <div>
-          <p className="eyebrow">Current project</p>
-          <div className="context-bar__heading">
-            <h3>{project.title}</h3>
+          <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Current project</p>
+          <div className="flex items-center gap-3 flex-wrap mt-1">
+            <h3 className="font-heading font-bold text-[1.05rem] text-primary">{project.title}</h3>
             <StatusBadge status={project.renderStatus} />
           </div>
-          <p>{project.nextMilestone}</p>
+          <p className="text-[0.86rem] text-secondary mt-1">{project.nextMilestone}</p>
         </div>
-        <div className="context-bar__meta">
-          <span>{titleFromStatus(project.stage)}</span>
-          <span>{project.sceneCount} scenes</span>
-          <span>{formatDuration(project.durationSec)}</span>
-          <span>{project.voicePreset}</span>
+        <div className="flex flex-wrap gap-2 text-xs text-secondary mt-1">
+          <span className="inline-flex items-center min-h-[1.8rem] px-3 py-1 rounded-full bg-glass text-[0.78rem]">{titleFromStatus(project.stage)}</span>
+          <span className="inline-flex items-center min-h-[1.8rem] px-3 py-1 rounded-full bg-glass text-[0.78rem]">{project.sceneCount} scenes</span>
+          <span className="inline-flex items-center min-h-[1.8rem] px-3 py-1 rounded-full bg-glass text-[0.78rem]">{formatDuration(project.durationSec)}</span>
+          <span className="inline-flex items-center min-h-[1.8rem] px-3 py-1 rounded-full bg-glass text-[0.78rem]">{project.voicePreset}</span>
         </div>
       </div>
 
-      <div className="context-bar__steps" aria-label="Project workflow">
+      <div className="flex flex-wrap gap-2 items-center" aria-label="Project workflow">
         {workflowRoutes.map((step) => {
           const isActive = currentStep === step.key;
           return (
             <Link
-              className={isActive ? "context-step context-step--active" : "context-step"}
+              className={isActive 
+                ? "inline-flex items-center justify-center min-h-[2rem] px-3 py-1.5 rounded-full bg-accent-gradient text-on-accent border border-transparent text-[0.82rem] font-semibold transition-all duration-200 shadow-md" 
+                : "inline-flex items-center justify-center min-h-[2rem] px-3 py-1.5 rounded-full bg-glass border border-border-subtle text-secondary text-[0.82rem] font-semibold transition-all duration-200 hover:border-border-active hover:text-primary"}
               key={step.key}
               to={`/app/projects/${project.id}/${step.key}`}
             >
@@ -486,19 +522,19 @@ export function PageFrame({
   children: ReactNode;
 }) {
   return (
-    <section className="p-8 max-w-[1400px] mx-auto w-full animate-fade-in-up">
-      <div className="flex items-start justify-between mb-8">
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-bold uppercase tracking-widest text-accent-violet">{eyebrow}</p>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-          <p className="text-sm text-slate-400 max-w-2xl">{description}</p>
+    <section className="flex flex-col gap-6 px-7 py-6 pb-12 w-full max-w-7xl mx-auto animate-fade-in-up">
+      <div className="flex items-end justify-between gap-6 mb-2">
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">{eyebrow}</p>
+          <h1 className="font-heading text-3xl md:text-[2.5rem] leading-[1.1] font-bold text-primary tracking-tight">{title}</h1>
+          <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch] mt-1">{description}</p>
         </div>
-        {actions ? <div className="flex items-center gap-3">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-start">
-        <div className="flex flex-col gap-6">{children}</div>
-        <aside className="sticky top-20 flex flex-col gap-4">{inspector}</aside>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_19rem] gap-6 items-start">
+        <div className="flex flex-col gap-6 min-w-0">{children}</div>
+        <aside className="sticky top-20 flex flex-col gap-4 self-start w-full">{inspector}</aside>
       </div>
     </section>
   );
@@ -517,12 +553,12 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={className ? `rounded-xl border border-slate-800/60 bg-slate-900/40 shadow-lg backdrop-blur flex flex-col overflow-hidden ${className}` : "rounded-xl border border-slate-800/60 bg-slate-900/40 shadow-lg backdrop-blur flex flex-col overflow-hidden"}>
-      <div className="flex flex-col px-5 py-4 border-b border-slate-800/50 bg-slate-800/20">
-        <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
-        {subtitle ? <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p> : null}
+    <section className={className ? `flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-card transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in ${className}` : "flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-card transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in"}>
+      <div className="flex flex-col pb-4 border-b border-border-subtle">
+        <h3 className="font-heading text-[1.05rem] font-bold text-primary leading-snug">{title}</h3>
+        {subtitle ? <p className="text-[0.86rem] text-secondary mt-1">{subtitle}</p> : null}
       </div>
-      <div className="p-5 flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {children}
       </div>
     </section>
@@ -542,10 +578,10 @@ export function MetricCard({
   tone?: HealthTone;
 }) {
   return (
-    <div className={`metric-card metric-card--${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <p>{detail}</p>
+    <div className={`flex flex-col gap-1 p-4 rounded-xl bg-card border border-border-card shadow-sm animate-rise-in tone-${tone}`}>
+      <span className="text-[0.6875rem] tracking-widest uppercase font-bold text-muted">{label}</span>
+      <strong className="text-2xl font-heading font-bold text-primary mt-1">{value}</strong>
+      <p className="text-[0.8rem] text-secondary mt-1">{detail}</p>
     </div>
   );
 }
@@ -568,13 +604,13 @@ export function ProgressBar({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex justify-between items-end">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</span>
-        <strong className="text-sm font-bold text-accent-cyan">{formatPercent(value)}</strong>
+        <span className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted">{label}</span>
+        <strong className="text-[0.8rem] font-bold text-accent">{formatPercent(value)}</strong>
       </div>
-      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden shadow-inner">
-        <div className="h-full bg-gradient-to-r from-accent-cyan to-accent-violet rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(34,211,238,0.5)]" style={{ width: `${value}%` }} />
+      <div className="h-1.5 w-full bg-border-subtle rounded-full overflow-hidden shadow-inner">
+        <div className="h-full bg-accent-gradient rounded-full transition-all duration-500 ease-out shadow-accent" style={{ width: `${value}%` }} />
       </div>
-      {detail ? <p className="text-[10px] text-slate-500 mt-1">{detail}</p> : null}
+      {detail ? <p className="text-[0.75rem] text-secondary mt-1">{detail}</p> : null}
     </div>
   );
 }
@@ -593,12 +629,13 @@ export function MediaFrame({
 }) {
   return (
     <div
-      className={aspect === "wide" ? "media-frame media-frame--wide" : "media-frame"}
+      className={`relative rounded-xl overflow-hidden flex items-end p-4 border border-border-subtle group ${aspect === "wide" ? "aspect-video" : "aspect-[9/16]"}`}
       style={{ background: gradient }}
     >
-      <div className="media-frame__overlay">
-        <p>{meta}</p>
-        <strong>{label}</strong>
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+      <div className="relative z-10 flex flex-col gap-1 drop-shadow-md">
+        <p className="text-[0.65rem] font-bold uppercase tracking-widest text-white/70">{meta}</p>
+        <strong className="text-sm font-semibold text-white">{label}</strong>
       </div>
     </div>
   );
@@ -616,21 +653,23 @@ export function TimelineItem({
 }) {
   return (
     <button
-      className={active ? "timeline-item timeline-item--active" : "timeline-item"}
+      className={active 
+        ? "flex flex-col items-start gap-1.5 p-3.5 rounded-lg bg-primary-bg border border-border-active transition-all duration-200 cursor-pointer text-left shadow-sm animate-rise-in transform scale-[1.01]" 
+        : "flex flex-col items-start gap-1.5 p-3.5 rounded-lg bg-card border border-border-subtle transition-all duration-200 cursor-pointer text-left hover:border-border-active animate-rise-in"}
       onClick={onClick}
       type="button"
       aria-pressed={active}
     >
-      <div className="timeline-item__heading">
-        <span className="timeline-index">Scene {scene.index}</span>
+      <div className="flex items-center gap-3 w-full justify-between">
+        <span className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Scene {scene.index}</span>
         <StatusBadge status={scene.status} />
       </div>
-      <strong>{scene.title}</strong>
-      <p>{scene.beat}</p>
-      <div className="timeline-item__meta">
-        <span>{scene.durationSec}s</span>
-        <span>{scene.transitionMode === "crossfade" ? "Crossfade" : "Hard cut"}</span>
-        <span>{scene.continuityScore}/100 consistency</span>
+      <strong className="text-[0.9rem] font-semibold text-primary mt-1">{scene.title}</strong>
+      <p className="text-[0.8rem] text-secondary line-clamp-2 mt-0.5 max-w-[95%]">{scene.beat}</p>
+      <div className="flex flex-wrap items-center gap-3 text-[0.7rem] text-muted mt-2">
+        <span className="inline-flex items-center justify-center bg-glass px-2 py-0.5 rounded-sm">{scene.durationSec}s</span>
+        <span className="inline-flex items-center justify-center bg-glass px-2 py-0.5 rounded-sm">{scene.transitionMode === "crossfade" ? "Crossfade" : "Hard cut"}</span>
+        <span className="inline-flex items-center justify-center bg-glass px-2 py-0.5 rounded-sm">{scene.continuityScore}/100 continuity</span>
       </div>
     </button>
   );
@@ -645,9 +684,12 @@ export function EmptyState({
   description: string;
 }) {
   return (
-    <div className="empty-state surface-card">
-      <h3>{title}</h3>
-      <p>{description}</p>
+    <div className="flex flex-col items-center justify-center text-center gap-4 py-16 px-6 rounded-2xl bg-card border border-border-card border-dashed">
+      <div className="w-12 h-12 rounded-full bg-glass flex items-center justify-center mb-2">
+        <Icon path="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" size={24} />
+      </div>
+      <h3 className="font-heading text-lg font-bold text-primary">{title}</h3>
+      <p className="text-secondary max-w-sm">{description}</p>
     </div>
   );
 }

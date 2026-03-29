@@ -13,12 +13,11 @@ import {
   getTemplates,
 } from "../lib/mock-api";
 import { useBrief, useUpdateBrief } from "../hooks/use-briefs";
-import { useProject } from "../hooks/use-projects";
+
 import { useScript, useApproveScript, useGenerateScript } from "../hooks/use-scripts";
-import { GenerationStatusIndicator } from "../components/GenerationStatus";
-import { formatDuration, formatSignedSeconds } from "../lib/format";
+
+import { formatDuration } from "../lib/format";
 import {
-  EmptyState,
   MediaFrame,
   MetricCard,
   PageFrame,
@@ -29,11 +28,8 @@ import {
 } from "../components/ui";
 import { useStudioUiStore } from "../state/ui-store";
 import type {
-  ExportArtifact,
   ProjectBundle,
   ProjectSummary,
-  RenderJob,
-  RenderStep,
   ScenePlan,
   SettingsSection,
 } from "../types/domain";
@@ -55,9 +51,9 @@ function LoadingPage() {
       eyebrow="Loading"
       title="Preparing the studio"
       description="Mock project data is loading into the workspace."
-      inspector={<div className="surface-card shimmer surface-card--loading" />}
+      inspector={<div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />}
     >
-      <div className="surface-card shimmer surface-card--loading" />
+      <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />
     </PageFrame>
   );
 }
@@ -95,8 +91,8 @@ function ProjectInspector({ project }: { project: ProjectSummary }) {
       </SectionCard>
 
       <SectionCard title="Current milestone">
-        <p className="body-copy">{project.nextMilestone}</p>
-        <div className="tag-row">
+        <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">{project.nextMilestone}</p>
+        <div className="flex flex-wrap items-center gap-2">
           {project.tags.map((tag) => (
             <span className="tag-chip" key={tag}>
               {tag}
@@ -180,10 +176,10 @@ export function DashboardPage() {
       description="A creator-first production shell that keeps project state, composition quality, and business guardrails visible in one place."
       actions={
         <>
-          <Link className="button button--secondary" to={`/app/projects/${focusProject.id}/brief`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${focusProject.id}/brief`}>
             Open brief
           </Link>
-          <Link className="button button--primary" to={`/app/projects/${focusProject.id}/renders`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${focusProject.id}/renders`}>
             Review active render
           </Link>
         </>
@@ -191,9 +187,9 @@ export function DashboardPage() {
       inspector={
         <div className="inspector-stack">
           <SectionCard title="Studio alerts">
-            <div className="alert-stack">
+            <div className="flex flex-col gap-3">
               {data.notifications.map((alert) => (
-                <div className="alert-item" key={alert.id}>
+                <div className="flex gap-3 items-start" key={alert.id}>
                   <span className={`tone-pill tone-pill--${alert.tone}`} />
                   <div>
                     <strong>{alert.label}</strong>
@@ -227,8 +223,8 @@ export function DashboardPage() {
       >
         <div className="hero-grid">
           <div>
-            <p className="body-copy">{focusProject.hook}</p>
-            <div className="tag-row">
+            <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">{focusProject.hook}</p>
+            <div className="flex flex-wrap items-center gap-2">
               {focusProject.tags.map((tag) => (
                 <span className="tag-chip" key={tag}>
                   {tag}
@@ -275,7 +271,7 @@ export function DashboardPage() {
             {data.recentProjects.map((project) => (
               <Link className="project-list__item" key={project.id} to={`/app/projects/${project.id}/brief`}>
                 <div>
-                  <p className="eyebrow">{project.stage}</p>
+                  <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">{project.stage}</p>
                   <strong>{project.title}</strong>
                   <p>{project.nextMilestone}</p>
                 </div>
@@ -305,7 +301,7 @@ export function ProjectsPage() {
       title="All active productions"
       description="Projects keep the same shell shape from brief through exports so the information architecture can survive later phases."
       actions={
-        <Link className="button button--primary" to={`/app/projects/${defaultProjectId}/brief`}>
+        <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${defaultProjectId}/brief`}>
           Open default project
         </Link>
       }
@@ -333,21 +329,21 @@ export function ProjectsPage() {
       <div className="artifact-grid">
         {data.map((project) => (
           <SectionCard key={project.id} title={project.title} subtitle={project.objective}>
-            <div className="inline-meta">
+            <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={project.renderStatus} />
               <span>{project.stage}</span>
               <span>{formatDuration(project.durationSec)}</span>
             </div>
-            <p className="body-copy">{project.hook}</p>
+            <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">{project.hook}</p>
             <div className="metric-row">
               <MetricCard label="Palette" value={project.palette} detail="Project look system" tone="primary" />
               <MetricCard label="Voice" value={project.voicePreset} detail="Narration preset" tone="neutral" />
             </div>
-            <div className="card-actions">
-              <Link className="button button--secondary" to={`/app/projects/${project.id}/script`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${project.id}/script`}>
                 Script
               </Link>
-              <Link className="button button--primary" to={`/app/projects/${project.id}/brief`}>
+              <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${project.id}/brief`}>
                 Open project
               </Link>
             </div>
@@ -416,12 +412,12 @@ export function ProjectBriefPage() {
       actions={
         <div style={{ display: "flex", gap: "0.75rem" }}>
           {editing ? (
-            <button className="button button--secondary" onClick={handleSave} type="button">
+            <button className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={handleSave} type="button">
               {updateBrief.isPending ? "Saving…" : "Save brief"}
             </button>
           ) : null}
           <button
-            className="button button--primary"
+            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
             onClick={handleSaveAndContinue}
             type="button"
           >
@@ -434,7 +430,7 @@ export function ProjectBriefPage() {
       <SectionCard className="surface-card--hero" title="Creative direction" subtitle="Core strategic elements that shape all generation">
         <div className="form-grid">
           <div className="form-field">
-            <label className="field-label" htmlFor="brief-objective">Objective</label>
+            <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor="brief-objective">Objective</label>
             <textarea
               id="brief-objective"
               className="field-input field-textarea"
@@ -446,7 +442,7 @@ export function ProjectBriefPage() {
           </div>
           <div className="content-grid content-grid--equal">
             <div className="form-field">
-              <label className="field-label" htmlFor="brief-hook">Hook</label>
+              <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor="brief-hook">Hook</label>
               <textarea
                 id="brief-hook"
                 className="field-input field-textarea"
@@ -457,7 +453,7 @@ export function ProjectBriefPage() {
               />
             </div>
             <div className="form-field">
-              <label className="field-label" htmlFor="brief-cta">Call to action</label>
+              <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor="brief-cta">Call to action</label>
               <textarea
                 id="brief-cta"
                 className="field-input field-textarea"
@@ -470,7 +466,7 @@ export function ProjectBriefPage() {
           </div>
           <div className="content-grid content-grid--equal">
             <div className="form-field">
-              <label className="field-label" htmlFor="brief-audience">Target audience</label>
+              <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor="brief-audience">Target audience</label>
               <textarea
                 id="brief-audience"
                 className="field-input field-textarea"
@@ -481,7 +477,7 @@ export function ProjectBriefPage() {
               />
             </div>
             <div className="form-field">
-              <label className="field-label" htmlFor="brief-northstar">Brand north star</label>
+              <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor="brief-northstar">Brand north star</label>
               <textarea
                 id="brief-northstar"
                 className="field-input field-textarea"
@@ -552,12 +548,12 @@ export function ScriptPage() {
           <p>Generate a script based on your brief and selected idea. The AI will write narration, visual direction, and pacing cues.</p>
           <button 
             type="button" 
-            className="button button--primary" 
+            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" 
             onClick={() => generateScript.mutate()}
           >
             Generate script
           </button>
-          <Link className="button button--secondary" to={`/app/projects/${projectId}/ideas`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/ideas`}>
             ← Back to ideas
           </Link>
         </div>
@@ -571,9 +567,9 @@ export function ScriptPage() {
         eyebrow="Loading"
         title="Generating script..."
         description="The AI is drafting the script from your selected idea."
-        inspector={<div className="surface-card shimmer surface-card--loading" />}
+        inspector={<div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />}
       >
-        <div className="surface-card shimmer surface-card--loading" />
+        <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />
       </PageFrame>
     );
   }
@@ -590,13 +586,13 @@ export function ScriptPage() {
       description="Dense but readable script review with clear versioning, per-scene timing, and voice continuity visibility."
       actions={
         <>
-          <Link className="button button--secondary" to={`/app/projects/${projectId}/ideas`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/ideas`}>
             ← Ideas
           </Link>
           {!isApproved ? (
             <button
               type="button"
-              className="button button--primary"
+              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
               onClick={() => approveScript.mutate()}
               disabled={approveScript.isPending}
             >
@@ -605,7 +601,7 @@ export function ScriptPage() {
           ) : (
             <>
               <span className="approval-badge approval-badge--approved">✓ Approved</span>
-              <Link className="button button--primary" to={`/app/projects/${projectId}/scenes`}>
+              <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${projectId}/scenes`}>
                 Segment into scenes →
               </Link>
             </>
@@ -652,9 +648,9 @@ export function ScriptPage() {
       <SectionCard title="Beat handoff cards" subtitle="Each line carries visual direction and pacing cues into the scene planner">
         <div className="artifact-grid artifact-grid--compact">
           {scriptData.lines.map((line) => (
-            <div className="surface-panel" key={line.id}>
-              <div className="inline-meta">
-                <span className="eyebrow">{line.sceneId}</span>
+            <div className="p-4 rounded-xl bg-card border border-border-card animate-rise-in" key={line.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">{line.sceneId}</span>
                 <StatusBadge status={line.status} />
               </div>
               <strong>{line.beat}</strong>
@@ -701,10 +697,10 @@ export function ScenesPage() {
       description="A bespoke timeline list paired with a wide detail canvas so clips, prompts, and continuity notes stay legible during review."
       actions={
         <>
-          <Link className="button button--secondary" to={`/app/projects/${projectId}/script`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/script`}>
             Back to script
           </Link>
-          <Link className="button button--primary" to={`/app/projects/${projectId}/renders`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${projectId}/renders`}>
             Open render monitor
           </Link>
         </>
@@ -756,12 +752,12 @@ export function ScenesPage() {
             gradient={selectedScene.gradient}
           />
           <div className="content-grid content-grid--equal">
-            <div className="surface-panel">
-              <p className="section-heading">Prompt</p>
-              <p className="body-copy">{selectedScene.prompt}</p>
+            <div className="p-4 rounded-xl bg-card border border-border-card animate-rise-in">
+              <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Prompt</p>
+              <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">{selectedScene.prompt}</p>
             </div>
-            <div className="surface-panel">
-              <p className="section-heading">Palette + audio cue</p>
+            <div className="p-4 rounded-xl bg-card border border-border-card animate-rise-in">
+              <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Palette + audio cue</p>
               <strong>{selectedScene.palette}</strong>
               <p>{selectedScene.audioCue}</p>
             </div>
@@ -783,9 +779,9 @@ export function ScenesPage() {
       <SectionCard title="Transition map" subtitle="Project-level composition intent stays visible while reviewing each scene">
         <div className="artifact-grid artifact-grid--compact">
           {bundle.scenes.map((scene) => (
-            <div className="surface-panel" key={scene.id}>
-              <div className="inline-meta">
-                <span className="eyebrow">Scene {scene.index}</span>
+            <div className="p-4 rounded-xl bg-card border border-border-card animate-rise-in" key={scene.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Scene {scene.index}</span>
                 <StatusBadge status={scene.transitionMode} />
               </div>
               <strong>{scene.title}</strong>
@@ -814,7 +810,7 @@ export function PresetsPage() {
       eyebrow="Preset library"
       title="Shared systems for look, voice, and motion"
       description="Presets are treated like studio assets: reusable, controlled, and visible to the full production workflow."
-      actions={<Link className="button button--primary" to="/app/templates">Browse templates</Link>}
+      actions={<Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to="/app/templates">Browse templates</Link>}
       inspector={
         <div className="inspector-stack">
           <SectionCard title="Library facts">
@@ -839,20 +835,20 @@ export function PresetsPage() {
       <div className="artifact-grid">
         {data.map((preset) => (
           <SectionCard key={preset.id} title={preset.name} subtitle={preset.description}>
-            <div className="inline-meta">
+            <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={preset.category} />
               <span>{preset.status}</span>
             </div>
-            <div className="tag-row">
+            <div className="flex flex-wrap items-center gap-2">
               {preset.tags.map((tag) => (
                 <span className="tag-chip" key={tag}>
                   {tag}
                 </span>
               ))}
             </div>
-            {preset.look ? <p className="body-copy">{preset.look}</p> : null}
-            {preset.voice ? <p className="body-copy">{preset.voice}</p> : null}
-            {preset.transitionMode ? <p className="body-copy">Default transition: {preset.transitionMode}</p> : null}
+            {preset.look ? <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">{preset.look}</p> : null}
+            {preset.voice ? <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">{preset.voice}</p> : null}
+            {preset.transitionMode ? <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">Default transition: {preset.transitionMode}</p> : null}
           </SectionCard>
         ))}
       </div>
@@ -878,7 +874,7 @@ export function TemplatesPage() {
       inspector={
         <div className="inspector-stack">
           <SectionCard title="Template intent">
-            <p className="body-copy">
+            <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">
               Each template packages a scene count, duration band, and visual tone so project creation can stay lightweight.
             </p>
           </SectionCard>
@@ -917,14 +913,14 @@ export function SettingsPage() {
       inspector={
         <div className="inspector-stack">
           <SectionCard title="Why this matters">
-            <p className="body-copy">
+            <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">
               Shared settings stop drift between projects and make the later API integration predictable.
             </p>
           </SectionCard>
         </div>
       }
     >
-      <div className="stack-gap">
+      <div className="flex flex-col gap-3">
         {data.map((section) => (
           <SettingsCard key={section.title} section={section} />
         ))}
@@ -1007,7 +1003,7 @@ export function BillingPage() {
           {data.invoices.map((invoice) => (
             <div className="project-list__item" key={invoice.id}>
               <div>
-                <p className="eyebrow">{invoice.date}</p>
+                <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">{invoice.date}</p>
                 <strong>{invoice.label}</strong>
                 <p>{invoice.amount}</p>
               </div>

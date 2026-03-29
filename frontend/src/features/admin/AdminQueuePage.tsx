@@ -1,5 +1,5 @@
-import { PageFrame, SectionCard, StatusBadge, LoadingPage } from "../../components/ui";
-import { useAdminQueue, useReleaseQueueItem, useRejectQueueItem } from "../../hooks/use-admin";
+import { LoadingPage, PageFrame, SectionCard, StatusBadge } from "../../components/ui";
+import { useAdminQueue, useRejectQueueItem, useReleaseQueueItem } from "../../hooks/use-admin";
 
 export function AdminQueuePage() {
   const { data, isLoading } = useAdminQueue();
@@ -48,7 +48,7 @@ export function AdminQueuePage() {
                 <th>Status</th>
                 <th>Retries</th>
                 <th>Provider</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -59,41 +59,41 @@ export function AdminQueuePage() {
                   <td>{row.project}</td>
                   <td>{row.step}</td>
                   <td>
-                    <StatusBadge status={row.status as any} />
+                    <StatusBadge status={row.status} />
                   </td>
                   <td>{row.retries}</td>
                   <td>{row.provider}</td>
-                  <td style={{ textAlign: "right" }}>
-                    {row.status === "blocked" && (
-                      <div style={{ display: "inline-flex", gap: "0.5rem" }}>
+                  <td className="text-right">
+                    {row.status === "blocked" ? (
+                      <div className="inline-flex gap-2">
                         <button
-                          className="button button--secondary"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
+                          className="inline-flex items-center justify-center rounded-lg border border-border-subtle bg-glass px-3 py-1.5 text-xs font-semibold text-primary transition-all duration-200 hover:border-border-active hover:bg-glass-hover disabled:opacity-60"
                           onClick={() => rejectMutation.mutate(row.id)}
                           disabled={rejectMutation.isPending || releaseMutation.isPending}
+                          type="button"
                         >
                           Reject
                         </button>
                         <button
-                          className="button button--primary"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
+                          className="inline-flex items-center justify-center rounded-lg bg-accent-gradient px-3 py-1.5 text-xs font-semibold text-on-accent shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-accent disabled:opacity-60"
                           onClick={() => releaseMutation.mutate(row.id)}
                           disabled={rejectMutation.isPending || releaseMutation.isPending}
+                          type="button"
                         >
                           Release
                         </button>
                       </div>
-                    )}
+                    ) : null}
                   </td>
                 </tr>
               ))}
-              {data.length === 0 && (
+              {data.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", color: "var(--color-ink-lighter)" }}>
+                  <td className="text-center text-muted" colSpan={8}>
                     The queue is entirely clean.
                   </td>
                 </tr>
-              )}
+              ) : null}
             </tbody>
           </table>
         </div>

@@ -52,7 +52,7 @@ export function IdeasPage() {
       actions={
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
           <button
-            className="button button--secondary"
+            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
             onClick={handleGenerate}
             disabled={isGenerating}
             type="button"
@@ -61,7 +61,7 @@ export function IdeasPage() {
           </button>
           {canContinue ? (
             <button
-              className="button button--primary"
+              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
               onClick={handleContinue}
               type="button"
             >
@@ -126,10 +126,10 @@ export function IdeasPage() {
           subtitle="Click 'Generate ideas' to create viral content concepts from your brief"
         >
           <div style={{ textAlign: "center", padding: "3rem 0" }}>
-            <p className="body-copy" style={{ maxWidth: "32rem", margin: "0 auto 1.5rem" }}>
+            <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]" style={{ maxWidth: "32rem", margin: "0 auto 1.5rem" }}>
               The AI will analyze your brief's objective, target audience, and brand guidelines to generate 5-6 viral content ideas ranked by potential engagement.
             </p>
-            <button className="button button--primary" onClick={handleGenerate} type="button">
+            <button className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" onClick={handleGenerate} type="button">
               Generate ideas
             </button>
           </div>
@@ -155,7 +155,7 @@ export function IdeasPage() {
                       style={{
                         cursor: "pointer",
                         transition: "all 0.2s ease",
-                        outline: isSelected ? "2px solid var(--color-primary, #004ced)" : "none",
+                        outline: isSelected ? "2px solid var(--accent)" : "none",
                         outlineOffset: "-2px",
                       }}
                       onClick={() => handleSelect(idea)}
@@ -180,11 +180,11 @@ export function IdeasPage() {
                           ) : null}
                         </div>
                       </div>
-                      <p className="body-copy" style={{ fontStyle: "italic", margin: "0.75rem 0" }}>
+                      <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]" style={{ fontStyle: "italic", margin: "0.75rem 0" }}>
                         "{idea.hook}"
                       </p>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div className="tag-row">
+                        <div className="flex flex-wrap items-center gap-2">
                           {idea.tags.map((tag) => (
                             <span className="tag-chip" key={tag}>
                               {tag}

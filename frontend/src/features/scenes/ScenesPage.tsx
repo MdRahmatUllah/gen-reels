@@ -70,10 +70,10 @@ function PromptPairEditor({
   return (
     <div className="prompt-pair-editor">
       <div className="prompt-pair-editor__header">
-        <h4 className="section-heading">Frame prompts</h4>
+        <h4 className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Frame prompts</h4>
         <button
           type="button"
-          className="button button--secondary"
+          className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
           onClick={onGenerate}
           disabled={isGenerating || isApproved}
           style={{ minHeight: "2rem", padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
@@ -83,7 +83,7 @@ function PromptPairEditor({
       </div>
       <div className="prompt-pair-editor__grid">
         <div className="form-field">
-          <label className="field-label" htmlFor={`start-prompt-${scene.id}`}>Start frame</label>
+          <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor={`start-prompt-${scene.id}`}>Start frame</label>
           <textarea
             id={`start-prompt-${scene.id}`}
             className="field-input field-textarea"
@@ -95,7 +95,7 @@ function PromptPairEditor({
           />
         </div>
         <div className="form-field">
-          <label className="field-label" htmlFor={`end-prompt-${scene.id}`}>End frame</label>
+          <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor={`end-prompt-${scene.id}`}>End frame</label>
           <textarea
             id={`end-prompt-${scene.id}`}
             className="field-input field-textarea"
@@ -183,10 +183,10 @@ function SceneDetailEditor({
       <div className="scene-detail-editor__fields">
         <div className="content-grid content-grid--equal">
           <div className="form-field">
-            <label className="field-label" htmlFor={`scene-title-${scene.id}`}>Title</label>
+            <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor={`scene-title-${scene.id}`}>Title</label>
             <input
               id={`scene-title-${scene.id}`}
-              className="field-input"
+              className="w-full px-3.5 py-2.5 rounded-md border border-border-card bg-glass text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)]"
               value={localScene.title}
               onChange={(e) => handleFieldChange("title", e.target.value)}
               disabled={isApproved}
@@ -194,10 +194,10 @@ function SceneDetailEditor({
             />
           </div>
           <div className="form-field">
-            <label className="field-label" htmlFor={`scene-shot-${scene.id}`}>Shot type</label>
+            <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor={`scene-shot-${scene.id}`}>Shot type</label>
             <input
               id={`scene-shot-${scene.id}`}
-              className="field-input"
+              className="w-full px-3.5 py-2.5 rounded-md border border-border-card bg-glass text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)]"
               value={localScene.shotType}
               onChange={(e) => handleFieldChange("shotType", e.target.value)}
               disabled={isApproved}
@@ -207,7 +207,7 @@ function SceneDetailEditor({
         </div>
 
         <div className="form-field">
-          <label className="field-label" htmlFor={`scene-beat-${scene.id}`}>Beat / narration</label>
+          <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor={`scene-beat-${scene.id}`}>Beat / narration</label>
           <textarea
             id={`scene-beat-${scene.id}`}
             className="field-input field-textarea"
@@ -220,10 +220,10 @@ function SceneDetailEditor({
 
         <div className="content-grid content-grid--equal">
           <div className="form-field">
-            <label className="field-label" htmlFor={`scene-motion-${scene.id}`}>Camera motion</label>
+            <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor={`scene-motion-${scene.id}`}>Camera motion</label>
             <input
               id={`scene-motion-${scene.id}`}
-              className="field-input"
+              className="w-full px-3.5 py-2.5 rounded-md border border-border-card bg-glass text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)]"
               value={localScene.motion}
               onChange={(e) => handleFieldChange("motion", e.target.value)}
               disabled={isApproved}
@@ -231,7 +231,7 @@ function SceneDetailEditor({
             />
           </div>
           <div className="form-field">
-            <label className="field-label">Transition</label>
+            <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1">Transition</label>
             <div className="transition-picker">
               {(["hard_cut", "crossfade"] as const).map((mode) => (
                 <button
@@ -250,10 +250,10 @@ function SceneDetailEditor({
 
         <div className="content-grid content-grid--equal">
           <div className="form-field">
-            <label className="field-label" htmlFor={`scene-palette-${scene.id}`}>Palette</label>
+            <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor={`scene-palette-${scene.id}`}>Palette</label>
             <input
               id={`scene-palette-${scene.id}`}
-              className="field-input"
+              className="w-full px-3.5 py-2.5 rounded-md border border-border-card bg-glass text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)]"
               value={localScene.palette}
               onChange={(e) => handleFieldChange("palette", e.target.value)}
               disabled={isApproved}
@@ -261,10 +261,10 @@ function SceneDetailEditor({
             />
           </div>
           <div className="form-field">
-            <label className="field-label" htmlFor={`scene-audio-${scene.id}`}>Audio cue</label>
+            <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor={`scene-audio-${scene.id}`}>Audio cue</label>
             <input
               id={`scene-audio-${scene.id}`}
-              className="field-input"
+              className="w-full px-3.5 py-2.5 rounded-md border border-border-card bg-glass text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)]"
               value={localScene.audioCue}
               onChange={(e) => handleFieldChange("audioCue", e.target.value)}
               disabled={isApproved}
@@ -277,7 +277,7 @@ function SceneDetailEditor({
       {/* Duration display */}
       <div className="scene-detail-editor__duration">
         <div className="duration-display">
-          <span className="field-label">EST. DURATION</span>
+          <span className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1">EST. DURATION</span>
           <strong className={scene.durationWarning ? "text-warning" : ""}>
             {scene.durationSec.toFixed(1)}s
           </strong>
@@ -300,10 +300,10 @@ function SceneDetailEditor({
       {/* Save */}
       {dirty && !isApproved ? (
         <div className="scene-detail-editor__actions">
-          <button type="button" className="button button--secondary" onClick={() => { setLocalScene(scene); setDirty(false); }}>
+          <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={() => { setLocalScene(scene); setDirty(false); }}>
             Discard
           </button>
-          <button type="button" className="button button--primary" onClick={handleSave} disabled={updateScene.isPending}>
+          <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" onClick={handleSave} disabled={updateScene.isPending}>
             {updateScene.isPending ? "Saving…" : "Save changes"}
           </button>
         </div>
@@ -336,10 +336,10 @@ function PresetPicker({
   return (
     <div className="preset-picker-section">
       <div className="form-field">
-        <label className="field-label" htmlFor="visual-preset-picker">Visual preset</label>
+        <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor="visual-preset-picker">Visual preset</label>
         <select
           id="visual-preset-picker"
-          className="field-input"
+          className="w-full px-3.5 py-2.5 rounded-md border border-border-card bg-glass text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)]"
           value={planSet.visualPresetId ?? ""}
           onChange={(e) => setPreset.mutate({ type: "visual", presetId: e.target.value })}
         >
@@ -350,10 +350,10 @@ function PresetPicker({
         </select>
       </div>
       <div className="form-field">
-        <label className="field-label" htmlFor="voice-preset-picker">Voice preset</label>
+        <label className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1" htmlFor="voice-preset-picker">Voice preset</label>
         <select
           id="voice-preset-picker"
-          className="field-input"
+          className="w-full px-3.5 py-2.5 rounded-md border border-border-card bg-glass text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)]"
           value={planSet.voicePresetId ?? ""}
           onChange={(e) => setPreset.mutate({ type: "voice", presetId: e.target.value })}
         >
@@ -426,10 +426,10 @@ export function ScenesPage() {
           <div className="scene-empty-state__icon">🎬</div>
           <h2>No scene plan yet</h2>
           <p>Generate a scene plan from the approved script. The system will segment it into scenes, assign shot types, and create start/end frame prompts.</p>
-          <button type="button" className="button button--primary" onClick={handleGenerate}>
+          <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" onClick={handleGenerate}>
             Generate scene plan
           </button>
-          <Link className="button button--secondary" to={`/app/projects/${projectId}/script`}>
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/script`}>
             ← Back to script
           </Link>
         </div>
@@ -440,7 +440,7 @@ export function ScenesPage() {
   /* ─── Loading state ───────────────────────────────────────────────────── */
   if (isLoading || generatePlan.isPending) {
     return (
-      <div className="page-shell">
+      <div className="flex flex-col gap-6 px-7 py-6 pb-12 w-full max-w-7xl mx-auto animate-fade-in-up">
         <SceneShimmer />
       </div>
     );
@@ -450,30 +450,30 @@ export function ScenesPage() {
 
   /* ─── Main layout ─────────────────────────────────────────────────────── */
   return (
-    <div className="page-shell">
+    <div className="flex flex-col gap-6 px-7 py-6 pb-12 w-full max-w-7xl mx-auto animate-fade-in-up">
       {/* Header */}
-      <div className="page-header">
+      <div className="flex items-end justify-between gap-6">
         <div>
-          <p className="eyebrow">Scene planner</p>
-          <h1 className="page-title">Scene plan</h1>
-          <p className="page-description">
+          <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Scene planner</p>
+          <h1 className="font-heading text-3xl md:text-4xl leading-tight font-bold text-primary tracking-tight">Scene plan</h1>
+          <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">
             {planSet.scenes.length} scenes · {planSet.totalDurationSec.toFixed(1)}s total
             {planSet.warningsCount > 0 ? ` · ${planSet.warningsCount} warning${planSet.warningsCount > 1 ? "s" : ""}` : ""}
           </p>
         </div>
-        <div className="page-actions">
-          <Link className="button button--secondary" to={`/app/projects/${projectId}/script`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/script`}>
             ← Script
           </Link>
           {!isApproved ? (
             <>
-              <button type="button" className="button button--secondary" onClick={triggerGhostEdit}>
+              <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={triggerGhostEdit}>
                 Trigger Ghost Edit
               </button>
-              <button type="button" className="button button--secondary" onClick={handleGenerate} disabled={generatePlan.isPending}>
+              <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={handleGenerate} disabled={generatePlan.isPending}>
                 Regenerate plan
               </button>
-              <button type="button" className="button button--primary" onClick={handleApprove} disabled={approvePlan.isPending}>
+              <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" onClick={handleApprove} disabled={approvePlan.isPending}>
                 {approvePlan.isPending ? "Approving…" : "Approve scene plan →"}
               </button>
             </>
@@ -488,7 +488,7 @@ export function ScenesPage() {
         {/* Timeline sidebar */}
         <div className="scene-timeline">
           <div className="scene-timeline__header">
-            <h3 className="section-heading">Timeline</h3>
+            <h3 className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Timeline</h3>
             <span className="text-muted" style={{ fontSize: "0.75rem" }}>
               {planSet.totalDurationSec.toFixed(1)}s
             </span>
@@ -517,8 +517,8 @@ export function ScenesPage() {
 
         {/* Inspector */}
         <div className="scene-inspector">
-          <div className="surface-card">
-            <h3 className="section-heading">Plan status</h3>
+          <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in">
+            <h3 className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Plan status</h3>
             <div className="inspector-list">
               <div>
                 <span>Approval</span>
@@ -539,15 +539,15 @@ export function ScenesPage() {
             </div>
           </div>
 
-          <div className="surface-card">
-            <h3 className="section-heading">Presets</h3>
+          <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in">
+            <h3 className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Presets</h3>
             <PresetPicker projectId={projectId} planSet={planSet} />
           </div>
 
           {selectedScene ? (
             <>
-              <div className="surface-card">
-                <h3 className="section-heading">Scene {selectedScene.index}</h3>
+              <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in">
+                <h3 className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Scene {selectedScene.index}</h3>
                 <div className="inspector-list">
                 <div>
                   <span>Continuity</span>
@@ -568,14 +568,14 @@ export function ScenesPage() {
               </div>
             </div>
             
-            <div className="surface-card">
-              <h3 className="section-heading">Prompt Lineage</h3>
+            <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in">
+              <h3 className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Prompt Lineage</h3>
               {(!selectedScene.promptHistory || selectedScene.promptHistory.length === 0) ? (
-                <p className="body-copy" style={{ fontSize: "12px", color: "var(--color-ink-lighter)" }}>No previous prompt versions logged.</p>
+                <p className="text-xs text-muted">No previous prompt versions logged.</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
                   {selectedScene.promptHistory.map((h, i) => (
-                    <div key={i} style={{ fontSize: "11px", color: "var(--color-ink-lighter)", padding: "8px", background: "var(--color-background)", border: "1px dashed var(--color-border)", borderRadius: "4px", lineHeight: "1.4" }}>
+                    <div key={i} className="rounded-lg border border-dashed border-border-card bg-card px-3 py-2 text-[11px] leading-[1.4] text-muted">
                       {h}
                     </div>
                   ))}

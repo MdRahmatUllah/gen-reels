@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
-import { PageFrame, SectionCard, StatusBadge, EmptyState, LoadingPage } from "../../components/ui";
+import { useMemo, useState } from "react";
+
+import { EmptyState, LoadingPage, PageFrame, SectionCard, StatusBadge } from "../../components/ui";
 import { useAssets } from "../../hooks/use-assets";
 
 export function AssetsPage() {
@@ -7,9 +8,13 @@ export function AssetsPage() {
   const [filterType, setFilterType] = useState<"all" | "image" | "video" | "audio">("all");
 
   const filteredAssets = useMemo(() => {
-    if (!data) return [];
-    if (filterType === "all") return data;
-    return data.filter(asset => asset.type === filterType);
+    if (!data) {
+      return [];
+    }
+    if (filterType === "all") {
+      return data;
+    }
+    return data.filter((asset) => asset.type === filterType);
   }, [data, filterType]);
 
   if (isLoading || !data) {
@@ -22,7 +27,7 @@ export function AssetsPage() {
       title="Global asset lineage"
       description="Easily browse, trace, and reuse prior generated assets across all your workspaces to accelerate creation."
       actions={
-        <div className="filter-row">
+        <div className="flex flex-wrap items-center gap-2">
           {(["all", "image", "video", "audio"] as const).map((type) => (
             <button
               key={type}
@@ -45,11 +50,11 @@ export function AssetsPage() {
               </div>
               <div>
                 <span>Approved videos</span>
-                <strong>{data.filter(a => a.type === "video" && a.tags.includes("approved")).length}</strong>
+                <strong>{data.filter((asset) => asset.type === "video" && asset.tags.includes("approved")).length}</strong>
               </div>
               <div>
                 <span>Reusable tracks</span>
-                <strong>{data.filter(a => a.type === "audio").length}</strong>
+                <strong>{data.filter((asset) => asset.type === "audio").length}</strong>
               </div>
             </div>
           </SectionCard>
@@ -61,19 +66,24 @@ export function AssetsPage() {
       ) : (
         <div className="artifact-grid">
           {filteredAssets.map((asset) => (
-            <div key={asset.id} className="surface-card p-0" style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}>
-              <div style={{ height: "160px", width: "100%", background: `url(${asset.thumbnailUrl})` }} />
-              <div style={{ padding: "16px", flex: "1" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                   <StatusBadge status={asset.type as any} />
-                   <span style={{ fontSize: "11px", color: "var(--color-ink-lighter)" }}>
-                     {new Date(asset.createdAt).toLocaleDateString()}
-                   </span>
+            <div key={asset.id} className="surface-card overflow-hidden p-0">
+              <div
+                className="h-40 w-full bg-cover bg-center"
+                style={{ backgroundImage: `url(${asset.thumbnailUrl})` }}
+              />
+              <div className="flex flex-1 flex-col p-4">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <StatusBadge status={asset.type} />
+                  <span className="text-[11px] text-muted">
+                    {new Date(asset.createdAt).toLocaleDateString()}
+                  </span>
                 </div>
-                <strong style={{ display: "block", marginBottom: "8px", fontSize: "14px" }}>
-                  {asset.prompt.length > 50 ? asset.prompt.substring(0, 50) + "..." : asset.prompt}
+
+                <strong className="mb-3 block text-sm font-semibold text-primary">
+                  {asset.prompt.length > 50 ? `${asset.prompt.substring(0, 50)}...` : asset.prompt}
                 </strong>
-                <div className="tag-row" style={{ marginTop: "auto" }}>
+
+                <div className="mt-auto flex flex-wrap items-center gap-2">
                   {asset.tags.map((tag) => (
                     <span className="tag-chip" key={tag}>
                       {tag}
@@ -81,10 +91,11 @@ export function AssetsPage() {
                   ))}
                 </div>
               </div>
-              <div style={{ padding: "12px 16px", borderTop: "1px solid var(--color-border)", background: "var(--color-surface)" }}>
-                 <p style={{ margin: 0, fontSize: "12px", color: "var(--color-ink-lighter)" }}>
-                   {asset.sourceProjectId ? `From: ${asset.sourceProjectId}` : "Generated independently"}
-                 </p>
+
+              <div className="border-t border-border-subtle bg-card-raised px-4 py-3">
+                <p className="text-xs text-muted">
+                  {asset.sourceProjectId ? `From: ${asset.sourceProjectId}` : "Generated independently"}
+                </p>
               </div>
             </div>
           ))}

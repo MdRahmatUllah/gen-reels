@@ -13,9 +13,9 @@ function LoadingAdminPage() {
       eyebrow="Loading"
       title="Preparing admin view"
       description="Admin mock data is loading."
-      inspector={<div className="surface-card shimmer surface-card--loading" />}
+      inspector={<div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />}
     >
-      <div className="surface-card shimmer surface-card--loading" />
+      <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />
     </PageFrame>
   );
 }

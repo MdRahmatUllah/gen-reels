@@ -12,23 +12,27 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    const el = dialogRef.current;
-    if (!el) return;
+    const element = dialogRef.current;
+    if (!element) {
+      return;
+    }
 
-    if (open && !el.open) {
-      el.showModal();
-    } else if (!open && el.open) {
-      el.close();
+    if (open && !element.open) {
+      element.showModal();
+    } else if (!open && element.open) {
+      element.close();
     }
   }, [open]);
 
   useEffect(() => {
-    const el = dialogRef.current;
-    if (!el) return;
+    const element = dialogRef.current;
+    if (!element) {
+      return;
+    }
 
     const handleClose = () => onClose();
-    el.addEventListener("close", handleClose);
-    return () => el.removeEventListener("close", handleClose);
+    element.addEventListener("close", handleClose);
+    return () => element.removeEventListener("close", handleClose);
   }, [onClose]);
 
   return (
@@ -41,13 +45,11 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
           onClick={onClose}
           aria-label="Close dialog"
         >
-          ✕
+          x
         </button>
       </div>
       <div className="studio-dialog__body">{children}</div>
-      {actions ? (
-        <div className="studio-dialog__actions">{actions}</div>
-      ) : null}
+      {actions ? <div className="studio-dialog__actions">{actions}</div> : null}
     </dialog>
   );
 }
