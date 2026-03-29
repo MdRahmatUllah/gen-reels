@@ -10,7 +10,6 @@ from app.core.errors import ApiError
 from app.integrations.storage import StorageClient, build_storage_client
 from app.models.entities import (
     Asset,
-    AuditEvent,
     JobStatus,
     ModerationDecision,
     ModerationEvent,
@@ -239,4 +238,3 @@ class AdminService:
                 }
             )
         return summaries
-

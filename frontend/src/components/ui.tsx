@@ -18,6 +18,17 @@ import type {
   WorkspaceSummary,
 } from "../types/domain";
 
+export function LoadingPage() {
+  return (
+    <div className="full-loader" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px' }}>
+      <div className="loader-spinner" style={{ width: '24px', height: '24px', border: '3px solid var(--border-subtle)', borderTopColor: 'var(--text-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+      <style>
+        {`@keyframes spin { to { transform: rotate(360deg); } }`}
+      </style>
+    </div>
+  );
+}
+
 /* ─── Icon Components ─────────────────────────────────────────────────────── */
 function Icon({ path, size = 16 }: { path: string; size?: number }) {
   return (

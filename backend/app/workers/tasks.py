@@ -15,6 +15,7 @@ from app.integrations.media import (
 from app.integrations.storage import build_storage_client
 from app.services.content_planning_service import ContentPlanningService
 from app.services.generation_service import GenerationService
+from app.services.billing_service import BillingService
 from app.services.render_service import RenderService
 from app.workers.celery_app import celery_app
 
@@ -134,5 +135,25 @@ def expire_stale_jobs() -> int:
     session = get_session_factory(settings.database_url)()
     try:
         return GenerationService(session, settings).expire_stale_jobs()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="render.expire_stale_jobs")
+def expire_stale_render_jobs() -> int:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        return RenderService(session, settings, build_storage_client(settings)).expire_stale_render_jobs()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="billing.reconcile_usage")
+def reconcile_usage() -> int:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        return BillingService(session, settings).reconcile_usage_entries()
     finally:
         session.close()

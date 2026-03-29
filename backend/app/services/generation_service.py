@@ -34,6 +34,7 @@ from app.models.entities import (
 )
 from app.schemas.scripts import ScriptPatchRequest
 from app.services.audit_service import record_audit_event
+from app.services.billing_service import BillingService
 from app.services.moderation_service import moderate_text_or_raise
 from app.services.presenters import (
     idea_set_to_dict,
@@ -68,6 +69,52 @@ class GenerationService:
     def _hash_request(self, payload: dict[str, object]) -> str:
         encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
+
+    def _set_step_checkpoint(self, step: RenderStep, payload: dict[str, object] | None = None) -> None:
+        step.checkpoint_payload = payload or {}
+        step.last_checkpoint_at = datetime.now(UTC)
+
+    def _record_step_retry(
+        self,
+        step: RenderStep,
+        *,
+        requested_by_user_id: str | UUID | None,
+        reason: str,
+        recovery_source_step_id: UUID | None = None,
+    ) -> None:
+        history = list(step.retry_history or [])
+        history.append(
+            {
+                "requested_by_user_id": str(requested_by_user_id) if requested_by_user_id else None,
+                "reason": reason,
+                "at": datetime.now(UTC).isoformat(),
+                "recovery_source_step_id": str(recovery_source_step_id) if recovery_source_step_id else None,
+            }
+        )
+        step.retry_history = history
+        step.retry_count += 1
+        step.recovery_source_step_id = recovery_source_step_id
+
+    def _finalize_provider_run(
+        self,
+        provider_run: ProviderRun,
+        *,
+        started_at: float,
+        response_payload: dict[str, object] | None = None,
+        error: AdapterError | None = None,
+    ) -> None:
+        provider_run.latency_ms = round((time.perf_counter() - started_at) * 1000)
+        provider_run.completed_at = datetime.now(UTC)
+        if error:
+            provider_run.status = ProviderRunStatus.failed
+            provider_run.error_category = ProviderErrorCategory(error.category)
+            provider_run.error_code = error.code
+            provider_run.error_message = error.message
+            return
+
+        provider_run.status = ProviderRunStatus.completed
+        provider_run.response_payload = response_payload
+        BillingService(self.db, self.settings).capture_provider_run_usage(provider_run)
 
     def _brief_payload(self, brief: ProjectBrief) -> dict[str, object]:
         return {
@@ -467,12 +514,7 @@ class GenerationService:
         try:
             output = text_provider.generate_ideas(self._brief_payload(brief))
         except AdapterError as error:
-            provider_run.status = ProviderRunStatus.failed
-            provider_run.error_category = ProviderErrorCategory(error.category)
-            provider_run.error_code = error.code
-            provider_run.error_message = error.message
-            provider_run.completed_at = datetime.now(UTC)
-            provider_run.latency_ms = round((time.perf_counter() - started) * 1000)
+            self._finalize_provider_run(provider_run, started_at=started, error=error)
             self.db.commit()
             raise
 
@@ -501,15 +543,13 @@ class GenerationService:
             )
 
         project.stage = ProjectStage.script
-        provider_run.status = ProviderRunStatus.completed
-        provider_run.response_payload = output
-        provider_run.completed_at = datetime.now(UTC)
-        provider_run.latency_ms = round((time.perf_counter() - started) * 1000)
+        self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
         job.completed_at = datetime.now(UTC)
         step.status = JobStatus.completed
         step.completed_at = datetime.now(UTC)
         step.output_payload = {"idea_set_id": str(idea_set.id)}
+        self._set_step_checkpoint(step, {"idea_set_id": str(idea_set.id)})
         record_audit_event(
             self.db,
             workspace_id=project.workspace_id,
@@ -555,12 +595,7 @@ class GenerationService:
                 selected_idea=self._idea_payload(idea),
             )
         except AdapterError as error:
-            provider_run.status = ProviderRunStatus.failed
-            provider_run.error_category = ProviderErrorCategory(error.category)
-            provider_run.error_code = error.code
-            provider_run.error_message = error.message
-            provider_run.completed_at = datetime.now(UTC)
-            provider_run.latency_ms = round((time.perf_counter() - started) * 1000)
+            self._finalize_provider_run(provider_run, started_at=started, error=error)
             self.db.commit()
             raise
 
@@ -590,15 +625,13 @@ class GenerationService:
         project.active_script_version_id = script.id
         project.active_scene_plan_id = None
         project.stage = ProjectStage.script
-        provider_run.status = ProviderRunStatus.completed
-        provider_run.response_payload = output
-        provider_run.completed_at = datetime.now(UTC)
-        provider_run.latency_ms = round((time.perf_counter() - started) * 1000)
+        self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
         job.completed_at = datetime.now(UTC)
         step.status = JobStatus.completed
         step.completed_at = datetime.now(UTC)
         step.output_payload = {"script_version_id": str(script.id)}
+        self._set_step_checkpoint(step, {"script_version_id": str(script.id)})
         record_audit_event(
             self.db,
             workspace_id=project.workspace_id,

@@ -5,14 +5,14 @@ import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LoginPage } from "../routes/login-page";
 import { IdeasPage } from "../features/ideas/IdeasPage";
 import { ScenesPage } from "../features/scenes/ScenesPage";
+import { RendersPage } from "../features/renders/RendersPage";
+import { ExportsPage } from "../features/exports/ExportsPage";
 import {
   BillingPage,
   DashboardPage,
-  ExportsPage,
   PresetsPage,
   ProjectBriefPage,
   ProjectsPage,
-  RendersPage,
   ScriptPage,
   SettingsPage,
   TemplatesPage,

@@ -22,6 +22,11 @@ class RenderStepResponse(BaseModel):
     step_index: int
     status: str
     is_stale: bool
+    retry_count: int
+    retry_history: list[dict[str, object]]
+    recovery_source_step_id: UUID | None
+    checkpoint_payload: dict[str, object]
+    last_checkpoint_at: datetime | None
     input_payload: dict[str, object]
     output_payload: dict[str, object] | None
     error_code: str | None
@@ -54,6 +59,10 @@ class AssetResponse(BaseModel):
     width: int | None
     height: int | None
     frame_rate: float | None
+    quarantine_bucket_name: str | None
+    quarantine_object_name: str | None
+    quarantined_at: datetime | None
+    released_at: datetime | None
     has_audio_stream: bool
     source_audio_policy: str
     timing_alignment_strategy: str

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.api.deps import AuthContext
 from app.core.errors import ApiError
@@ -360,14 +360,26 @@ class BillingService:
             select(ProviderRun).where(ProviderRun.status == ProviderRunStatus.completed)
         ).all()
         for provider_run in provider_runs:
+            idempotency_key = f"provider-run:{provider_run.id}"
+            exists = self.db.scalar(
+                select(CreditLedgerEntry).where(CreditLedgerEntry.idempotency_key == idempotency_key)
+            )
+            if exists:
+                self.capture_provider_run_usage(provider_run)
+                continue
             if self.capture_provider_run_usage(provider_run):
                 created += 1
 
         exports = self.db.scalars(select(ExportRecord).where(ExportRecord.status == "completed")).all()
         for export_record in exports:
+            idempotency_key = f"export:{export_record.id}"
+            exists = self.db.scalar(
+                select(CreditLedgerEntry).where(CreditLedgerEntry.idempotency_key == idempotency_key)
+            )
+            if exists:
+                continue
             if self.capture_export_usage(export_record):
                 created += 1
 
         self.db.commit()
         return created
-

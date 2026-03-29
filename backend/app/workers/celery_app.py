@@ -25,13 +25,23 @@ celery_app.conf.update(
         "planning.generate_scene_plan": {"queue": "planning"},
         "planning.generate_prompt_pairs": {"queue": "planning"},
         "planning.expire_stale_jobs": {"queue": "planning"},
+        "render.expire_stale_jobs": {"queue": "render"},
         "render.execute_job": {"queue": "render"},
+        "billing.reconcile_usage": {"queue": "planning"},
     },
     beat_schedule={
         "expire-stale-planning-jobs": {
             "task": "planning.expire_stale_jobs",
             "schedule": crontab(minute="*/15"),
-        }
+        },
+        "expire-stale-render-jobs": {
+            "task": "render.expire_stale_jobs",
+            "schedule": crontab(minute="*/15"),
+        },
+        "reconcile-usage-ledger": {
+            "task": "billing.reconcile_usage",
+            "schedule": crontab(minute="0"),
+        },
     },
 )
 celery_app.autodiscover_tasks(["app.workers"])

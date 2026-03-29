@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import select
@@ -22,9 +23,11 @@ from app.models.entities import (
     ExportRecord,
     JobKind,
     JobStatus,
+    ModerationDecision,
+    ModerationEvent,
+    ModerationReviewStatus,
     Project,
     ProjectStage,
-    ProviderErrorCategory,
     ProviderRun,
     ProviderRunStatus,
     RenderJob,
@@ -38,7 +41,9 @@ from app.models.entities import (
 )
 from app.schemas.renders import RenderCreateRequest
 from app.services.audit_service import record_audit_event
+from app.services.billing_service import BillingService
 from app.services.generation_service import GenerationService
+from app.services.notification_service import NotificationService
 from app.services.presenters import asset_to_dict, export_to_dict, job_to_dict, render_step_to_dict
 
 
@@ -204,18 +209,24 @@ class RenderService(GenerationService):
         step.error_message = None
         step.started_at = datetime.now(UTC)
         step.completed_at = None
+        self._set_step_checkpoint(step, {"status": "running"})
 
     def _complete_step(self, step: RenderStep, *, output_payload: dict[str, object] | None = None) -> None:
         step.output_payload = output_payload
         step.status = JobStatus.completed
         step.is_stale = False
         step.completed_at = datetime.now(UTC)
+        self._set_step_checkpoint(step, output_payload or {"status": "completed"})
 
     def _fail_step(self, step: RenderStep, error: AdapterError) -> None:
         step.status = JobStatus.failed
         step.error_code = error.code
         step.error_message = error.message
         step.completed_at = datetime.now(UTC)
+        self._set_step_checkpoint(
+            step,
+            {"status": "failed", "error_code": error.code, "error_message": error.message},
+        )
 
     def _create_asset_variant(
         self,
@@ -256,16 +267,39 @@ class RenderService(GenerationService):
                 return candidate
             version += 1
 
-    def _record_output_moderation(
+    def _quarantine_asset(self, asset: Asset) -> None:
+        release_target_bucket = asset.bucket_name
+        release_target_object = asset.object_name
+        quarantine_object_name = f"moderation/{asset.id}/{Path(asset.object_name).name}"
+        self.storage.copy_object(
+            asset.bucket_name,
+            asset.object_name,
+            self.settings.minio_bucket_quarantine,
+            quarantine_object_name,
+        )
+        self.storage.delete_object(asset.bucket_name, asset.object_name)
+        asset.metadata_payload = {
+            **dict(asset.metadata_payload or {}),
+            "release_target_bucket_name": release_target_bucket,
+            "release_target_object_name": release_target_object,
+        }
+        asset.bucket_name = self.settings.minio_bucket_quarantine
+        asset.object_name = quarantine_object_name
+        asset.quarantine_bucket_name = self.settings.minio_bucket_quarantine
+        asset.quarantine_object_name = quarantine_object_name
+        asset.status = "quarantined"
+        asset.quarantined_at = datetime.now(UTC)
+
+    def _moderate_generated_asset(
         self,
         *,
         moderation_provider: ModerationProvider,
         project: Project,
         scene_segment: SceneSegment | None,
         target_type: str,
-        target_id: str,
+        asset: Asset,
         input_text: str,
-    ) -> None:
+    ) -> bool:
         result = moderation_provider.moderate_text(input_text, target_type=target_type)
         self.db.add(
             AuditEvent(
@@ -277,30 +311,27 @@ class RenderService(GenerationService):
                 payload={"blocked": result.blocked, "scene_segment_id": str(scene_segment.id) if scene_segment else None},
             )
         )
-        from app.models.entities import ModerationDecision, ModerationEvent
-
-        self.db.add(
-            ModerationEvent(
-                project_id=project.id,
-                workspace_id=project.workspace_id,
-                user_id=None,
-                target_type=target_type,
-                target_id=target_id,
-                input_text=input_text,
-                decision=ModerationDecision.blocked if result.blocked else ModerationDecision.allowed,
-                provider_name=result.provider_name,
-                severity_summary=result.severity_summary,
-                response_payload=result.raw_response,
-                blocked_message=result.blocked_message,
-            )
+        moderation_event = ModerationEvent(
+            project_id=project.id,
+            workspace_id=project.workspace_id,
+            user_id=None,
+            related_asset_id=asset.id,
+            target_type=target_type,
+            target_id=str(asset.id),
+            input_text=input_text,
+            decision=ModerationDecision.blocked if result.blocked else ModerationDecision.allowed,
+            review_status=ModerationReviewStatus.pending if result.blocked else ModerationReviewStatus.none,
+            provider_name=result.provider_name,
+            severity_summary=result.severity_summary,
+            response_payload=result.raw_response,
+            blocked_message=result.blocked_message,
         )
+        self.db.add(moderation_event)
         self.db.flush()
         if result.blocked:
-            raise AdapterError(
-                "moderation_rejection",
-                "generated_output_blocked",
-                "Generated output was blocked by moderation.",
-            )
+            self._quarantine_asset(asset)
+            return True
+        return False
 
     def _create_provider_run(
         self,
@@ -336,16 +367,62 @@ class RenderService(GenerationService):
         response_payload: dict[str, object] | None = None,
         error: AdapterError | None = None,
     ) -> None:
-        provider_run.latency_ms = round((time.perf_counter() - started_at) * 1000)
-        provider_run.completed_at = datetime.now(UTC)
-        if error:
-            provider_run.status = ProviderRunStatus.failed
-            provider_run.error_category = ProviderErrorCategory(error.category)
-            provider_run.error_code = error.code
-            provider_run.error_message = error.message
-        else:
-            provider_run.status = ProviderRunStatus.completed
-            provider_run.response_payload = response_payload
+        self._finalize_provider_run(
+            provider_run,
+            started_at=started_at,
+            response_payload=response_payload,
+            error=error,
+        )
+
+    def _set_render_blocked(
+        self,
+        render_job: RenderJob,
+        step: RenderStep,
+        *,
+        error_code: str,
+        error_message: str,
+        checkpoint_payload: dict[str, object],
+    ) -> None:
+        step.status = JobStatus.blocked
+        step.error_code = error_code
+        step.error_message = error_message
+        step.completed_at = datetime.now(UTC)
+        step.output_payload = checkpoint_payload
+        self._set_step_checkpoint(step, checkpoint_payload)
+        render_job.status = JobStatus.blocked
+        render_job.error_code = error_code
+        render_job.error_message = error_message
+
+    def _recovery_source_step_id(self, render_job: RenderJob, step: RenderStep) -> UUID | None:
+        previous_step = self.db.scalar(
+            select(RenderStep)
+            .where(
+                RenderStep.render_job_id == render_job.id,
+                RenderStep.step_index < step.step_index,
+                RenderStep.status.in_([JobStatus.completed, JobStatus.review, JobStatus.approved]),
+            )
+            .order_by(RenderStep.step_index.desc())
+        )
+        return previous_step.id if previous_step else None
+
+    def _reset_step_for_resume(
+        self,
+        step: RenderStep,
+        *,
+        is_stale: bool,
+        clear_output: bool,
+        recovery_source_step_id: UUID | None,
+    ) -> None:
+        step.status = JobStatus.queued
+        step.is_stale = is_stale
+        step.error_code = None
+        step.error_message = None
+        step.started_at = None
+        step.completed_at = None
+        if clear_output:
+            step.output_payload = None
+        self._set_step_checkpoint(step, {"status": "queued"})
+        step.recovery_source_step_id = recovery_source_step_id
 
     def _store_generated_asset(
         self,
@@ -430,6 +507,10 @@ class RenderService(GenerationService):
                 "consistency_pack_required",
                 "The approved scene plan does not have a resolved consistency pack.",
             )
+        BillingService(self.db, self.settings).ensure_render_credits_available(
+            project.workspace_id,
+            scene_plan.scene_count or len(self._scene_segments(scene_plan.id)),
+        )
         request_payload = {
             "project_id": project_id,
             "scene_plan_id": str(scene_plan.id),
@@ -570,10 +651,20 @@ class RenderService(GenerationService):
         render_job.error_code = error.code
         render_job.error_message = error.message
         if running_step:
+            self._record_step_retry(
+                running_step,
+                requested_by_user_id=render_job.created_by_user_id,
+                reason="transient_provider_retry",
+                recovery_source_step_id=self._recovery_source_step_id(render_job, running_step),
+            )
             running_step.status = JobStatus.queued
             running_step.error_code = error.code
             running_step.error_message = error.message
             running_step.started_at = None
+            self._set_step_checkpoint(
+                running_step,
+                {"status": "queued", "reason": "transient_provider_retry", "error_code": error.code},
+            )
         self.db.commit()
 
     def mark_job_failed(self, job_id: str, error: AdapterError) -> None:
@@ -592,6 +683,7 @@ class RenderService(GenerationService):
         render_job.completed_at = datetime.now(UTC)
         if running_step:
             self._fail_step(running_step, error)
+        NotificationService(self.db, self.settings).notify_render_failed(render_job, reason=error.message)
         self.db.commit()
 
     def approve_frame_pair(
@@ -666,32 +758,39 @@ class RenderService(GenerationService):
 
         target_segment = self.db.get(SceneSegment, target_step.scene_segment_id)
         assert target_segment is not None
+        recovery_source_step_id = self._recovery_source_step_id(render_job, target_step)
+        self._record_step_retry(
+            target_step,
+            requested_by_user_id=auth.user_id,
+            reason="frame_pair_regeneration_requested",
+            recovery_source_step_id=recovery_source_step_id,
+        )
         affected_steps = self.db.scalars(
             select(RenderStep)
-            .where(
-                RenderStep.render_job_id == render_job.id,
-                RenderStep.step_kind == StepKind.frame_pair_generation,
-            )
+            .where(RenderStep.render_job_id == render_job.id)
             .order_by(RenderStep.step_index.asc())
         ).all()
         for step in affected_steps:
-            if not step.scene_segment_id:
+            segment = self.db.get(SceneSegment, step.scene_segment_id) if step.scene_segment_id else None
+            if step.id != target_step.id and step.step_index < target_step.step_index:
                 continue
-            segment = self.db.get(SceneSegment, step.scene_segment_id)
-            if not segment or segment.scene_index < target_segment.scene_index:
+            if segment and segment.scene_index < target_segment.scene_index:
                 continue
-            step.status = JobStatus.queued
-            step.is_stale = segment.scene_index > target_segment.scene_index
-            step.error_code = None
-            step.error_message = None
-            step.output_payload = None
-            step.started_at = None
-            step.completed_at = None
-            segment.start_image_asset_id = None
-            segment.end_image_asset_id = None
-            if segment.scene_index == 1:
-                segment.chained_from_asset_id = None
+            self._reset_step_for_resume(
+                step,
+                is_stale=bool(segment and segment.scene_index > target_segment.scene_index),
+                clear_output=True,
+                recovery_source_step_id=recovery_source_step_id,
+            )
+            if segment:
+                if step.step_kind == StepKind.frame_pair_generation:
+                    segment.start_image_asset_id = None
+                    segment.end_image_asset_id = None
+                    if segment.scene_index == 1:
+                        segment.chained_from_asset_id = None
         render_job.status = JobStatus.queued
+        render_job.error_code = None
+        render_job.error_message = None
         record_audit_event(
             self.db,
             workspace_id=render_job.workspace_id,
@@ -725,12 +824,28 @@ class RenderService(GenerationService):
             raise ApiError(404, "render_step_not_found", "Render step not found.")
         if step.status not in {JobStatus.failed, JobStatus.cancelled}:
             raise ApiError(400, "render_step_not_retryable", "This render step is not retryable.")
-        step.status = JobStatus.queued
-        step.error_code = None
-        step.error_message = None
-        step.started_at = None
-        step.completed_at = None
-        step.is_stale = False
+        recovery_source_step_id = self._recovery_source_step_id(render_job, step)
+        self._record_step_retry(
+            step,
+            requested_by_user_id=auth.user_id,
+            reason="manual_step_retry",
+            recovery_source_step_id=recovery_source_step_id,
+        )
+        reset_candidates = self.db.scalars(
+            select(RenderStep)
+            .where(
+                RenderStep.render_job_id == render_job.id,
+                RenderStep.step_index >= step.step_index,
+            )
+            .order_by(RenderStep.step_index.asc())
+        ).all()
+        for candidate in reset_candidates:
+            self._reset_step_for_resume(
+                candidate,
+                is_stale=False,
+                clear_output=True,
+                recovery_source_step_id=recovery_source_step_id,
+            )
         render_job.status = JobStatus.queued
         render_job.error_code = None
         render_job.error_message = None
@@ -782,6 +897,12 @@ class RenderService(GenerationService):
                 awaiting_review = True
                 previous_end_asset_id = str(segment.end_image_asset_id) if segment.end_image_asset_id else None
                 continue
+            if step.status == JobStatus.blocked and not step.is_stale:
+                render_job.status = JobStatus.blocked
+                render_job.error_code = step.error_code
+                render_job.error_message = step.error_message
+                self.db.commit()
+                return True
 
             self._set_step_running(step)
             provider_request = {
@@ -808,14 +929,6 @@ class RenderService(GenerationService):
                     reference_asset_id=previous_end_asset_id,
                     consistency_pack_state=consistency_pack_state,
                 )
-                self._record_output_moderation(
-                    moderation_provider=moderation_provider,
-                    project=project,
-                    scene_segment=segment,
-                    target_type="generated_frame_output_proxy",
-                    target_id=str(segment.id),
-                    input_text=segment.start_image_prompt,
-                )
                 start_asset = self._store_generated_asset(
                     render_job=render_job,
                     render_step=step,
@@ -835,14 +948,6 @@ class RenderService(GenerationService):
                     frame_kind="end",
                     reference_asset_id=str(start_asset.id),
                     consistency_pack_state=consistency_pack_state,
-                )
-                self._record_output_moderation(
-                    moderation_provider=moderation_provider,
-                    project=project,
-                    scene_segment=segment,
-                    target_type="generated_frame_output_proxy",
-                    target_id=str(segment.id),
-                    input_text=segment.end_image_prompt,
                 )
                 end_asset = self._store_generated_asset(
                     render_job=render_job,
@@ -866,6 +971,22 @@ class RenderService(GenerationService):
             segment.start_image_asset_id = start_asset.id
             segment.end_image_asset_id = end_asset.id
             previous_end_asset_id = str(end_asset.id)
+            start_blocked = self._moderate_generated_asset(
+                moderation_provider=moderation_provider,
+                project=project,
+                scene_segment=segment,
+                target_type="generated_frame_output_proxy",
+                asset=start_asset,
+                input_text=segment.start_image_prompt,
+            )
+            end_blocked = self._moderate_generated_asset(
+                moderation_provider=moderation_provider,
+                project=project,
+                scene_segment=segment,
+                target_type="generated_frame_output_proxy",
+                asset=end_asset,
+                input_text=segment.end_image_prompt,
+            )
             self._finish_provider_run(
                 provider_run,
                 started_at=started,
@@ -878,9 +999,29 @@ class RenderService(GenerationService):
                 "start_image_asset_id": str(start_asset.id),
                 "end_image_asset_id": str(end_asset.id),
             }
+            if start_blocked or end_blocked:
+                self._set_render_blocked(
+                    render_job,
+                    step,
+                    error_code="moderation_review_required",
+                    error_message="Generated frame pairs require operator moderation review.",
+                    checkpoint_payload=step.output_payload,
+                )
+                record_audit_event(
+                    self.db,
+                    workspace_id=render_job.workspace_id,
+                    user_id=render_job.created_by_user_id,
+                    event_type="render.frame_pair_quarantined",
+                    target_type="render_step",
+                    target_id=str(step.id),
+                    payload={"render_job_id": str(render_job.id), "scene_index": segment.scene_index},
+                )
+                self.db.commit()
+                return True
             step.status = JobStatus.review
             step.is_stale = False
             step.completed_at = datetime.now(UTC)
+            self._set_step_checkpoint(step, step.output_payload)
             awaiting_review = True
             record_audit_event(
                 self.db,
@@ -908,7 +1049,7 @@ class RenderService(GenerationService):
         segment: SceneSegment,
         video_provider: VideoProvider,
         moderation_provider: ModerationProvider,
-    ) -> Asset:
+    ) -> Asset | None:
         step = self._get_or_create_step(
             render_job,
             step_kind=StepKind.video_generation,
@@ -924,6 +1065,12 @@ class RenderService(GenerationService):
             )
             if existing_asset:
                 return existing_asset
+        if step.status == JobStatus.blocked:
+            render_job.status = JobStatus.blocked
+            render_job.error_code = step.error_code
+            render_job.error_message = step.error_message
+            self.db.commit()
+            return None
 
         self._set_step_running(step)
         provider_request = {
@@ -950,14 +1097,6 @@ class RenderService(GenerationService):
                 start_frame_asset_id=str(segment.start_image_asset_id),
                 end_frame_asset_id=str(segment.end_image_asset_id),
             )
-            self._record_output_moderation(
-                moderation_provider=moderation_provider,
-                project=project,
-                scene_segment=segment,
-                target_type="generated_video_output_proxy",
-                target_id=str(step.id),
-                input_text=segment.visual_prompt,
-            )
             raw_asset = self._store_generated_asset(
                 render_job=render_job,
                 render_step=step,
@@ -983,6 +1122,32 @@ class RenderService(GenerationService):
             started_at=started,
             response_payload={"asset_id": str(raw_asset.id)},
         )
+        if self._moderate_generated_asset(
+            moderation_provider=moderation_provider,
+            project=project,
+            scene_segment=segment,
+            target_type="generated_video_output_proxy",
+            asset=raw_asset,
+            input_text=segment.visual_prompt,
+        ):
+            self._set_render_blocked(
+                render_job,
+                step,
+                error_code="moderation_review_required",
+                error_message="Generated video output requires operator moderation review.",
+                checkpoint_payload={"asset_id": str(raw_asset.id)},
+            )
+            record_audit_event(
+                self.db,
+                workspace_id=render_job.workspace_id,
+                user_id=render_job.created_by_user_id,
+                event_type="render.video_quarantined",
+                target_type="render_step",
+                target_id=str(step.id),
+                payload={"render_job_id": str(render_job.id), "scene_index": segment.scene_index},
+            )
+            self.db.commit()
+            return None
         self._complete_step(step, output_payload={"asset_id": str(raw_asset.id)})
         record_audit_event(
             self.db,
@@ -1203,9 +1368,19 @@ class RenderService(GenerationService):
             return self._latest_asset(render_job.id, asset_role=AssetRole.music_bed)
 
         self._set_step_running(step)
+        provider_run = self._create_provider_run(
+            render_job=render_job,
+            render_step=step,
+            operation="music_preparation",
+            request_payload={"total_duration_seconds": total_duration_seconds},
+            provider_name="stub_music_provider",
+            provider_model="stub-music-v1",
+        )
+        started = time.perf_counter()
         try:
             generated = music_provider.prepare_track(total_duration_seconds=total_duration_seconds)
         except AdapterError as error:
+            self._finish_provider_run(provider_run, started_at=started, error=error)
             self._fail_step(step, error)
             if render_job.allow_export_without_music:
                 return None
@@ -1224,7 +1399,13 @@ class RenderService(GenerationService):
             file_name="music-bed.wav",
             asset_type=AssetType.music,
             asset_role=AssetRole.music_bed,
+            provider_run_id=provider_run.id,
             has_audio_stream=True,
+        )
+        self._finish_provider_run(
+            provider_run,
+            started_at=started,
+            response_payload={"asset_id": str(music_asset.id)},
         )
         self._complete_step(step, output_payload={"asset_id": str(music_asset.id)})
         return music_asset
@@ -1373,6 +1554,7 @@ class RenderService(GenerationService):
         )
         self.db.add(export_record)
         self.db.flush()
+        BillingService(self.db, self.settings).capture_export_usage(export_record)
         self._complete_step(step, output_payload={"asset_id": str(export_asset.id), "export_id": str(export_record.id)})
         record_audit_event(
             self.db,
@@ -1441,6 +1623,8 @@ class RenderService(GenerationService):
                 video_provider=video_provider,
                 moderation_provider=moderation_provider,
             )
+            if raw_asset is None:
+                return
             silent_asset = self._run_audio_normalization_stage(
                 render_job=render_job,
                 segment=segment,
@@ -1483,6 +1667,48 @@ class RenderService(GenerationService):
         render_job.error_code = None
         render_job.error_message = None
         self.db.commit()
+
+    def expire_stale_render_jobs(self) -> int:
+        threshold = datetime.now(UTC) - timedelta(minutes=self.settings.render_job_timeout_minutes)
+        stale_jobs = self.db.scalars(
+            select(RenderJob).where(
+                RenderJob.queue_name == "render",
+                RenderJob.status.in_([JobStatus.queued, JobStatus.running, JobStatus.blocked]),
+                RenderJob.created_at < threshold,
+            )
+        ).all()
+        for render_job in stale_jobs:
+            render_job.status = JobStatus.failed
+            render_job.error_code = "job_timeout"
+            render_job.error_message = "The render expired before completion."
+            render_job.completed_at = datetime.now(UTC)
+            running_step = self.db.scalar(
+                select(RenderStep)
+                .where(
+                    RenderStep.render_job_id == render_job.id,
+                    RenderStep.status.in_([JobStatus.queued, JobStatus.running, JobStatus.blocked]),
+                )
+                .order_by(RenderStep.step_index.desc())
+            )
+            if running_step:
+                running_step.status = JobStatus.failed
+                running_step.error_code = "job_timeout"
+                running_step.error_message = "The render expired before completion."
+                running_step.completed_at = datetime.now(UTC)
+                self._set_step_checkpoint(
+                    running_step,
+                    {
+                        "status": "failed",
+                        "error_code": "job_timeout",
+                        "error_message": "The render expired before completion.",
+                    },
+                )
+            NotificationService(self.db, self.settings).notify_render_failed(
+                render_job,
+                reason=render_job.error_message,
+            )
+        self.db.commit()
+        return len(stale_jobs)
 
     @staticmethod
     def _format_srt_timestamp(total_ms: int) -> str:

@@ -1,0 +1,158 @@
+import { Link } from "react-router-dom";
+import {
+  PageFrame,
+  SectionCard,
+  StatusBadge,
+  MetricCard,
+  MediaFrame,
+  EmptyState,
+  LoadingPage,
+} from "../../components/ui";
+import { useParams } from "react-router-dom";
+import { useProject } from "../../hooks/use-projects";
+import { useExports } from "../../hooks/use-exports";
+import type { ExportArtifact } from "../../types/domain";
+
+function formatDuration(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}m ${s < 10 ? "0" : ""}${s}s`;
+}
+
+function ExportCard({ artifact }: { artifact: ExportArtifact }) {
+  return (
+    <div className="artifact-card">
+      <MediaFrame
+        label={artifact.name}
+        meta={`${artifact.ratio} · ${artifact.format}`}
+        gradient={artifact.gradient}
+      />
+      <div className="artifact-card__meta">
+        <div className="inline-meta">
+          <StatusBadge status={artifact.status} />
+          <span>{formatDuration(artifact.durationSec)}</span>
+          <span>{artifact.sizeMb} MB</span>
+        </div>
+        <strong>{artifact.destination}</strong>
+        <p>
+          {artifact.subtitles ? "Subtitles on" : "Subtitles off"} ·{" "}
+          {artifact.musicBed ? "Music bed on" : "Music bed off"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function ExportsPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const { data: project, isLoading: projectLoading } = useProject(projectId || "");
+  const { data: exportsData, isLoading: exportsLoading } = useExports(project?.id || "");
+
+  if (projectLoading || exportsLoading || !project) {
+    return <LoadingPage />;
+  }
+
+  const latestExport = exportsData && exportsData.length > 0 ? exportsData[0] : null;
+
+  return (
+    <PageFrame
+      eyebrow="Export library"
+      title={`${project.title} exports`}
+      description="Final exports expose delivery metadata, loudness outcomes, and channel-specific readiness so release decisions feel operational, not guessy."
+      actions={
+        <>
+          <Link className="button button--secondary" to={`/app/projects/${project.id}/renders`}>
+            Back to renders
+          </Link>
+          <Link className="button button--primary" to={`/app/projects/${project.id}/brief`}>
+            Review brief context
+          </Link>
+        </>
+      }
+      inspector={
+        latestExport ? (
+          <div className="inspector-stack">
+            <SectionCard title="Publish checklist">
+              <div className="check-list">
+                <div className="check-item">
+                  <StatusBadge status={latestExport.subtitles ? "approved" : "review"} />
+                  <div>
+                    <strong>Subtitle coverage</strong>
+                    <p>{latestExport.subtitles ? "Burn-in enabled" : "No subtitles on this export"}</p>
+                  </div>
+                </div>
+                <div className="check-item">
+                  <StatusBadge status={latestExport.musicBed ? "approved" : "review"} />
+                  <div>
+                    <strong>Music continuity</strong>
+                    <p>{latestExport.musicBed ? "Music bed delivered with fade" : "No music bed attached"}</p>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Master metrics">
+              <div className="inspector-list">
+                <div>
+                  <span>Integrated loudness</span>
+                  <strong>{latestExport.integratedLufs} LUFS</strong>
+                </div>
+                <div>
+                  <span>True peak</span>
+                  <strong>{latestExport.truePeak} dBTP</strong>
+                </div>
+                <div>
+                  <span>Format</span>
+                  <strong>{latestExport.format}</strong>
+                </div>
+                <div>
+                  <span>Destination</span>
+                  <strong>{latestExport.destination}</strong>
+                </div>
+              </div>
+            </SectionCard>
+          </div>
+        ) : (
+          <div className="inspector-stack">
+            <EmptyState title="No exports" description="Complete a render to view exports." />
+          </div>
+        )
+      }
+    >
+      {latestExport ? (
+        <>
+          <SectionCard className="surface-card--hero" title={latestExport.name} subtitle="Latest master output">
+            <div className="hero-grid">
+              <MediaFrame
+                label={latestExport.name}
+                meta={`${latestExport.ratio} · ${latestExport.format}`}
+                gradient={latestExport.gradient}
+                aspect="wide"
+              />
+              <div className="metric-column">
+                <MetricCard label="Duration" value={formatDuration(latestExport.durationSec)} detail="Final export length" tone="primary" />
+                <MetricCard label="File size" value={`${latestExport.sizeMb} MB`} detail="Fast-start optimized" tone="neutral" />
+                {latestExport.createdAt && (
+                  <MetricCard label="Created" value={latestExport.createdAt} detail="Latest delivered artifact" tone="success" />
+                )}
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Export library" subtitle="Cards stay visual while metadata keeps the operational details close">
+            <div className="artifact-grid">
+              {exportsData?.map((artifact) => (
+                <ExportCard key={artifact.id} artifact={artifact} />
+              ))}
+            </div>
+          </SectionCard>
+        </>
+      ) : (
+        <EmptyState 
+           title="No Exports Yet"
+           description="Your project has no successful exports. Go to the Renders tab to start a new composition pipeline."
+        />
+      )}
+    </PageFrame>
+  );
+}

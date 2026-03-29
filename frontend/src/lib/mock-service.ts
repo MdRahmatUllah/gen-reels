@@ -12,6 +12,10 @@ import type {
   IdeaSet,
   LoginCredentials,
   ProjectBundle,
+  RenderJob,
+  RenderStep,
+  RenderEvent,
+  ExportArtifact,
   ProjectSummary,
   ScenePlan,
   ScenePlanSet,
@@ -134,6 +138,8 @@ interface MockState {
   ideaSets: Map<string, IdeaSet>;
   scripts: Map<string, ScriptData>;
   scenePlanSets: Map<string, ScenePlanSet>;
+  renderJobs: Map<string, RenderJob>;
+  exports: Map<string, ExportArtifact[]>;
   visualPresets: VisualPreset[];
   voicePresets: VoicePreset[];
 }
@@ -171,6 +177,8 @@ const state: MockState = {
   ideaSets: new Map(),
   scripts: new Map(),
   scenePlanSets: new Map(),
+  renderJobs: new Map(),
+  exports: new Map(),
   visualPresets: [...seedVisualPresets],
   voicePresets: [...seedVoicePresets],
 };
@@ -816,3 +824,227 @@ export async function mockSetScenePlanPreset(
   state.scenePlanSets.set(projectId, planSet);
   return planSet;
 }
+
+/* ─── Render MVP Simulator (Phase 3) ──────────────────────────────────────── */
+
+export async function mockGetRenders(projectId: string): Promise<RenderJob[]> {
+  await randomDelay(100, 200);
+  // Using the active one mapped to this projectId (we use single job per project in mock)
+  const job = state.renderJobs.get(projectId);
+  return job ? [job] : [];
+}
+
+export async function mockGetExports(projectId: string): Promise<ExportArtifact[]> {
+  await randomDelay(100, 200);
+  return state.exports.get(projectId) || [];
+}
+
+export async function mockCancelRender(projectId: string): Promise<void> {
+  await randomDelay(100, 200);
+  const job = state.renderJobs.get(projectId);
+  if (job && job.status === "running") {
+    job.status = "failed";
+    job.sseState = "Cancelled";
+    job.nextAction = "Render was cancelled by user.";
+    job.events.push({ id: nextId("evt"), time: new Date().toLocaleTimeString(), label: "Cancelled", detail: "Job cancelled by user override", tone: "error" });
+    state.renderJobs.set(projectId, job);
+  }
+}
+
+export async function mockRetryRenderStep(projectId: string, stepId: string): Promise<RenderJob> {
+  await randomDelay(200, 400);
+  const job = state.renderJobs.get(projectId);
+  if (!job) throw new Error("Render job not found");
+
+  const step = job.steps.find((s) => s.id === stepId);
+  if (!step) throw new Error("Step not found");
+
+  step.status = "running";
+  step.clipStatus = "Retrying";
+  step.nextAction = "Waiting for generation";
+  
+  // Also clear job error if it was blocked
+  job.status = "running";
+  job.sseState = "Live SSE connected";
+  job.nextAction = "Processing retried step";
+  job.events.push({ id: nextId("evt"), time: new Date().toLocaleTimeString(), label: "Step Retried", detail: `User requested retry for step ${step.name}`, tone: "warning" });
+  state.renderJobs.set(projectId, job);
+
+  // Resume simulator loop if it was blocked
+  void renderSimulatorLoop(projectId);
+
+  return job;
+}
+
+// Spawns the SSE Simulator
+export async function mockStartRender(projectId: string): Promise<RenderJob> {
+  await randomDelay(300, 600);
+  const planSet = state.scenePlanSets.get(projectId);
+  const project = state.projects.get(projectId);
+  if (!planSet || !project) throw new Error("Invalid project or scene plan");
+
+  project.stage = "renders";
+  state.projects.set(projectId, project);
+
+  const steps: RenderStep[] = planSet.scenes.map((scene, i) => ({
+    id: nextId("step"),
+    sceneId: `Scene ${i + 1}`,
+    name: scene.shotType || "Shot",
+    status: "draft",
+    durationDeltaSec: 0,
+    clipStatus: "Queued",
+    narrationStatus: "Queued",
+    consistency: "Pending",
+    nextAction: "Waiting for queue",
+  }));
+
+  const job: RenderJob = {
+    id: `render_${projectId}`,
+    label: `Render ${Math.floor(Math.random() * 100)} · Master vertical export`,
+    status: "running",
+    progress: 0,
+    createdAt: new Date().toLocaleTimeString(),
+    updatedAt: new Date().toLocaleTimeString(),
+    durationSec: planSet.totalDurationSec,
+    transitionMode: "crossfade",
+    voicePreset: "Ava Editorial",
+    consistencyPackSnapshotId: `cps_${projectId}_${Date.now()}`,
+    sseState: "Live SSE connected",
+    nextAction: "Initializing pipelines...",
+    musicTrack: "Ambient Corporate 1",
+    allowExportWithoutMusic: false,
+    checks: [
+      { id: "c1", label: "Consistency pack provenance", status: "pass", detail: "All clips reference locked snapshot." },
+    ],
+    steps,
+    events: [
+      { id: nextId("evt"), time: new Date().toLocaleTimeString(), label: "Job Created", detail: "Render job queued for execution", tone: "neutral" }
+    ],
+    metrics: { lufsTarget: "-14 LUFS", truePeak: "-1.0 dBTP", musicDucking: "-12 dB", subtitleState: "Burned" }
+  };
+
+  state.renderJobs.set(projectId, job);
+
+  // Fire and forget simulator loop
+  void renderSimulatorLoop(projectId);
+  
+  return job;
+}
+
+// Background simulator loop mutating the state dynamically.
+// This mocks SSE stream architecture.
+export async function renderSimulatorLoop(projectId: string) {
+  const job = state.renderJobs.get(projectId);
+  if (!job) return;
+
+  const pushEvent = (label: string, detail: string, tone: "neutral"| "success"| "warning"| "error") => {
+    job.events.unshift({ id: nextId("evt"), time: new Date().toLocaleTimeString(), label, detail, tone });
+    if (job.events.length > 5) job.events.pop();
+  };
+
+  pushEvent("Pipeline Started", "Orchestrator resolving consistency pack", "neutral");
+  job.nextAction = "Generating scene frames";
+  state.renderJobs.set(projectId, { ...job });
+
+  const totalSteps = job.steps.length;
+  // 3 phases per step: Prompts -> Audio -> Clip -> Done
+  const TICK_MS = 1500;
+  
+  for (let i = 0; i < totalSteps; i++) {
+    const step = job.steps[i];
+    
+    if (job.status !== "running") return; // Cancelled
+    
+    // 1. Image Generation
+    await new Promise(r => setTimeout(r, TICK_MS));
+    if (job.status !== "running") return;
+    step.status = "running";
+    step.clipStatus = "Generating frames...";
+    step.nextAction = "Awaiting image pair";
+    job.progress = Math.floor((i / totalSteps) * 100) + 5;
+    state.renderJobs.set(projectId, { ...job });
+
+    // 2. Audio Generation
+    await new Promise(r => setTimeout(r, TICK_MS));
+    if (job.status !== "running") return;
+    step.narrationStatus = "Synthesizing";
+    step.nextAction = "Generating video clip";
+    job.progress = Math.floor((i / totalSteps) * 100) + 10;
+    state.renderJobs.set(projectId, { ...job });
+
+    // 3. Render Clip
+    await new Promise(r => setTimeout(r, TICK_MS));
+    if (job.status !== "running") return;
+    
+    // Random intermittent failure check
+    // If it's the second scene and we haven't failed yet, fail it manually
+    if (i === 1 && !step.name.includes("Fixed")) {
+      step.status = "failed";
+      step.clipStatus = "Failed";
+      step.narrationStatus = "Generated";
+      step.name += " (Failed)";
+      step.nextAction = "Click retry to rerun clip pipeline";
+      
+      job.status = "failed";
+      job.sseState = "Halted on scene error";
+      job.nextAction = `Review Scene ${i+1} and retry.`;
+      pushEvent("Pipeline Fault", `Scene ${i+1} semantic collision in transition`, "error");
+      state.renderJobs.set(projectId, { ...job });
+      
+      // Stop the loop completely, UI must call retry!
+      return; 
+    }
+
+    // Success path for step
+    step.name = step.name.replace(" (Failed)", " (Fixed)"); // In case it was a retry
+    step.status = "completed";
+    step.clipStatus = "Rendered";
+    step.narrationStatus = "Aligned";
+    step.consistency = "Matched";
+    step.nextAction = "Complete";
+    job.progress = Math.floor(((i + 1) / totalSteps) * 100) - 2;
+    pushEvent("Scene Completed", `Frames and clip encoded for Scene ${i+1}`, "success");
+    state.renderJobs.set(projectId, { ...job });
+  }
+
+  // 4. Composition (FFmpeg)
+  await new Promise(r => setTimeout(r, TICK_MS * 2));
+  if (job.status !== "running") return;
+  
+  job.nextAction = "Composing master audio bed...";
+  job.progress = 95;
+  pushEvent("Composition Pipeline", "Normalizing audio and adding background tracks", "neutral");
+  state.renderJobs.set(projectId, { ...job });
+
+  await new Promise(r => setTimeout(r, TICK_MS * 2));
+  if (job.status !== "running") return;
+  job.progress = 100;
+  job.status = "completed";
+  job.sseState = "Disconnected (Clean close)";
+  job.nextAction = "Export complete.";
+  pushEvent("Job Complete", "Master vertical export wrapped successfully", "success");
+  
+  // Push an export artifact
+  const newExport: ExportArtifact = {
+    id: nextId("exp"),
+    name: "Master HD Export",
+    createdAt: new Date().toLocaleDateString(),
+    status: "ready",
+    durationSec: job.durationSec,
+    sizeMb: 14.5,
+    format: "MP4 / H.264",
+    ratio: "9:16",
+    destination: "Local File System",
+    integratedLufs: -14.2,
+    truePeak: -1.0,
+    subtitles: true,
+    musicBed: true,
+    gradient: "linear-gradient(135deg, #101014 0%, #151520 100%)"
+  };
+  const exps = state.exports.get(projectId) || [];
+  exps.unshift(newExport);
+  state.exports.set(projectId, exps);
+  
+  state.renderJobs.set(projectId, { ...job });
+}
+

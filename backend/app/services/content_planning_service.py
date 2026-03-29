@@ -700,12 +700,7 @@ class ContentPlanningService(GenerationService):
                 voice_preset=self._voice_preset_payload(voice_preset),
             )
         except AdapterError as error:
-            provider_run.status = ProviderRunStatus.failed
-            provider_run.error_category = ProviderErrorCategory(error.category)
-            provider_run.error_code = error.code
-            provider_run.error_message = error.message
-            provider_run.completed_at = datetime.now(UTC)
-            provider_run.latency_ms = round((time.perf_counter() - started) * 1000)
+            self._finalize_provider_run(provider_run, started_at=started, error=error)
             self.db.commit()
             raise
 
@@ -733,15 +728,13 @@ class ContentPlanningService(GenerationService):
         project.active_scene_plan_id = scene_plan.id
         project.stage = ProjectStage.scenes
 
-        provider_run.status = ProviderRunStatus.completed
-        provider_run.response_payload = output
-        provider_run.completed_at = datetime.now(UTC)
-        provider_run.latency_ms = round((time.perf_counter() - started) * 1000)
+        self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
         job.completed_at = datetime.now(UTC)
         step.status = JobStatus.completed
         step.completed_at = datetime.now(UTC)
         step.output_payload = {"scene_plan_id": str(scene_plan.id)}
+        self._set_step_checkpoint(step, {"scene_plan_id": str(scene_plan.id)})
         record_audit_event(
             self.db,
             workspace_id=project.workspace_id,
@@ -800,12 +793,7 @@ class ContentPlanningService(GenerationService):
                 visual_preset=self._visual_preset_payload(visual_preset),
             )
         except AdapterError as error:
-            provider_run.status = ProviderRunStatus.failed
-            provider_run.error_category = ProviderErrorCategory(error.category)
-            provider_run.error_code = error.code
-            provider_run.error_message = error.message
-            provider_run.completed_at = datetime.now(UTC)
-            provider_run.latency_ms = round((time.perf_counter() - started) * 1000)
+            self._finalize_provider_run(provider_run, started_at=started, error=error)
             self.db.commit()
             raise
 
@@ -834,15 +822,13 @@ class ContentPlanningService(GenerationService):
         scene_plan.validation_warnings = self._scene_plan_warnings(
             total_duration_seconds=scene_plan.total_estimated_duration_seconds
         )
-        provider_run.status = ProviderRunStatus.completed
-        provider_run.response_payload = output
-        provider_run.completed_at = datetime.now(UTC)
-        provider_run.latency_ms = round((time.perf_counter() - started) * 1000)
+        self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
         job.completed_at = datetime.now(UTC)
         step.status = JobStatus.completed
         step.completed_at = datetime.now(UTC)
         step.output_payload = {"scene_plan_id": str(scene_plan.id)}
+        self._set_step_checkpoint(step, {"scene_plan_id": str(scene_plan.id)})
         record_audit_event(
             self.db,
             workspace_id=project.workspace_id,
