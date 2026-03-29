@@ -5,12 +5,13 @@ import hmac
 import json
 from urllib import error as urllib_error
 from urllib import request as urllib_request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
 from app.api.deps import AuthContext
+from app.core.crypto import encrypt_json
 from app.core.errors import ApiError
 from app.core.security import generate_token, hash_password, hash_token
 from app.models.entities import (
@@ -21,14 +22,12 @@ from app.models.entities import (
     WebhookEndpoint,
     Workspace,
     WorkspaceApiKey,
+    WorkspaceAuthConfiguration,
     WorkspaceMember,
+    WorkspaceAuthProviderType,
     WorkspaceRole,
 )
-from app.schemas.automation import (
-    WebhookEndpointCreateRequest,
-    WebhookEndpointUpdateRequest,
-    WorkspaceApiKeyCreateRequest,
-)
+from app.schemas.automation import WebhookEndpointCreateRequest, WebhookEndpointUpdateRequest, WorkspaceApiKeyCreateRequest
 from app.schemas.workspace import WorkspaceMemberCreateRequest, WorkspaceMemberUpdateRequest
 from app.services.audit_service import record_audit_event
 from app.services.permissions import require_workspace_admin
@@ -57,9 +56,33 @@ class WorkspaceService:
             return None
         return NotificationService(self.db, self.settings)
 
-    def _dispatch_delivery(self, endpoint: WebhookEndpoint, delivery: WebhookDelivery) -> None:
-        if not self.settings or self.settings.environment == "test":
+    def _queue_delivery_task(self, delivery_id: UUID, *, countdown: int | None = None) -> None:
+        if not self.settings or self.settings.celery_task_always_eager or self.settings.environment == "test":
             return
+        from app.workers.tasks import deliver_webhook_delivery_task
+
+        if countdown and countdown > 0:
+            deliver_webhook_delivery_task.apply_async(args=[str(delivery_id)], countdown=countdown)
+        else:
+            deliver_webhook_delivery_task.apply_async(args=[str(delivery_id)], countdown=5)
+
+    def deliver_webhook_delivery(self, delivery_id: str) -> dict[str, object] | None:
+        delivery = self.db.get(WebhookDelivery, UUID(delivery_id))
+        if not delivery:
+            return None
+        endpoint = self.db.get(WebhookEndpoint, delivery.endpoint_id)
+        if not endpoint or not endpoint.is_active:
+            delivery.status = WebhookDeliveryStatus.exhausted
+            delivery.exhausted_at = datetime.now(UTC)
+            self.db.commit()
+            return webhook_delivery_to_dict(delivery)
+        if not self.settings or self.settings.environment == "test":
+            delivery.attempt_count += 1
+            delivery.last_attempt_at = datetime.now(UTC)
+            delivery.status = WebhookDeliveryStatus.delivered
+            delivery.delivered_at = datetime.now(UTC)
+            self.db.commit()
+            return webhook_delivery_to_dict(delivery)
 
         body = json.dumps(delivery.payload, sort_keys=True, default=str).encode("utf-8")
         request = urllib_request.Request(
@@ -75,6 +98,8 @@ class WorkspaceService:
             },
         )
         delivery.attempt_count += 1
+        delivery.last_attempt_at = datetime.now(UTC)
+        delivery.next_attempt_at = None
         try:
             with urllib_request.urlopen(request, timeout=5) as response:  # pragma: no cover - external I/O
                 response_body = response.read().decode("utf-8", errors="replace")
@@ -92,6 +117,21 @@ class WorkspaceService:
         except Exception as exc:  # pragma: no cover - external I/O
             delivery.status = WebhookDeliveryStatus.failed
             delivery.response_body = str(exc)[:4000]
+
+        if delivery.status == WebhookDeliveryStatus.failed:
+            if delivery.attempt_count >= self.settings.webhook_max_attempts:
+                delivery.status = WebhookDeliveryStatus.exhausted
+                delivery.exhausted_at = datetime.now(UTC)
+            else:
+                retry_delay = self.settings.webhook_retry_base_seconds * (
+                    2 ** max(delivery.attempt_count - 1, 0)
+                )
+                delivery.next_attempt_at = datetime.now(UTC) + timedelta(seconds=retry_delay)
+                self.db.commit()
+                self._queue_delivery_task(delivery.id, countdown=retry_delay)
+                return webhook_delivery_to_dict(delivery)
+        self.db.commit()
+        return webhook_delivery_to_dict(delivery)
 
     def _member(self, workspace_id: str, member_id: str) -> WorkspaceMember:
         member = self.db.scalar(
@@ -304,7 +344,7 @@ class WorkspaceService:
     def create_api_key(self, auth: AuthContext, payload: WorkspaceApiKeyCreateRequest) -> dict[str, object]:
         require_workspace_admin(auth, message="Only workspace admins can manage API keys.")
         role_scope = WorkspaceRole(payload.role_scope)
-        raw_secret = f"rgwk_{generate_token(32)}"
+        raw_secret = f"rg_{generate_token(32)}"
         api_key = WorkspaceApiKey(
             workspace_id=UUID(auth.workspace_id),
             created_by_user_id=UUID(auth.user_id),
@@ -478,6 +518,108 @@ class WorkspaceService:
         self.db.commit()
         return webhook_delivery_to_dict(delivery[0])
 
+    @staticmethod
+    def _auth_configuration_to_dict(configuration: WorkspaceAuthConfiguration) -> dict[str, object]:
+        return {
+            "id": configuration.id,
+            "workspace_id": configuration.workspace_id,
+            "created_by_user_id": configuration.created_by_user_id,
+            "updated_by_user_id": configuration.updated_by_user_id,
+            "provider_type": configuration.provider_type.value,
+            "display_name": configuration.display_name,
+            "config_public": configuration.config_public,
+            "is_enabled": configuration.is_enabled,
+            "last_validated_at": configuration.last_validated_at,
+            "last_validation_error": configuration.last_validation_error,
+            "created_at": configuration.created_at,
+            "updated_at": configuration.updated_at,
+        }
+
+    @staticmethod
+    def _validate_auth_configuration(provider_type: WorkspaceAuthProviderType, config_public: dict[str, object]) -> str | None:
+        if provider_type == WorkspaceAuthProviderType.oidc:
+            required_keys = {"issuer", "client_id"}
+        else:
+            required_keys = {"entity_id", "sso_url"}
+        missing = [key for key in required_keys if not str(config_public.get(key) or "").strip()]
+        if missing:
+            return f"Missing required fields: {', '.join(sorted(missing))}"
+        return None
+
+    def list_auth_configurations(self, auth: AuthContext) -> list[dict[str, object]]:
+        require_workspace_admin(auth, message="Only workspace admins can manage auth configuration.")
+        configurations = self.db.scalars(
+            select(WorkspaceAuthConfiguration)
+            .where(WorkspaceAuthConfiguration.workspace_id == UUID(auth.workspace_id))
+            .order_by(WorkspaceAuthConfiguration.created_at.desc())
+        ).all()
+        return [self._auth_configuration_to_dict(configuration) for configuration in configurations]
+
+    def create_auth_configuration(self, auth: AuthContext, payload) -> dict[str, object]:
+        require_workspace_admin(auth, message="Only workspace admins can manage auth configuration.")
+        provider_type = WorkspaceAuthProviderType(payload.provider_type)
+        validation_error = self._validate_auth_configuration(provider_type, payload.config_public)
+        configuration = WorkspaceAuthConfiguration(
+            workspace_id=UUID(auth.workspace_id),
+            created_by_user_id=UUID(auth.user_id),
+            updated_by_user_id=UUID(auth.user_id),
+            provider_type=provider_type,
+            display_name=payload.display_name,
+            config_public=payload.config_public,
+            secret_payload_encrypted=encrypt_json(self.settings, payload.secret_config),
+            is_enabled=payload.is_enabled,
+            last_validated_at=datetime.now(UTC),
+            last_validation_error=validation_error,
+        )
+        self.db.add(configuration)
+        self.db.flush()
+        record_audit_event(
+            self.db,
+            workspace_id=configuration.workspace_id,
+            user_id=UUID(auth.user_id),
+            event_type="workspace.auth_configuration_created",
+            target_type="workspace_auth_configuration",
+            target_id=str(configuration.id),
+            payload={"provider_type": provider_type.value},
+        )
+        self.db.commit()
+        self.db.refresh(configuration)
+        return self._auth_configuration_to_dict(configuration)
+
+    def update_auth_configuration(self, auth: AuthContext, configuration_id: str, payload) -> dict[str, object]:
+        require_workspace_admin(auth, message="Only workspace admins can manage auth configuration.")
+        configuration = self.db.scalar(
+            select(WorkspaceAuthConfiguration).where(
+                WorkspaceAuthConfiguration.id == UUID(configuration_id),
+                WorkspaceAuthConfiguration.workspace_id == UUID(auth.workspace_id),
+            )
+        )
+        if not configuration:
+            raise ApiError(404, "workspace_auth_configuration_not_found", "Auth configuration not found.")
+        for field_name in ("display_name", "config_public", "is_enabled"):
+            if field_name in payload.model_fields_set:
+                setattr(configuration, field_name, getattr(payload, field_name))
+        if "secret_config" in payload.model_fields_set and payload.secret_config is not None:
+            configuration.secret_payload_encrypted = encrypt_json(self.settings, payload.secret_config)
+        configuration.updated_by_user_id = UUID(auth.user_id)
+        configuration.last_validated_at = datetime.now(UTC)
+        configuration.last_validation_error = self._validate_auth_configuration(
+            configuration.provider_type,
+            configuration.config_public,
+        )
+        record_audit_event(
+            self.db,
+            workspace_id=configuration.workspace_id,
+            user_id=UUID(auth.user_id),
+            event_type="workspace.auth_configuration_updated",
+            target_type="workspace_auth_configuration",
+            target_id=str(configuration.id),
+            payload={},
+        )
+        self.db.commit()
+        self.db.refresh(configuration)
+        return self._auth_configuration_to_dict(configuration)
+
     def emit_workspace_event(
         self,
         workspace_id: UUID,
@@ -517,5 +659,6 @@ class WorkspaceService:
             )
             self.db.add(delivery)
             deliveries.append(delivery)
-            self._dispatch_delivery(endpoint, delivery)
+            self.db.flush()
+            self._queue_delivery_task(delivery.id)
         return deliveries

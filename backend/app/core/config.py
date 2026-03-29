@@ -64,10 +64,22 @@ class Settings(BaseSettings):
     azure_openai_api_key: str | None = None
     azure_openai_api_version: str = "2024-10-21"
     azure_openai_chat_deployment: str | None = None
+    azure_openai_image_deployment: str | None = None
+    azure_openai_image_model: str = "gpt-image-1.5"
+    azure_openai_image_api_version: str = "2025-04-01-preview"
+    azure_openai_speech_deployment: str | None = None
+    azure_openai_speech_model: str = "tts-1-hd"
+    azure_openai_speech_api_version: str = "2025-04-01-preview"
+    azure_openai_speech_voice: str = "alloy"
     azure_content_safety_endpoint: str | None = None
     azure_content_safety_api_key: str | None = None
     azure_content_safety_api_version: str = "2024-09-15-preview"
     azure_content_safety_block_threshold: int = 4
+    vertex_ai_project_id: str | None = None
+    vertex_ai_location: str = "us-central1"
+    vertex_ai_model_id: str = "veo-3.1-generate-001"
+    vertex_ai_access_token: str | None = None
+    vertex_ai_output_storage_uri: str | None = None
     mail_from: str = "noreply@reels.local"
     smtp_host: str = "localhost"
     smtp_port: int = 1025
@@ -78,6 +90,14 @@ class Settings(BaseSettings):
     planning_job_timeout_minutes: int = 30
     render_job_timeout_minutes: int = 120
     local_worker_heartbeat_timeout_seconds: int = 180
+    render_event_stream_heartbeat_seconds: int = 15
+    webhook_max_attempts: int = 5
+    webhook_retry_base_seconds: int = 30
+    export_moderation_sample_rate: float = 0.10
+    export_moderation_lookback_days: int = 30
+    ffmpeg_bin: str = "ffmpeg"
+    ffprobe_bin: str = "ffprobe"
+    ffmpeg_docker_image: str = "jrottenberg/ffmpeg:6.1-alpine"
     allow_export_without_music: bool = True
     use_stub_providers: bool = False
 

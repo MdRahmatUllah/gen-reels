@@ -149,6 +149,7 @@ class WebhookDeliveryStatus(str, enum.Enum):
     queued = "queued"
     delivered = "delivered"
     failed = "failed"
+    exhausted = "exhausted"
 
 
 class SubscriptionStatus(str, enum.Enum):
@@ -191,6 +192,18 @@ class AssetRole(str, enum.Enum):
     final_export = "final_export"
 
 
+class ModerationReportStatus(str, enum.Enum):
+    pending = "pending"
+    released = "released"
+    rejected = "rejected"
+    passed = "passed"
+
+
+class WorkspaceAuthProviderType(str, enum.Enum):
+    oidc = "oidc"
+    saml = "saml"
+
+
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), default=utcnow, nullable=False
@@ -220,6 +233,7 @@ class Workspace(Base, TimestampMixin):
     plan_name: Mapped[str] = mapped_column(sa.String(100), default="Studio", nullable=False)
     seats: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
     credits_remaining: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    credits_reserved: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
     credits_total: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
     monthly_budget_cents: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
 
@@ -471,6 +485,7 @@ class RenderJob(Base, TimestampMixin):
     request_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     allow_export_without_music: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
+    reserved_credits: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
     error_code: Mapped[str | None] = mapped_column(sa.String(64))
     error_message: Mapped[str | None] = mapped_column(sa.Text)
     retry_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
@@ -539,6 +554,8 @@ class Asset(Base, TimestampMixin):
     quarantine_object_name: Mapped[str | None] = mapped_column(sa.String(1024))
     quarantined_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     released_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     has_audio_stream: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
     source_audio_policy: Mapped[str] = mapped_column(
         sa.String(32), default="request_silent", nullable=False
@@ -578,6 +595,11 @@ class ExportRecord(Base, TimestampMixin):
     bucket_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     object_name: Mapped[str] = mapped_column(sa.String(1024), nullable=False, unique=True)
     duration_ms: Mapped[int | None] = mapped_column(sa.Integer)
+    availability_status: Mapped[str] = mapped_column(
+        sa.String(32), default="available", nullable=False
+    )
+    held_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    available_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     subtitle_style_profile: Mapped[dict[str, object]] = mapped_column(
         json_type(), default=dict, nullable=False
     )
@@ -683,6 +705,48 @@ class AuditEvent(Base):
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
 
 
+class RenderEvent(Base):
+    __tablename__ = "render_events"
+    __table_args__ = (
+        UniqueConstraint("render_job_id", "sequence_number", name="uq_render_event_sequence"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    render_job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("render_jobs.id"), nullable=False, index=True)
+    render_step_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_steps.id"))
+    sequence_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    target_type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    target_id: Mapped[str | None] = mapped_column(sa.String(64))
+    payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
+class ModerationReport(Base, TimestampMixin):
+    __tablename__ = "moderation_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    render_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_jobs.id"), index=True)
+    export_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("exports.id"), index=True)
+    related_asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assets.id"), index=True)
+    status: Mapped[ModerationReportStatus] = mapped_column(
+        sa.Enum(ModerationReportStatus),
+        default=ModerationReportStatus.pending,
+        nullable=False,
+    )
+    sample_reason: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    provider_name: Mapped[str] = mapped_column(sa.String(128), default="azure_content_safety", nullable=False)
+    blocked_event_count_30d: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    findings_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    review_notes: Mapped[str | None] = mapped_column(sa.Text)
+
+
 class Subscription(Base, TimestampMixin):
     __tablename__ = "subscriptions"
     __table_args__ = (UniqueConstraint("workspace_id", name="uq_subscription_workspace"),)
@@ -702,6 +766,20 @@ class Subscription(Base, TimestampMixin):
     current_period_start_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     current_period_end_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+
+
+class Plan(Base, TimestampMixin):
+    __tablename__ = "plans"
+    __table_args__ = (UniqueConstraint("slug", name="uq_plan_slug"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    slug: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    name: Mapped[str] = mapped_column(sa.String(100), nullable=False)
+    monthly_credit_allowance: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    monthly_render_limit: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    max_concurrent_renders: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
+    max_scenes_per_render: Mapped[int] = mapped_column(sa.Integer, default=12, nullable=False)
     metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
 
 
@@ -859,6 +937,41 @@ class ReviewRequest(Base, TimestampMixin):
     decided_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
+class NotificationPreference(Base, TimestampMixin):
+    __tablename__ = "notification_preferences"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_notification_preference_user_workspace"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    render_email_enabled: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
+    review_email_enabled: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
+    membership_email_enabled: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
+    moderation_email_enabled: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
+    planning_email_enabled: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
+
+
+class NotificationEvent(Base):
+    __tablename__ = "notification_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    render_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_jobs.id"), index=True)
+    review_request_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("review_requests.id"))
+    event_type: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    body: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    email_delivery_status: Mapped[str | None] = mapped_column(sa.String(32))
+    email_error_message: Mapped[str | None] = mapped_column(sa.Text)
+    read_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
 class WorkspaceApiKey(Base):
     __tablename__ = "workspace_api_keys"
 
@@ -889,6 +1002,24 @@ class WorkspaceProviderCredential(Base, TimestampMixin):
     last_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class WorkspaceAuthConfiguration(Base, TimestampMixin):
+    __tablename__ = "workspace_auth_configurations"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    provider_type: Mapped[WorkspaceAuthProviderType] = mapped_column(
+        sa.Enum(WorkspaceAuthProviderType), nullable=False
+    )
+    display_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    config_public: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    secret_payload_encrypted: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
+    last_validated_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    last_validation_error: Mapped[str | None] = mapped_column(sa.Text)
 
 
 class LocalWorker(Base, TimestampMixin):
@@ -948,7 +1079,7 @@ class WorkspaceExecutionPolicy(Base, TimestampMixin):
         sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
     )
     image_provider_key: Mapped[str] = mapped_column(
-        sa.String(128), default="stub_image_provider", nullable=False
+        sa.String(128), default="azure_openai_image", nullable=False
     )
     image_credential_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("workspace_provider_credentials.id")
@@ -957,7 +1088,7 @@ class WorkspaceExecutionPolicy(Base, TimestampMixin):
         sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
     )
     video_provider_key: Mapped[str] = mapped_column(
-        sa.String(128), default="stub_video_provider", nullable=False
+        sa.String(128), default="veo_video", nullable=False
     )
     video_credential_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("workspace_provider_credentials.id")
@@ -966,12 +1097,17 @@ class WorkspaceExecutionPolicy(Base, TimestampMixin):
         sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
     )
     speech_provider_key: Mapped[str] = mapped_column(
-        sa.String(128), default="stub_speech_provider", nullable=False
+        sa.String(128), default="azure_openai_speech", nullable=False
     )
     speech_credential_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("workspace_provider_credentials.id")
     )
     preferred_local_worker_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("local_workers.id"))
+    pause_render_generation: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    pause_image_generation: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    pause_video_generation: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    pause_audio_generation: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    pause_reason: Mapped[str | None] = mapped_column(sa.Text)
 
 
 class LocalWorkerHeartbeat(Base):
@@ -1017,5 +1153,8 @@ class WebhookDelivery(Base):
     response_status_code: Mapped[int | None] = mapped_column(sa.Integer)
     response_body: Mapped[str | None] = mapped_column(sa.Text)
     attempt_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
     delivered_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    exhausted_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))

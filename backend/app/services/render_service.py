@@ -6,21 +6,32 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
+import redis
+from sqlalchemy import func, select
 
 from app.api.deps import AuthContext
 from app.core.errors import AdapterError, ApiError
 from app.integrations.azure import ModerationProvider
+from app.integrations.media_ops import (
+    compose_reel_export,
+    probe_media_bytes,
+    retime_video_to_target,
+    strip_audio_from_video,
+)
 from app.integrations.media import (
     GeneratedMedia,
     ImageProvider,
+    ImageReference,
     MusicProvider,
     SpeechProvider,
     StubImageProvider,
     StubSpeechProvider,
     StubVideoProvider,
     VideoProvider,
+    build_image_provider,
     build_music_provider,
+    build_speech_provider,
+    build_video_provider,
 )
 from app.integrations.storage import StorageClient, build_storage_client
 from app.models.entities import (
@@ -37,6 +48,8 @@ from app.models.entities import (
     LocalWorker,
     ModerationDecision,
     ModerationEvent,
+    ModerationReport,
+    ModerationReportStatus,
     ModerationReviewStatus,
     Project,
     ProjectStage,
@@ -45,6 +58,7 @@ from app.models.entities import (
     ProviderRun,
     ProviderRunStatus,
     RenderJob,
+    RenderEvent,
     RenderStep,
     ScenePlan,
     SceneSegment,
@@ -57,6 +71,7 @@ from app.schemas.execution import LocalWorkerJobResultRequest
 from app.schemas.renders import RenderCreateRequest
 from app.services.audit_service import record_audit_event
 from app.services.billing_service import BillingService
+from app.services.execution_policy_service import ExecutionPolicyService
 from app.services.generation_service import GenerationService
 from app.services.notification_service import NotificationService
 from app.services.project_profiles import (
@@ -153,6 +168,62 @@ class RenderService(GenerationService):
             .order_by(ExportRecord.created_at.asc())
         ).all()
 
+    @staticmethod
+    def _render_event_channel(render_job_id: UUID) -> str:
+        return f"render-events:{render_job_id}"
+
+    def _append_render_event(
+        self,
+        *,
+        render_job: RenderJob,
+        event_type: str,
+        target_type: str,
+        target_id: str | None,
+        payload: dict[str, object] | None = None,
+        render_step_id: UUID | None = None,
+    ) -> RenderEvent:
+        next_sequence = (
+            self.db.scalar(
+                select(func.max(RenderEvent.sequence_number)).where(
+                    RenderEvent.render_job_id == render_job.id
+                )
+            )
+            or 0
+        ) + 1
+        event = RenderEvent(
+            workspace_id=render_job.workspace_id,
+            project_id=render_job.project_id,
+            render_job_id=render_job.id,
+            render_step_id=render_step_id,
+            sequence_number=next_sequence,
+            event_type=event_type,
+            target_type=target_type,
+            target_id=target_id,
+            payload=payload or {},
+        )
+        self.db.add(event)
+        self.db.flush()
+        try:
+            redis.Redis.from_url(self.settings.redis_url, decode_responses=True).publish(
+                self._render_event_channel(render_job.id),
+                json.dumps(
+                    {
+                        "sequence_number": event.sequence_number,
+                        "at": event.created_at.isoformat() if event.created_at else None,
+                        "render_job_id": str(render_job.id),
+                        "render_step_id": str(render_step_id) if render_step_id else None,
+                        "event_type": event.event_type,
+                        "target_type": event.target_type,
+                        "target_id": event.target_id,
+                        "payload": event.payload,
+                    },
+                    default=str,
+                ),
+            )
+        except Exception:
+            pass
+        return event
+
     def _latest_provider_run_for_step(
         self,
         render_step_id: UUID,
@@ -212,7 +283,9 @@ class RenderService(GenerationService):
             return None
         return self.storage.presigned_get_url(asset.bucket_name, asset.object_name)
 
-    def _export_download_url(self, export: ExportRecord) -> str:
+    def _export_download_url(self, export: ExportRecord) -> str | None:
+        if export.availability_status not in {"available", "released"}:
+            return None
         return self.storage.presigned_get_url(export.bucket_name, export.object_name)
 
     def _render_detail_dict(self, render_job: RenderJob) -> dict[str, object]:
@@ -462,6 +535,14 @@ class RenderService(GenerationService):
         render_job.status = JobStatus.blocked
         render_job.error_code = error_code
         render_job.error_message = error_message
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.blocked",
+            target_type="render_step",
+            target_id=str(step.id),
+            render_step_id=step.id,
+            payload={"error_code": error_code, "error_message": error_message},
+        )
 
     def _recovery_source_step_id(self, render_job: RenderJob, step: RenderStep) -> UUID | None:
         previous_step = self.db.scalar(
@@ -603,9 +684,9 @@ class RenderService(GenerationService):
     @staticmethod
     def _fallback_hosted_decision(modality: str) -> RoutingDecision:
         defaults = {
-            "image": ("stub_image_provider", "stub_image_provider", "stub-image-v1"),
-            "video": ("stub_video_provider", "stub_video_provider", "stub-video-v1"),
-            "speech": ("stub_speech_provider", "stub_speech_provider", "stub-speech-v1"),
+            "image": ("azure_openai_image", "azure_openai_image", "azure-openai-image"),
+            "video": ("veo_video", "veo_video", "veo-video"),
+            "speech": ("azure_openai_speech", "azure_openai_speech", "azure-openai-speech"),
         }
         provider_key, provider_name, provider_model = defaults[modality]
         return RoutingDecision(
@@ -642,17 +723,17 @@ class RenderService(GenerationService):
         workspace_id: UUID,
     ) -> tuple[ImageProvider | None, RoutingDecision]:
         if step.input_payload.get("force_hosted"):
-            return StubImageProvider(), self._fallback_hosted_decision("image")
+            return build_image_provider(self.settings), self._fallback_hosted_decision("image")
         return RoutingService(self.db, self.settings).build_image_provider_for_workspace(workspace_id)
 
     def _video_provider_and_decision(self, step: RenderStep, workspace_id: UUID) -> tuple[VideoProvider | None, RoutingDecision]:
         if step.input_payload.get("force_hosted"):
-            return StubVideoProvider(), self._fallback_hosted_decision("video")
+            return build_video_provider(self.settings), self._fallback_hosted_decision("video")
         return RoutingService(self.db, self.settings).build_video_provider_for_workspace(workspace_id)
 
     def _speech_provider_and_decision(self, step: RenderStep, workspace_id: UUID) -> tuple[SpeechProvider | None, RoutingDecision]:
         if step.input_payload.get("force_hosted"):
-            return StubSpeechProvider(), self._fallback_hosted_decision("speech")
+            return build_speech_provider(self.settings), self._fallback_hosted_decision("speech")
         return RoutingService(self.db, self.settings).build_speech_provider_for_workspace(workspace_id)
 
     def _queue_render_resume(self, render_job_id: UUID) -> None:
@@ -722,6 +803,14 @@ class RenderService(GenerationService):
             target_id=str(render_step.id),
             payload={"render_job_id": str(render_job.id), "provider_run_id": str(provider_run.id)},
         )
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.local_worker_dispatched",
+            target_type="render_step",
+            target_id=str(render_step.id),
+            render_step_id=render_step.id,
+            payload={"provider_run_id": str(provider_run.id)},
+        )
         return provider_run
 
     def handle_local_worker_result(
@@ -760,6 +849,14 @@ class RenderService(GenerationService):
                 render_job.status = JobStatus.queued
                 render_job.error_code = None
                 render_job.error_message = None
+                self._append_render_event(
+                    render_job=render_job,
+                    event_type="render.local_worker_rerouted",
+                    target_type="render_step",
+                    target_id=str(step.id),
+                    render_step_id=step.id,
+                    payload={"provider_run_id": str(provider_run.id)},
+                )
                 self.db.commit()
                 self._queue_render_resume(render_job.id)
                 return {
@@ -781,6 +878,15 @@ class RenderService(GenerationService):
             render_job.error_code = error.code
             render_job.error_message = error.message
             render_job.completed_at = datetime.now(UTC)
+            BillingService(self.db, self.settings).release_render_reservation(render_job, reason="failed")
+            self._append_render_event(
+                render_job=render_job,
+                event_type="render.local_worker_failed",
+                target_type="render_step",
+                target_id=str(step.id),
+                render_step_id=step.id,
+                payload={"error_code": error.code, "error_message": error.message},
+            )
             self.db.commit()
             return {
                 "render_job_id": render_job.id,
@@ -1001,21 +1107,63 @@ class RenderService(GenerationService):
                     "local_worker_output_incomplete",
                     "Narration jobs must return one narration output.",
                 )
+            narration_content_type = narration_output.content_type
+            narration_file_name = narration_output.file_name
+            narration_metadata = {
+                **dict(narration_output.metadata_payload or {}),
+                **dict(payload.provider_metadata or {}),
+                "duration_ms": int((payload.duration_seconds or 1) * 1000),
+            }
+            uploaded_narration_bytes = self.storage.read_bytes(
+                narration_output.bucket_name,
+                narration_output.object_name,
+            )
+            narration_probe = probe_media_bytes(
+                self.settings,
+                file_name=narration_output.file_name,
+                bytes_payload=uploaded_narration_bytes,
+            )
+            narration_stream = next(
+                (
+                    item
+                    for item in narration_probe.get("streams", [])
+                    if item.get("codec_type") == "audio"
+                ),
+                {},
+            )
+            if not narration_stream:
+                fallback_audio = StubSpeechProvider(
+                    provider_name="local_worker_audio_fallback",
+                    provider_model="stub-speech-v1",
+                ).synthesize(
+                    text=str(request_payload.get("narration_text") or segment.narration_text),
+                    scene_index=segment.scene_index,
+                    voice_preset=request_payload.get("voice_preset") if isinstance(request_payload, dict) else None,
+                )
+                self.storage.put_bytes(
+                    narration_output.bucket_name,
+                    narration_output.object_name,
+                    fallback_audio.bytes_payload,
+                    content_type=fallback_audio.content_type,
+                )
+                narration_content_type = fallback_audio.content_type
+                narration_file_name = f"scene-{segment.scene_index:02d}-narration.wav"
+                narration_metadata = {
+                    **narration_metadata,
+                    **fallback_audio.metadata,
+                    "fallback_mode": "local_worker_audio_validation",
+                }
             narration_asset = self._register_uploaded_asset(
                 render_job=render_job,
                 render_step=step,
                 scene_segment=segment,
                 bucket_name=narration_output.bucket_name,
                 object_name=narration_output.object_name,
-                file_name=narration_output.file_name,
-                content_type=narration_output.content_type,
+                file_name=narration_file_name,
+                content_type=narration_content_type,
                 asset_type=AssetType.narration,
                 asset_role=AssetRole.narration_track,
-                metadata_payload={
-                    **dict(narration_output.metadata_payload or {}),
-                    **dict(payload.provider_metadata or {}),
-                    "duration_ms": int((payload.duration_seconds or 1) * 1000),
-                },
+                metadata_payload=narration_metadata,
                 provider_run_id=provider_run.id,
                 has_audio_stream=True,
             )
@@ -1129,7 +1277,15 @@ class RenderService(GenerationService):
                 "consistency_pack_required",
                 "The approved scene plan does not have a resolved consistency pack.",
             )
-        BillingService(self.db, self.settings).ensure_render_credits_available(
+        policy = ExecutionPolicyService(self.db).get_effective_policy(project.workspace_id)
+        if policy.get("pause_render_generation"):
+            raise ApiError(
+                423,
+                "render_generation_paused",
+                str(policy.get("pause_reason") or "Render generation is currently paused for this workspace."),
+            )
+        billing = BillingService(self.db, self.settings)
+        billing.ensure_render_credits_available(
             project.workspace_id,
             scene_plan.scene_count or len(self._scene_segments(scene_plan.id)),
         )
@@ -1182,10 +1338,21 @@ class RenderService(GenerationService):
         )
         self.db.add(render_job)
         self.db.flush()
+        billing.reserve_render_credits(
+            render_job,
+            scene_count=scene_plan.scene_count or len(self._scene_segments(scene_plan.id)),
+        )
         record_audit_event(
             self.db,
             workspace_id=project.workspace_id,
             user_id=UUID(auth.user_id),
+            event_type="render.created",
+            target_type="render_job",
+            target_id=str(render_job.id),
+            payload=request_payload,
+        )
+        self._append_render_event(
+            render_job=render_job,
             event_type="render.created",
             target_type="render_job",
             target_id=str(render_job.id),
@@ -1216,10 +1383,18 @@ class RenderService(GenerationService):
             raise ApiError(400, "render_not_cancellable", "This render can no longer be cancelled.")
         render_job.status = JobStatus.cancelled
         render_job.cancelled_at = datetime.now(UTC)
+        BillingService(self.db, self.settings).release_render_reservation(render_job, reason="cancelled")
         record_audit_event(
             self.db,
             workspace_id=render_job.workspace_id,
             user_id=UUID(auth.user_id),
+            event_type="render.cancelled",
+            target_type="render_job",
+            target_id=str(render_job.id),
+            payload={},
+        )
+        self._append_render_event(
+            render_job=render_job,
             event_type="render.cancelled",
             target_type="render_job",
             target_id=str(render_job.id),
@@ -1234,31 +1409,34 @@ class RenderService(GenerationService):
             raise ApiError(404, "asset_not_found", "Asset not found.")
         return {"asset_id": asset.id, "url": self._asset_download_url(asset)}
 
-    def list_render_events(self, auth: AuthContext, render_job_id: str) -> list[dict[str, object]]:
+    def list_render_events(
+        self,
+        auth: AuthContext,
+        render_job_id: str,
+        *,
+        after_sequence: int | None = None,
+    ) -> list[dict[str, object]]:
         render_job = self._get_render_job_for_auth(auth, render_job_id)
-        step_ids = {str(step.id) for step in self._render_steps(render_job.id)}
-        events = self.db.scalars(
-            select(AuditEvent)
-            .where(AuditEvent.workspace_id == render_job.workspace_id)
-            .order_by(AuditEvent.created_at.asc())
-        ).all()
+        query = (
+            select(RenderEvent)
+            .where(RenderEvent.render_job_id == render_job.id)
+            .order_by(RenderEvent.sequence_number.asc())
+        )
+        if after_sequence:
+            query = query.where(RenderEvent.sequence_number > after_sequence)
+        events = self.db.scalars(query).all()
         return [
             {
+                "sequence_number": event.sequence_number,
                 "at": event.created_at,
+                "render_job_id": event.render_job_id,
+                "render_step_id": event.render_step_id,
                 "event_type": event.event_type,
                 "target_type": event.target_type,
                 "target_id": event.target_id,
                 "payload": event.payload,
             }
             for event in events
-            if (
-                (event.target_type == "render_job" and event.target_id == str(render_job.id))
-                or (event.target_type == "render_step" and (event.target_id or "") in step_ids)
-                or (
-                    event.target_type == "export"
-                    and str(event.payload.get("render_job_id", "")) == str(render_job.id)
-                )
-            )
         ]
 
     def mark_job_retry(self, job_id: str, error: AdapterError) -> None:
@@ -1290,6 +1468,14 @@ class RenderService(GenerationService):
                 running_step,
                 {"status": "queued", "reason": "transient_provider_retry", "error_code": error.code},
             )
+            self._append_render_event(
+                render_job=render_job,
+                event_type="render.step_retry_scheduled",
+                target_type="render_step",
+                target_id=str(running_step.id),
+                render_step_id=running_step.id,
+                payload={"error_code": error.code, "error_message": error.message},
+            )
         self.db.commit()
 
     def mark_job_failed(self, job_id: str, error: AdapterError) -> None:
@@ -1308,7 +1494,23 @@ class RenderService(GenerationService):
         render_job.completed_at = datetime.now(UTC)
         if running_step:
             self._fail_step(running_step, error)
+            self._append_render_event(
+                render_job=render_job,
+                event_type="render.step_failed",
+                target_type="render_step",
+                target_id=str(running_step.id),
+                render_step_id=running_step.id,
+                payload={"error_code": error.code, "error_message": error.message},
+            )
+        BillingService(self.db, self.settings).release_render_reservation(render_job, reason="failed")
         NotificationService(self.db, self.settings).notify_render_failed(render_job, reason=error.message)
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.failed",
+            target_type="render_job",
+            target_id=str(render_job.id),
+            payload={"error_code": error.code, "error_message": error.message},
+        )
         self.db.commit()
 
     def approve_frame_pair(
@@ -1369,6 +1571,14 @@ class RenderService(GenerationService):
             event_type="render.frame_pair_approved",
             target_type="render_step",
             target_id=str(step.id),
+            payload={"render_job_id": str(render_job.id)},
+        )
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.frame_pair_approved",
+            target_type="render_step",
+            target_id=str(step.id),
+            render_step_id=step.id,
             payload={"render_job_id": str(render_job.id)},
         )
         frame_pair_steps = self.db.scalars(
@@ -1509,6 +1719,14 @@ class RenderService(GenerationService):
             target_id=str(step.id),
             payload={"render_job_id": str(render_job.id)},
         )
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.step_retry_requested",
+            target_type="render_step",
+            target_id=str(step.id),
+            render_step_id=step.id,
+            payload={"render_job_id": str(render_job.id)},
+        )
         self.db.commit()
         from app.workers.tasks import execute_render_job_task
 
@@ -1569,16 +1787,32 @@ class RenderService(GenerationService):
                 step,
                 render_job.workspace_id,
             )
+            previous_asset = self.db.get(Asset, UUID(previous_end_asset_id)) if previous_end_asset_id else None
+            ordered_reference_images: list[ImageReference] = []
+            if previous_asset:
+                ordered_reference_images.append(
+                    ImageReference(
+                        asset_id=str(previous_asset.id),
+                        content_type=previous_asset.content_type,
+                        bytes_payload=self.storage.read_bytes(
+                            previous_asset.bucket_name,
+                            previous_asset.object_name,
+                        ),
+                        role="chain_anchor",
+                    )
+                )
             provider_request = {
                 "scene_index": segment.scene_index,
                 "start_prompt": segment.start_image_prompt,
                 "end_prompt": segment.end_image_prompt,
                 "previous_end_asset_id": previous_end_asset_id,
+                "ordered_reference_asset_ids": [
+                    reference.asset_id for reference in ordered_reference_images if reference.asset_id
+                ],
                 "consistency_pack_id": str(render_job.consistency_pack_id),
                 "routing": routing_decision.to_payload(),
             }
             if routing_decision.execution_mode == ExecutionMode.local:
-                previous_asset = self.db.get(Asset, UUID(previous_end_asset_id)) if previous_end_asset_id else None
                 start_object_name = f"{self._scene_object_prefix(render_job, segment.scene_index)}/images/start.png"
                 end_object_name = f"{self._scene_object_prefix(render_job, segment.scene_index)}/images/end.png"
                 local_payload = {
@@ -1653,7 +1887,7 @@ class RenderService(GenerationService):
                     prompt=segment.start_image_prompt,
                     scene_index=segment.scene_index,
                     frame_kind="start",
-                    reference_asset_id=previous_end_asset_id,
+                    reference_images=ordered_reference_images,
                     consistency_pack_state=consistency_pack_state,
                 )
                 start_asset = self._store_generated_asset(
@@ -1673,7 +1907,15 @@ class RenderService(GenerationService):
                     prompt=segment.end_image_prompt,
                     scene_index=segment.scene_index,
                     frame_kind="end",
-                    reference_asset_id=str(start_asset.id),
+                    reference_images=[
+                        ImageReference(
+                            asset_id=str(start_asset.id),
+                            content_type=start_frame.content_type,
+                            bytes_payload=start_frame.bytes_payload,
+                            role="scene_start_frame",
+                        ),
+                        *ordered_reference_images,
+                    ],
                     consistency_pack_state=consistency_pack_state,
                 )
                 end_asset = self._store_generated_asset(
@@ -1775,6 +2017,14 @@ class RenderService(GenerationService):
                     target_id=str(step.id),
                     payload={"render_job_id": str(render_job.id), "scene_index": segment.scene_index},
                 )
+                self._append_render_event(
+                    render_job=render_job,
+                    event_type="render.frame_pair_quarantined",
+                    target_type="render_step",
+                    target_id=str(step.id),
+                    render_step_id=step.id,
+                    payload={"scene_index": segment.scene_index},
+                )
                 self.db.commit()
                 return True
             step.status = JobStatus.review
@@ -1790,6 +2040,14 @@ class RenderService(GenerationService):
                 target_type="render_step",
                 target_id=str(step.id),
                 payload={"render_job_id": str(render_job.id), "scene_index": segment.scene_index},
+            )
+            self._append_render_event(
+                render_job=render_job,
+                event_type="render.frame_pair_ready",
+                target_type="render_step",
+                target_id=str(step.id),
+                render_step_id=step.id,
+                payload={"scene_index": segment.scene_index},
             )
 
         if awaiting_review:
@@ -1844,18 +2102,28 @@ class RenderService(GenerationService):
             step,
             render_job.workspace_id,
         )
+        start_asset = self.db.get(Asset, segment.start_image_asset_id) if segment.start_image_asset_id else None
+        end_asset = self.db.get(Asset, segment.end_image_asset_id) if segment.end_image_asset_id else None
+        if not start_asset or not end_asset:
+            error = AdapterError(
+                "deterministic_input",
+                "frame_pair_assets_missing",
+                "Scene start and end frames are required before video generation.",
+            )
+            self._fail_step(step, error)
+            raise error
         provider_request = {
             "scene_index": segment.scene_index,
             "visual_prompt": segment.visual_prompt,
             "start_image_asset_id": str(segment.start_image_asset_id),
             "end_image_asset_id": str(segment.end_image_asset_id),
             "duration_seconds": segment.target_duration_seconds,
+            "request_silent_output": True,
+            "continuity_mode": "first_last_frame",
             "routing": routing_decision.to_payload(),
         }
         if routing_decision.execution_mode == ExecutionMode.local:
-            start_asset = self.db.get(Asset, segment.start_image_asset_id) if segment.start_image_asset_id else None
-            end_asset = self.db.get(Asset, segment.end_image_asset_id) if segment.end_image_asset_id else None
-            raw_object_name = f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/raw.json"
+            raw_object_name = f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/raw.mp4"
             local_payload = {
                 "step_kind": StepKind.video_generation.value,
                 "modality": "video",
@@ -1873,8 +2141,8 @@ class RenderService(GenerationService):
                             self.settings.minio_bucket_assets,
                             raw_object_name,
                         ),
-                        content_type="application/json",
-                        file_name=f"scene-{segment.scene_index:02d}-raw.json",
+                        content_type="video/mp4",
+                        file_name=f"scene-{segment.scene_index:02d}-raw.mp4",
                     )
                 ],
                 "provider_metadata": {
@@ -1917,8 +2185,13 @@ class RenderService(GenerationService):
                 prompt=segment.visual_prompt,
                 scene_index=segment.scene_index,
                 duration_seconds=segment.target_duration_seconds,
-                start_frame_asset_id=str(segment.start_image_asset_id),
-                end_frame_asset_id=str(segment.end_image_asset_id),
+                start_frame_bytes=self.storage.read_bytes(start_asset.bucket_name, start_asset.object_name),
+                start_frame_content_type=start_asset.content_type,
+                end_frame_bytes=self.storage.read_bytes(end_asset.bucket_name, end_asset.object_name),
+                end_frame_content_type=end_asset.content_type,
+            )
+            provider_run.continuity_mode = str(
+                generated.metadata.get("continuity_mode") or "first_last_frame"
             )
             raw_asset = self._store_generated_asset(
                 render_job=render_job,
@@ -1926,14 +2199,17 @@ class RenderService(GenerationService):
                 scene_segment=segment,
                 generated_media=generated,
                 bucket_name=self.settings.minio_bucket_assets,
-                object_name=f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/raw.json",
-                file_name=f"scene-{segment.scene_index:02d}-raw.json",
+                object_name=(
+                    f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/raw."
+                    f"{generated.file_extension}"
+                ),
+                file_name=f"scene-{segment.scene_index:02d}-raw.{generated.file_extension}",
                 asset_type=AssetType.video_clip,
                 asset_role=AssetRole.raw_video_clip,
                 parent_asset_id=segment.end_image_asset_id,
                 provider_run_id=provider_run.id,
-                has_audio_stream=bool(generated.metadata.get("has_audio_stream", True)),
-                source_audio_policy="strip_after_generation",
+                has_audio_stream=bool(generated.metadata.get("has_audio_stream", False)),
+                source_audio_policy="request_silent",
             )
         except AdapterError as error:
             self._finish_provider_run(provider_run, started_at=started, error=error)
@@ -1984,6 +2260,14 @@ class RenderService(GenerationService):
                 target_id=str(step.id),
                 payload={"render_job_id": str(render_job.id), "scene_index": segment.scene_index},
             )
+            self._append_render_event(
+                render_job=render_job,
+                event_type="render.video_quarantined",
+                target_type="render_step",
+                target_id=str(step.id),
+                render_step_id=step.id,
+                payload={"scene_index": segment.scene_index},
+            )
             self.db.commit()
             return None
         self._complete_step(step, output_payload={"asset_id": str(raw_asset.id)})
@@ -1995,6 +2279,14 @@ class RenderService(GenerationService):
             target_type="render_step",
             target_id=str(step.id),
             payload={"render_job_id": str(render_job.id), "scene_index": segment.scene_index},
+        )
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.scene_video_completed",
+            target_type="render_step",
+            target_id=str(step.id),
+            render_step_id=step.id,
+            payload={"scene_index": segment.scene_index},
         )
         return raw_asset
 
@@ -2017,17 +2309,25 @@ class RenderService(GenerationService):
 
         self._set_step_running(step)
         source_bytes = self.storage.read_bytes(raw_asset.bucket_name, raw_asset.object_name)
+        normalized_bytes, normalized_metadata = strip_audio_from_video(
+            self.settings,
+            source_bytes=source_bytes,
+            source_file_name=raw_asset.file_name,
+        )
         normalized = GeneratedMedia(
             provider_name="internal_audio_normalizer",
-            provider_model="copy-strip-v1",
-            content_type=raw_asset.content_type,
-            file_extension=raw_asset.object_name.split(".")[-1],
-            bytes_payload=source_bytes,
+            provider_model="ffmpeg-strip-audio-v1",
+            content_type="video/mp4" if raw_asset.content_type.startswith("video/") else raw_asset.content_type,
+            file_extension="mp4" if raw_asset.content_type.startswith("video/") else raw_asset.object_name.split(".")[-1],
+            bytes_payload=normalized_bytes,
             metadata={
                 **raw_asset.metadata_payload,
+                **normalized_metadata,
                 "normalized": True,
                 "source_audio_removed": True,
-                "duration_ms": raw_asset.duration_ms or (segment.target_duration_seconds * 1000),
+                "duration_ms": normalized_metadata.get("duration_ms")
+                or raw_asset.duration_ms
+                or (segment.target_duration_seconds * 1000),
             },
         )
         silent_asset = self._store_generated_asset(
@@ -2036,13 +2336,13 @@ class RenderService(GenerationService):
             scene_segment=segment,
             generated_media=normalized,
             bucket_name=self.settings.minio_bucket_assets,
-            object_name=f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/silent.json",
-            file_name=f"scene-{segment.scene_index:02d}-silent.json",
+            object_name=f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/silent.mp4",
+            file_name=f"scene-{segment.scene_index:02d}-silent.mp4",
             asset_type=AssetType.video_clip,
             asset_role=AssetRole.silent_video_clip,
             parent_asset_id=raw_asset.id,
             has_audio_stream=False,
-            source_audio_policy="strip_after_generation",
+            source_audio_policy="request_silent",
         )
         self._create_asset_variant(
             source_asset=raw_asset,
@@ -2146,14 +2446,38 @@ class RenderService(GenerationService):
                 scene_index=segment.scene_index,
                 voice_preset=voice_preset_snapshot,
             )
+            narration_probe = probe_media_bytes(
+                self.settings,
+                file_name=f"scene-{segment.scene_index:02d}-narration.{generated.file_extension}",
+                bytes_payload=generated.bytes_payload,
+            )
+            audio_stream = next(
+                (
+                    item
+                    for item in narration_probe.get("streams", [])
+                    if item.get("codec_type") == "audio"
+                ),
+                {},
+            )
+            narration_duration_ms = int(
+                float((narration_probe.get("format") or {}).get("duration") or 0) * 1000
+            ) or int(generated.metadata.get("duration_ms") or 0)
+            generated.metadata = {
+                **generated.metadata,
+                "duration_ms": narration_duration_ms,
+                "sample_rate": audio_stream.get("sample_rate"),
+            }
             narration_asset = self._store_generated_asset(
                 render_job=render_job,
                 render_step=step,
                 scene_segment=segment,
                 generated_media=generated,
                 bucket_name=self.settings.minio_bucket_assets,
-                object_name=f"{self._scene_object_prefix(render_job, segment.scene_index)}/audio/narration.wav",
-                file_name=f"scene-{segment.scene_index:02d}-narration.wav",
+                object_name=(
+                    f"{self._scene_object_prefix(render_job, segment.scene_index)}/audio/"
+                    f"narration.{generated.file_extension}"
+                ),
+                file_name=f"scene-{segment.scene_index:02d}-narration.{generated.file_extension}",
                 asset_type=AssetType.narration,
                 asset_role=AssetRole.narration_track,
                 provider_run_id=provider_run.id,
@@ -2220,16 +2544,24 @@ class RenderService(GenerationService):
             strategy = "freeze_pad"
         else:
             strategy = "trim"
+        retimed_bytes, retimed_metadata = retime_video_to_target(
+            self.settings,
+            source_bytes=self.storage.read_bytes(silent_asset.bucket_name, silent_asset.object_name),
+            source_file_name=silent_asset.file_name,
+            target_duration_ms=narration_duration_ms,
+        )
         retimed = GeneratedMedia(
             provider_name="internal_retimer",
-            provider_model="timing-align-v1",
-            content_type=silent_asset.content_type,
-            file_extension=silent_asset.object_name.split(".")[-1],
-            bytes_payload=self.storage.read_bytes(silent_asset.bucket_name, silent_asset.object_name),
+            provider_model="ffmpeg-retime-v1",
+            content_type="video/mp4" if silent_asset.content_type.startswith("video/") else silent_asset.content_type,
+            file_extension="mp4" if silent_asset.content_type.startswith("video/") else silent_asset.object_name.split(".")[-1],
+            bytes_payload=retimed_bytes,
             metadata={
                 **silent_asset.metadata_payload,
-                "duration_ms": narration_duration_ms,
-                "timing_alignment_strategy": strategy,
+                **retimed_metadata,
+                "duration_ms": retimed_metadata.get("duration_ms") or narration_duration_ms,
+                "timing_alignment_strategy": retimed_metadata.get("timing_alignment_strategy")
+                or strategy,
             },
         )
         retimed_asset = self._store_generated_asset(
@@ -2238,8 +2570,8 @@ class RenderService(GenerationService):
             scene_segment=segment,
             generated_media=retimed,
             bucket_name=self.settings.minio_bucket_assets,
-            object_name=f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/retimed.json",
-            file_name=f"scene-{segment.scene_index:02d}-retimed.json",
+            object_name=f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/retimed.mp4",
+            file_name=f"scene-{segment.scene_index:02d}-retimed.mp4",
             asset_type=AssetType.video_clip,
             asset_role=AssetRole.retimed_video_clip,
             parent_asset_id=silent_asset.id,
@@ -2288,8 +2620,8 @@ class RenderService(GenerationService):
                 "total_duration_seconds": total_duration_seconds,
                 "audio_mix_profile": audio_mix_profile,
             },
-            provider_name="stub_music_provider",
-            provider_model="stub-music-v1",
+            provider_name="curated_music_library",
+            provider_model="royalty-free-pack-1",
         )
         started = time.perf_counter()
         try:
@@ -2399,6 +2731,26 @@ class RenderService(GenerationService):
         self._complete_step(step, output_payload={"asset_id": str(subtitle_asset.id)})
         return subtitle_asset
 
+    def _should_hold_export_for_moderation(self, render_job: RenderJob) -> tuple[bool, int, str]:
+        lookback = datetime.now(UTC) - timedelta(days=self.settings.export_moderation_lookback_days)
+        blocked_count = int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(ModerationEvent)
+                .where(
+                    ModerationEvent.workspace_id == render_job.workspace_id,
+                    ModerationEvent.decision == ModerationDecision.blocked,
+                    ModerationEvent.created_at >= lookback,
+                )
+            )
+            or 0
+        )
+        if blocked_count > 0:
+            return True, blocked_count, "recent_workspace_block"
+        threshold = int(self.settings.export_moderation_sample_rate * 100)
+        sample_bucket = int(str(render_job.id).replace("-", "")[-2:], 16) % 100
+        return sample_bucket < threshold, blocked_count, "sampled_export"
+
     def _run_composition_stage(
         self,
         *,
@@ -2432,34 +2784,39 @@ class RenderService(GenerationService):
                 return existing_export
 
         self._set_step_running(step)
-        manifest = {
-            "render_job_id": str(render_job.id),
-            "scene_plan_id": str(scene_plan.id),
-            "aspect_ratio": "9:16",
-            "scene_count": len(segments),
-            "scenes": [
-                {
-                    "scene_index": segment.scene_index,
-                    "retimed_video_asset_id": str(video_asset.id),
-                    "narration_asset_id": str(audio_asset.id),
-                }
-                for segment, video_asset, audio_asset in zip(segments, retimed_assets, narration_assets, strict=True)
+        subtitle_text = (
+            self.storage.read_bytes(subtitle_asset.bucket_name, subtitle_asset.object_name).decode("utf-8")
+            if subtitle_asset
+            else None
+        )
+        export_bytes, manifest_bytes, export_metadata = compose_reel_export(
+            self.settings,
+            clip_files=[
+                (video_asset.file_name, self.storage.read_bytes(video_asset.bucket_name, video_asset.object_name))
+                for video_asset in retimed_assets
             ],
-            "music_asset_id": str(music_asset.id) if music_asset else None,
-            "subtitle_asset_id": str(subtitle_asset.id) if subtitle_asset else None,
-            "consistency_pack_id": str(render_job.consistency_pack_id) if render_job.consistency_pack_id else None,
-            "subtitle_style_profile": subtitle_style_profile,
-            "export_profile": export_profile,
-            "audio_mix_profile": audio_mix_profile,
-        }
-        generated = GeneratedMedia(
-            provider_name="internal_stub_composer",
-            provider_model="manifest-export-v1",
-            content_type="application/json",
-            file_extension="json",
-            bytes_payload=json.dumps(manifest, indent=2).encode("utf-8"),
+            narration_files=[
+                (audio_asset.file_name, self.storage.read_bytes(audio_asset.bucket_name, audio_asset.object_name))
+                for audio_asset in narration_assets
+            ],
+            music_file=(
+                (
+                    music_asset.file_name,
+                    self.storage.read_bytes(music_asset.bucket_name, music_asset.object_name),
+                )
+                if music_asset
+                else None
+            ),
+            subtitle_text=subtitle_text,
+        )
+        export_generated = GeneratedMedia(
+            provider_name="internal_ffmpeg_composer",
+            provider_model="ffmpeg-export-v1",
+            content_type="video/mp4",
+            file_extension="mp4",
+            bytes_payload=export_bytes,
             metadata={
-                "duration_ms": sum(asset.duration_ms or 0 for asset in narration_assets),
+                **export_metadata,
                 "scene_count": len(segments),
                 "aspect_ratio": "9:16",
                 "subtitle_style_profile": subtitle_style_profile,
@@ -2471,16 +2828,44 @@ class RenderService(GenerationService):
             render_job=render_job,
             render_step=step,
             scene_segment=None,
-            generated_media=generated,
+            generated_media=export_generated,
             bucket_name=self.settings.minio_bucket_assets,
             object_name=(
                 f"workspace/{render_job.workspace_id}/project/{render_job.project_id}/"
-                f"render/{render_job.id}/exports/final-export.json"
+                f"render/{render_job.id}/exports/final-export.mp4"
             ),
-            file_name="final-export.json",
+            file_name="final-export.mp4",
+            asset_type=AssetType.export,
+            asset_role=AssetRole.final_export,
+            has_audio_stream=True,
+        )
+        manifest_generated = GeneratedMedia(
+            provider_name="internal_ffmpeg_composer",
+            provider_model="ffmpeg-export-manifest-v1",
+            content_type="application/json",
+            file_extension="json",
+            bytes_payload=manifest_bytes,
+            metadata={
+                "sidecar": True,
+                "render_job_id": str(render_job.id),
+                "scene_plan_id": str(scene_plan.id),
+            },
+        )
+        manifest_asset = self._store_generated_asset(
+            render_job=render_job,
+            render_step=step,
+            scene_segment=None,
+            generated_media=manifest_generated,
+            bucket_name=self.settings.minio_bucket_assets,
+            object_name=(
+                f"workspace/{render_job.workspace_id}/project/{render_job.project_id}/"
+                f"render/{render_job.id}/exports/final-export-manifest.json"
+            ),
+            file_name="final-export-manifest.json",
             asset_type=AssetType.export,
             asset_role=AssetRole.final_export,
         )
+        hold_export, blocked_count_30d, sample_reason = self._should_hold_export_for_moderation(render_job)
         export_record = ExportRecord(
             workspace_id=render_job.workspace_id,
             project_id=render_job.project_id,
@@ -2488,27 +2873,49 @@ class RenderService(GenerationService):
             asset_id=export_asset.id,
             status="completed",
             file_name=export_asset.file_name,
-            format=str(export_profile.get("format") or "json"),
+            format=str(export_profile.get("format") or "mp4"),
             bucket_name=export_asset.bucket_name,
             object_name=export_asset.object_name,
-            duration_ms=generated.metadata.get("duration_ms"),
+            duration_ms=export_generated.metadata.get("duration_ms"),
+            availability_status="moderation_hold" if hold_export else "available",
+            held_at=datetime.now(UTC) if hold_export else None,
+            available_at=None if hold_export else datetime.now(UTC),
             subtitle_style_profile=subtitle_style_profile,
             export_profile=export_profile,
             audio_mix_profile=audio_mix_profile,
-            metadata_payload=generated.metadata,
+            metadata_payload={
+                **export_generated.metadata,
+                "manifest_asset_id": str(manifest_asset.id),
+            },
             completed_at=datetime.now(UTC),
         )
         self.db.add(export_record)
         self.db.flush()
+        if hold_export:
+            export_asset.status = "moderation_hold"
+            moderation_report = ModerationReport(
+                workspace_id=render_job.workspace_id,
+                project_id=render_job.project_id,
+                render_job_id=render_job.id,
+                export_id=export_record.id,
+                related_asset_id=export_asset.id,
+                status=ModerationReportStatus.pending,
+                sample_reason=sample_reason,
+                blocked_event_count_30d=blocked_count_30d,
+                findings_payload={"scene_count": len(segments)},
+            )
+            self.db.add(moderation_report)
+        else:
+            export_asset.status = "available"
         self._record_prompt_history(
             render_job=render_job,
             render_step=step,
             scene_segment=None,
             provider_run=None,
-            asset=export_asset,
+            asset=manifest_asset,
             export_id=export_record.id,
             prompt_role="final_composition_manifest",
-            prompt_text=json.dumps(manifest, default=str),
+            prompt_text=manifest_bytes.decode("utf-8"),
             metadata_payload={"scene_count": len(segments)},
         )
         BillingService(self.db, self.settings).capture_export_usage(export_record)
@@ -2521,6 +2928,17 @@ class RenderService(GenerationService):
             target_type="export",
             target_id=str(export_record.id),
             payload={"render_job_id": str(render_job.id)},
+        )
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.completed",
+            target_type="export",
+            target_id=str(export_record.id),
+            render_step_id=step.id,
+            payload={
+                "export_id": str(export_record.id),
+                "availability_status": export_record.availability_status,
+            },
         )
         return export_record
 
@@ -2566,6 +2984,13 @@ class RenderService(GenerationService):
         segments = self._scene_segments(scene_plan.id)
         render_job.status = JobStatus.running
         render_job.started_at = render_job.started_at or datetime.now(UTC)
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.started",
+            target_type="render_job",
+            target_id=str(render_job.id),
+            payload={"scene_count": len(segments)},
+        )
         self.db.commit()
 
         if self._run_frame_pair_stage(
@@ -2642,6 +3067,8 @@ class RenderService(GenerationService):
         render_job.completed_at = datetime.now(UTC)
         render_job.error_code = None
         render_job.error_message = None
+        BillingService(self.db, self.settings).release_render_reservation(render_job, reason="completed")
+        NotificationService(self.db, self.settings).notify_render_completed(render_job)
         self.db.commit()
 
     def expire_stale_render_jobs(self) -> int:
@@ -2679,12 +3106,101 @@ class RenderService(GenerationService):
                         "error_message": "The render expired before completion.",
                     },
                 )
+            BillingService(self.db, self.settings).release_render_reservation(
+                render_job,
+                reason="expired",
+            )
+            self._append_render_event(
+                render_job=render_job,
+                event_type="render.expired",
+                target_type="render_job",
+                target_id=str(render_job.id),
+                payload={"error_code": "job_timeout"},
+            )
             NotificationService(self.db, self.settings).notify_render_failed(
                 render_job,
                 reason=render_job.error_message,
             )
         self.db.commit()
         return len(stale_jobs)
+
+    def process_frame_pair_review_timeouts(self) -> int:
+        threshold = datetime.now(UTC) - timedelta(minutes=max(60, self.settings.render_job_timeout_minutes // 2))
+        steps = self.db.scalars(
+            select(RenderStep).where(
+                RenderStep.step_kind == StepKind.frame_pair_generation,
+                RenderStep.status == JobStatus.review,
+                RenderStep.last_checkpoint_at < threshold,
+            )
+        ).all()
+        updated = 0
+        for step in steps:
+            render_job = self.db.get(RenderJob, step.render_job_id)
+            if not render_job:
+                continue
+            step.status = JobStatus.failed
+            step.error_code = "frame_pair_review_timeout"
+            step.error_message = "Frame-pair review expired before approval."
+            step.completed_at = datetime.now(UTC)
+            render_job.status = JobStatus.failed
+            render_job.error_code = step.error_code
+            render_job.error_message = step.error_message
+            render_job.completed_at = datetime.now(UTC)
+            BillingService(self.db, self.settings).release_render_reservation(
+                render_job,
+                reason="frame_pair_review_timeout",
+            )
+            self._append_render_event(
+                render_job=render_job,
+                event_type="render.review_timeout",
+                target_type="render_step",
+                target_id=str(step.id),
+                render_step_id=step.id,
+                payload={"error_code": step.error_code},
+            )
+            updated += 1
+        if updated:
+            self.db.commit()
+        return updated
+
+    def cleanup_expired_assets(self) -> int:
+        now = datetime.now(UTC)
+        assets = self.db.scalars(
+            select(Asset).where(Asset.expires_at.is_not(None), Asset.expires_at < now, Asset.deleted_at.is_(None))
+        ).all()
+        deleted = 0
+        for asset in assets:
+            try:
+                self.storage.delete_object(asset.bucket_name, asset.object_name)
+            except Exception:
+                pass
+            asset.deleted_at = now
+            asset.status = "deleted"
+            deleted += 1
+        if deleted:
+            self.db.commit()
+        return deleted
+
+    def archive_old_quarantine_records(self) -> int:
+        threshold = datetime.now(UTC) - timedelta(days=7)
+        assets = self.db.scalars(
+            select(Asset).where(
+                Asset.quarantined_at.is_not(None),
+                Asset.quarantined_at < threshold,
+                Asset.status == "quarantined",
+            )
+        ).all()
+        archived = 0
+        for asset in assets:
+            asset.status = "archived_quarantine"
+            asset.metadata_payload = {**dict(asset.metadata_payload or {}), "archived_quarantine": True}
+            archived += 1
+        if archived:
+            self.db.commit()
+        return archived
+
+    def refresh_provider_health(self) -> int:
+        return 1 if build_video_provider(self.settings) else 0
 
     @staticmethod
     def _format_srt_timestamp(total_ms: int) -> str:

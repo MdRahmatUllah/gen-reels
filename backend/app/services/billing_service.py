@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import AuthContext
 from app.core.errors import ApiError
@@ -13,12 +13,17 @@ from app.models.entities import (
     CreditLedgerEntryKind,
     ExecutionMode,
     ExportRecord,
+    JobKind,
+    JobStatus,
+    Plan,
     ProviderRun,
     ProviderRunStatus,
+    RenderJob,
     Subscription,
     SubscriptionStatus,
     Workspace,
     WorkspaceRole,
+    WorkspaceExecutionPolicy,
 )
 from app.services.audit_service import record_audit_event
 
@@ -62,6 +67,81 @@ class BillingService:
 
     def _get_subscription(self, workspace_id: UUID) -> Subscription | None:
         return self.db.scalar(select(Subscription).where(Subscription.workspace_id == workspace_id))
+
+    def _resolve_plan(self, workspace: Workspace) -> Plan | None:
+        plans = self.db.scalars(select(Plan).order_by(Plan.created_at.asc())).all()
+        if not plans:
+            return None
+        requested = (workspace.plan_name or "").strip().lower()
+        for plan in plans:
+            if plan.slug.lower() == requested or plan.name.lower() == requested:
+                return plan
+        for keyword in ("free", "creator", "pro", "studio"):
+            if keyword in requested:
+                for plan in plans:
+                    if plan.slug.lower() == keyword:
+                        return plan
+        for plan in plans:
+            if plan.slug.lower() == "studio":
+                return plan
+        return plans[-1]
+
+    def _plan_limits(self, workspace: Workspace) -> dict[str, int]:
+        plan = self._resolve_plan(workspace)
+        if not plan:
+            return {
+                "monthly_render_limit": 0,
+                "max_concurrent_renders": 1,
+                "max_scenes_per_render": 12,
+            }
+        return {
+            "monthly_render_limit": plan.monthly_render_limit,
+            "max_concurrent_renders": plan.max_concurrent_renders,
+            "max_scenes_per_render": plan.max_scenes_per_render,
+        }
+
+    def _render_usage_for_period(
+        self,
+        workspace_id: UUID,
+        *,
+        period_start: datetime,
+        period_end: datetime,
+    ) -> int:
+        return int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(RenderJob)
+                .where(
+                    RenderJob.workspace_id == workspace_id,
+                    RenderJob.job_kind == JobKind.render_generation,
+                    RenderJob.created_at >= period_start,
+                    RenderJob.created_at < period_end,
+                    RenderJob.status != JobStatus.cancelled,
+                )
+            )
+            or 0
+        )
+
+    def _concurrent_render_count(self, workspace_id: UUID) -> int:
+        return int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(RenderJob)
+                .where(
+                    RenderJob.workspace_id == workspace_id,
+                    RenderJob.job_kind == JobKind.render_generation,
+                    RenderJob.status.in_(
+                        [
+                            JobStatus.queued,
+                            JobStatus.running,
+                            JobStatus.review,
+                            JobStatus.blocked,
+                        ]
+                    ),
+                )
+            )
+            or 0
+        )
 
     def _subscription_to_dict(self, workspace: Workspace, subscription: Subscription | None) -> dict[str, object]:
         if subscription:
@@ -142,6 +222,7 @@ class BillingService:
             "workspace_id": workspace.id,
             "plan_name": workspace.plan_name,
             "credits_remaining": workspace.credits_remaining,
+            "credits_reserved": workspace.credits_reserved,
             "credits_total": workspace.credits_total,
             "monthly_budget_cents": workspace.monthly_budget_cents,
             "current_period_start_at": period_start,
@@ -150,6 +231,12 @@ class BillingService:
             "month_credits_used": month_credits_used,
             "month_export_count": month_export_count,
             "month_provider_run_count": month_provider_run_count,
+            "month_render_count": self._render_usage_for_period(
+                workspace.id,
+                period_start=period_start,
+                period_end=period_end,
+            ),
+            "quota_limits": self._plan_limits(workspace),
             "month_execution_mode_summary": month_execution_mode_summary,
             "recent_entries": [self.ledger_entry_to_dict(entry) for entry in recent_entries],
         }
@@ -236,13 +323,120 @@ class BillingService:
 
     def ensure_render_credits_available(self, workspace_id: UUID, scene_count: int) -> None:
         workspace = self._get_workspace(workspace_id)
+        plan_limits = self._plan_limits(workspace)
+        if plan_limits["max_scenes_per_render"] and scene_count > plan_limits["max_scenes_per_render"]:
+            raise ApiError(
+                400,
+                "render_scene_limit_exceeded",
+                "This render exceeds the maximum scenes allowed by the current plan.",
+            )
+        period_start, period_end = self._subscription_period(self._get_subscription(workspace.id))
+        monthly_limit = plan_limits["monthly_render_limit"]
+        if monthly_limit and self._render_usage_for_period(
+            workspace.id,
+            period_start=period_start,
+            period_end=period_end,
+        ) >= monthly_limit:
+            raise ApiError(
+                429,
+                "monthly_render_quota_exceeded",
+                "This workspace has reached its monthly render quota.",
+            )
+        concurrent_limit = plan_limits["max_concurrent_renders"]
+        if concurrent_limit and self._concurrent_render_count(workspace.id) >= concurrent_limit:
+            raise ApiError(
+                429,
+                "concurrent_render_quota_exceeded",
+                "This workspace has reached its concurrent render limit.",
+            )
         estimated_reserve = self.estimate_render_credit_reserve(scene_count)
-        if workspace.credits_remaining < estimated_reserve:
+        available_credits = workspace.credits_remaining - workspace.credits_reserved
+        if available_credits < estimated_reserve:
             raise ApiError(
                 402,
                 "insufficient_credits",
                 "This workspace does not have enough credits to start the render.",
             )
+
+    def reserve_render_credits(self, render_job: RenderJob, *, scene_count: int) -> int:
+        idempotency_key = f"render-reserve:{render_job.id}"
+        existing = self.db.scalar(
+            select(CreditLedgerEntry).where(CreditLedgerEntry.idempotency_key == idempotency_key)
+        )
+        if existing:
+            return render_job.reserved_credits
+        workspace = self._get_workspace(render_job.workspace_id)
+        reserve = self.estimate_render_credit_reserve(scene_count)
+        self.ensure_render_credits_available(workspace.id, scene_count)
+        workspace.credits_reserved += reserve
+        render_job.reserved_credits = reserve
+        self.db.add(
+            CreditLedgerEntry(
+                workspace_id=workspace.id,
+                project_id=render_job.project_id,
+                render_job_id=render_job.id,
+                kind=CreditLedgerEntryKind.manual_adjustment,
+                billable_unit="render_reservation",
+                quantity=reserve,
+                credits_delta=0,
+                amount_cents=0,
+                currency="USD",
+                balance_after=workspace.credits_remaining,
+                idempotency_key=idempotency_key,
+                metadata_payload={"reserved_credits": reserve},
+            )
+        )
+        return reserve
+
+    def release_render_reservation(self, render_job: RenderJob, *, reason: str) -> None:
+        if render_job.reserved_credits <= 0:
+            return
+        idempotency_key = f"render-reserve-release:{render_job.id}:{reason}"
+        existing = self.db.scalar(
+            select(CreditLedgerEntry).where(CreditLedgerEntry.idempotency_key == idempotency_key)
+        )
+        if existing:
+            render_job.reserved_credits = 0
+            return
+        workspace = self._get_workspace(render_job.workspace_id)
+        released = min(workspace.credits_reserved, render_job.reserved_credits)
+        workspace.credits_reserved = max(0, workspace.credits_reserved - released)
+        render_job.reserved_credits = max(0, render_job.reserved_credits - released)
+        self.db.add(
+            CreditLedgerEntry(
+                workspace_id=workspace.id,
+                project_id=render_job.project_id,
+                render_job_id=render_job.id,
+                kind=CreditLedgerEntryKind.manual_adjustment,
+                billable_unit="render_reservation_release",
+                quantity=released,
+                credits_delta=0,
+                amount_cents=0,
+                currency="USD",
+                balance_after=workspace.credits_remaining,
+                idempotency_key=idempotency_key,
+                metadata_payload={"released_credits": released, "reason": reason},
+            )
+        )
+
+    def quota_headers_for_workspace(self, workspace_id: str | UUID) -> dict[str, str]:
+        workspace = self._get_workspace(workspace_id)
+        subscription = self._get_subscription(workspace.id)
+        period_start, period_end = self._subscription_period(subscription)
+        plan_limits = self._plan_limits(workspace)
+        return {
+            "X-Credits-Remaining": str(workspace.credits_remaining),
+            "X-Credits-Reserved": str(workspace.credits_reserved),
+            "X-Quota-Renders-Used": str(
+                self._render_usage_for_period(
+                    workspace.id,
+                    period_start=period_start,
+                    period_end=period_end,
+                )
+            ),
+            "X-Quota-Renders-Limit": str(plan_limits["monthly_render_limit"]),
+            "X-Quota-Reset": period_end.isoformat(),
+        }
 
     def ledger_entry_to_dict(self, entry: CreditLedgerEntry) -> dict[str, object]:
         return {

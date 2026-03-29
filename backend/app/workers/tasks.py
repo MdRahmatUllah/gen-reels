@@ -10,8 +10,10 @@ from app.integrations.storage import build_storage_client
 from app.services.content_planning_service import ContentPlanningService
 from app.services.generation_service import GenerationService
 from app.services.billing_service import BillingService
+from app.services.notification_service import NotificationService
 from app.services.routing_service import RoutingService
 from app.services.render_service import RenderService
+from app.services.workspace_service import WorkspaceService
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -117,6 +119,26 @@ def execute_render_job_task(self, job_id: str) -> None:
         session.close()
 
 
+@celery_app.task(name="notifications.deliver_email")
+def deliver_notification_email_task(notification_id: str) -> None:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        NotificationService(session, settings).deliver_notification_email(notification_id)
+    finally:
+        session.close()
+
+
+@celery_app.task(name="notifications.deliver_webhook")
+def deliver_webhook_delivery_task(delivery_id: str) -> None:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        WorkspaceService(session, settings).deliver_webhook_delivery(delivery_id)
+    finally:
+        session.close()
+
+
 @celery_app.task(name="planning.expire_stale_jobs")
 def expire_stale_jobs() -> int:
     settings = get_settings()
@@ -153,5 +175,45 @@ def refresh_local_workers() -> int:
     session = get_session_factory(settings.database_url)()
     try:
         return RoutingService(session, settings).refresh_worker_statuses()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="maintenance.process_frame_pair_review_timeouts")
+def process_frame_pair_review_timeouts() -> int:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        return RenderService(session, settings, build_storage_client(settings)).process_frame_pair_review_timeouts()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="maintenance.cleanup_expired_assets")
+def cleanup_expired_assets() -> int:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        return RenderService(session, settings, build_storage_client(settings)).cleanup_expired_assets()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="maintenance.archive_old_quarantine_records")
+def archive_old_quarantine_records() -> int:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        return RenderService(session, settings, build_storage_client(settings)).archive_old_quarantine_records()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="maintenance.refresh_provider_health")
+def refresh_provider_health() -> int:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        return RenderService(session, settings, build_storage_client(settings)).refresh_provider_health()
     finally:
         session.close()

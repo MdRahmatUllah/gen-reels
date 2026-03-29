@@ -10,9 +10,12 @@ from app.core.errors import ApiError
 from app.integrations.storage import StorageClient, build_storage_client
 from app.models.entities import (
     Asset,
+    ExportRecord,
     JobStatus,
     ModerationDecision,
     ModerationEvent,
+    ModerationReport,
+    ModerationReportStatus,
     ModerationReviewStatus,
     ProviderRun,
     RenderJob,
@@ -238,3 +241,73 @@ class AdminService:
                 }
             )
         return summaries
+
+    @staticmethod
+    def _moderation_report_to_dict(report: ModerationReport) -> dict[str, object]:
+        return {
+            "id": report.id,
+            "workspace_id": report.workspace_id,
+            "project_id": report.project_id,
+            "render_job_id": report.render_job_id,
+            "export_id": report.export_id,
+            "related_asset_id": report.related_asset_id,
+            "status": report.status.value,
+            "sample_reason": report.sample_reason,
+            "provider_name": report.provider_name,
+            "blocked_event_count_30d": report.blocked_event_count_30d,
+            "findings_payload": report.findings_payload,
+            "reviewed_by_user_id": report.reviewed_by_user_id,
+            "reviewed_at": report.reviewed_at,
+            "review_notes": report.review_notes,
+            "created_at": report.created_at,
+            "updated_at": report.updated_at,
+        }
+
+    def list_moderation_reports(self, auth: AuthContext, *, status: str | None = None) -> list[dict[str, object]]:
+        self._assert_admin(auth)
+        query = select(ModerationReport).where(ModerationReport.workspace_id == UUID(auth.workspace_id))
+        if status:
+            query = query.where(ModerationReport.status == ModerationReportStatus(status))
+        reports = self.db.scalars(query.order_by(ModerationReport.created_at.desc())).all()
+        return [self._moderation_report_to_dict(report) for report in reports]
+
+    def release_moderation_report(self, auth: AuthContext, report_id: str, *, notes: str | None) -> dict[str, object]:
+        self._assert_admin(auth)
+        report = self.db.get(ModerationReport, UUID(report_id))
+        if not report or str(report.workspace_id) != auth.workspace_id:
+            raise ApiError(404, "moderation_report_not_found", "Moderation report not found.")
+        export_record = self.db.get(ExportRecord, report.export_id) if report.export_id else None
+        asset = self.db.get(Asset, report.related_asset_id) if report.related_asset_id else None
+        if export_record:
+            export_record.availability_status = "released"
+            export_record.available_at = datetime.now(UTC)
+            export_record.held_at = export_record.held_at or datetime.now(UTC)
+        if asset:
+            asset.status = "available"
+            asset.released_at = datetime.now(UTC)
+        report.status = ModerationReportStatus.released
+        report.reviewed_by_user_id = UUID(auth.user_id)
+        report.reviewed_at = datetime.now(UTC)
+        report.review_notes = notes
+        self.db.commit()
+        self.db.refresh(report)
+        return self._moderation_report_to_dict(report)
+
+    def reject_moderation_report(self, auth: AuthContext, report_id: str, *, notes: str | None) -> dict[str, object]:
+        self._assert_admin(auth)
+        report = self.db.get(ModerationReport, UUID(report_id))
+        if not report or str(report.workspace_id) != auth.workspace_id:
+            raise ApiError(404, "moderation_report_not_found", "Moderation report not found.")
+        export_record = self.db.get(ExportRecord, report.export_id) if report.export_id else None
+        asset = self.db.get(Asset, report.related_asset_id) if report.related_asset_id else None
+        if export_record:
+            export_record.availability_status = "rejected"
+        if asset:
+            asset.status = "rejected"
+        report.status = ModerationReportStatus.rejected
+        report.reviewed_by_user_id = UUID(auth.user_id)
+        report.reviewed_at = datetime.now(UTC)
+        report.review_notes = notes
+        self.db.commit()
+        self.db.refresh(report)
+        return self._moderation_report_to_dict(report)

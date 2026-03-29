@@ -27,9 +27,16 @@ services:
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
       AZURE_OPENAI_CHAT_DEPLOYMENT: ${AZURE_OPENAI_CHAT_DEPLOYMENT:-}
+      AZURE_OPENAI_IMAGE_DEPLOYMENT: ${AZURE_OPENAI_IMAGE_DEPLOYMENT:-}
+      AZURE_OPENAI_SPEECH_DEPLOYMENT: ${AZURE_OPENAI_SPEECH_DEPLOYMENT:-}
       AZURE_CONTENT_SAFETY_ENDPOINT: ${AZURE_CONTENT_SAFETY_ENDPOINT:-}
       AZURE_CONTENT_SAFETY_API_KEY: ${AZURE_CONTENT_SAFETY_API_KEY:-}
       AZURE_CONTENT_SAFETY_API_VERSION: ${AZURE_CONTENT_SAFETY_API_VERSION:-2024-09-15-preview}
+      VERTEX_AI_PROJECT_ID: ${VERTEX_AI_PROJECT_ID:-}
+      VERTEX_AI_LOCATION: ${VERTEX_AI_LOCATION:-us-central1}
+      VERTEX_AI_MODEL_ID: ${VERTEX_AI_MODEL_ID:-veo-3.1-generate-001}
+      VERTEX_AI_ACCESS_TOKEN: ${VERTEX_AI_ACCESS_TOKEN:-}
+      VERTEX_AI_OUTPUT_STORAGE_URI: ${VERTEX_AI_OUTPUT_STORAGE_URI:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,10 +89,10 @@ services:
       minio-init:
         condition: service_completed_successfully
 
-  worker-render:
+  worker-frame:
     build:
       context: ./backend
-    command: uv run celery -A app.workers.celery_app.celery_app worker -Q render --loglevel=info
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q frame --loglevel=info
     volumes:
       - ./backend:/app
     environment:
@@ -106,9 +113,144 @@ services:
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
       AZURE_OPENAI_CHAT_DEPLOYMENT: ${AZURE_OPENAI_CHAT_DEPLOYMENT:-}
+      AZURE_OPENAI_IMAGE_DEPLOYMENT: ${AZURE_OPENAI_IMAGE_DEPLOYMENT:-}
+      AZURE_OPENAI_SPEECH_DEPLOYMENT: ${AZURE_OPENAI_SPEECH_DEPLOYMENT:-}
       AZURE_CONTENT_SAFETY_ENDPOINT: ${AZURE_CONTENT_SAFETY_ENDPOINT:-}
       AZURE_CONTENT_SAFETY_API_KEY: ${AZURE_CONTENT_SAFETY_API_KEY:-}
       AZURE_CONTENT_SAFETY_API_VERSION: ${AZURE_CONTENT_SAFETY_API_VERSION:-2024-09-15-preview}
+      VERTEX_AI_PROJECT_ID: ${VERTEX_AI_PROJECT_ID:-}
+      VERTEX_AI_LOCATION: ${VERTEX_AI_LOCATION:-us-central1}
+      VERTEX_AI_MODEL_ID: ${VERTEX_AI_MODEL_ID:-veo-3.1-generate-001}
+      VERTEX_AI_ACCESS_TOKEN: ${VERTEX_AI_ACCESS_TOKEN:-}
+      VERTEX_AI_OUTPUT_STORAGE_URI: ${VERTEX_AI_OUTPUT_STORAGE_URI:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  worker-video:
+    build:
+      context: ./backend
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q video --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://reels:reels@postgres:5432/reels
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_SECURE: "false"
+      MINIO_REGION: us-east-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  worker-audio:
+    build:
+      context: ./backend
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://reels:reels@postgres:5432/reels
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_SECURE: "false"
+      MINIO_REGION: us-east-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  worker-composition:
+    build:
+      context: ./backend
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q composition --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://reels:reels@postgres:5432/reels
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_SECURE: "false"
+      MINIO_REGION: us-east-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  worker-notifications:
+    build:
+      context: ./backend
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q notifications --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://reels:reels@postgres:5432/reels
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_SECURE: "false"
+      MINIO_REGION: us-east-1
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      MAIL_FROM: noreply@reels.local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  worker-maintenance:
+    build:
+      context: ./backend
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q maintenance --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://reels:reels@postgres:5432/reels
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_SECURE: "false"
+      MINIO_REGION: us-east-1
     depends_on:
       postgres:
         condition: service_healthy

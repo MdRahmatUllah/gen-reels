@@ -147,7 +147,7 @@ def test_phase6_brand_kits_workspace_admin_and_webhooks(authenticated_client, se
     )
     assert api_key.status_code == 200
     api_key_payload = api_key.json()
-    assert api_key_payload["api_key"].startswith("rgwk_")
+    assert api_key_payload["api_key"].startswith("rg_")
 
     api_keys = authenticated_client.get("/api/v1/workspace/api-keys")
     assert api_keys.status_code == 200

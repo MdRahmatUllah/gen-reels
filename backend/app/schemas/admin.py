@@ -54,3 +54,21 @@ class AdminRenderSummaryResponse(BaseModel):
     latest_provider_cost_cents: int
     provider_run_count: int
 
+
+class AdminModerationReportResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    project_id: UUID | None
+    render_job_id: UUID | None
+    export_id: UUID | None
+    related_asset_id: UUID | None
+    status: str
+    sample_reason: str
+    provider_name: str
+    blocked_event_count_30d: int
+    findings_payload: dict[str, object]
+    reviewed_by_user_id: UUID | None
+    reviewed_at: datetime | None
+    review_notes: str | None
+    created_at: datetime
+    updated_at: datetime

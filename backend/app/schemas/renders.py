@@ -90,6 +90,9 @@ class ExportResponse(BaseModel):
     bucket_name: str
     object_name: str
     duration_ms: int | None
+    availability_status: str
+    held_at: datetime | None
+    available_at: datetime | None
     subtitle_style_profile: dict[str, object]
     export_profile: dict[str, object]
     audio_mix_profile: dict[str, object]
@@ -130,7 +133,10 @@ class RenderJobResponse(BaseModel):
 
 
 class RenderEventResponse(BaseModel):
+    sequence_number: int
     at: datetime
+    render_job_id: UUID
+    render_step_id: UUID | None = None
     event_type: str
     target_type: str
     target_id: str | None

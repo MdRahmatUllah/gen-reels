@@ -72,5 +72,8 @@ class WebhookDeliveryResponse(BaseModel):
     response_status_code: int | None
     response_body: str | None
     attempt_count: int
+    next_attempt_at: datetime | None
+    last_attempt_at: datetime | None
     created_at: datetime
     delivered_at: datetime | None
+    exhausted_at: datetime | None

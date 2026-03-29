@@ -28,9 +28,9 @@ class PolicyRoute:
 DEFAULT_POLICY = {
     "text": PolicyRoute(ExecutionMode.hosted, "azure_openai_text", None),
     "moderation": PolicyRoute(ExecutionMode.hosted, "azure_content_safety", None),
-    "image": PolicyRoute(ExecutionMode.hosted, "stub_image_provider", None),
-    "video": PolicyRoute(ExecutionMode.hosted, "stub_video_provider", None),
-    "speech": PolicyRoute(ExecutionMode.hosted, "stub_speech_provider", None),
+    "image": PolicyRoute(ExecutionMode.hosted, "azure_openai_image", None),
+    "video": PolicyRoute(ExecutionMode.hosted, "veo_video", None),
+    "speech": PolicyRoute(ExecutionMode.hosted, "azure_openai_speech", None),
 }
 
 
@@ -82,6 +82,11 @@ class ExecutionPolicyService:
                 )
             ),
             "preferred_local_worker_id": policy.preferred_local_worker_id if policy else None,
+            "pause_render_generation": policy.pause_render_generation if policy else False,
+            "pause_image_generation": policy.pause_image_generation if policy else False,
+            "pause_video_generation": policy.pause_video_generation if policy else False,
+            "pause_audio_generation": policy.pause_audio_generation if policy else False,
+            "pause_reason": policy.pause_reason if policy else None,
             "created_at": policy.created_at if policy else None,
             "updated_at": policy.updated_at if policy else None,
         }
@@ -177,6 +182,15 @@ class ExecutionPolicyService:
                 if not worker:
                     raise ApiError(404, "local_worker_not_found", "Preferred local worker not found.")
             policy.preferred_local_worker_id = preferred_worker_id
+        for field_name in (
+            "pause_render_generation",
+            "pause_image_generation",
+            "pause_video_generation",
+            "pause_audio_generation",
+            "pause_reason",
+        ):
+            if field_name in payload.model_fields_set:
+                setattr(policy, field_name, getattr(payload, field_name))
         policy.updated_by_user_id = UUID(auth.user_id)
         record_audit_event(
             self.db,

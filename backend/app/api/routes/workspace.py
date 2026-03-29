@@ -21,6 +21,9 @@ from app.schemas.execution import (
     LocalWorkerResponse,
     ProviderCredentialCreateRequest,
     ProviderCredentialResponse,
+    WorkspaceAuthConfigurationCreateRequest,
+    WorkspaceAuthConfigurationResponse,
+    WorkspaceAuthConfigurationUpdateRequest,
 )
 from app.schemas.workspace import (
     AuditEventResponse,
@@ -244,3 +247,36 @@ def list_webhook_deliveries(
     settings=Depends(get_settings_dep),
 ):
     return WorkspaceService(db, settings).list_webhook_deliveries(auth, endpoint_id)
+
+
+@router.get("/auth-configurations", response_model=list[WorkspaceAuthConfigurationResponse])
+def list_auth_configurations(
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return WorkspaceService(db, settings).list_auth_configurations(auth)
+
+
+@router.post("/auth-configurations", response_model=WorkspaceAuthConfigurationResponse)
+def create_auth_configuration(
+    payload: WorkspaceAuthConfigurationCreateRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return WorkspaceService(db, settings).create_auth_configuration(auth, payload)
+
+
+@router.patch(
+    "/auth-configurations/{configuration_id}",
+    response_model=WorkspaceAuthConfigurationResponse,
+)
+def patch_auth_configuration(
+    configuration_id: str,
+    payload: WorkspaceAuthConfigurationUpdateRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return WorkspaceService(db, settings).update_auth_configuration(auth, configuration_id, payload)

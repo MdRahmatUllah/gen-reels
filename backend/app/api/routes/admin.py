@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import AuthContext, get_db_dep, get_settings_dep, require_auth
 from app.schemas.admin import (
     AdminModerationItemResponse,
+    AdminModerationReportResponse,
     AdminRenderSummaryResponse,
     ModerationReviewRequest,
 )
@@ -55,3 +56,40 @@ def list_admin_renders(
 ):
     return AdminService(db, settings).list_renders(auth, status=status)
 
+
+@router.get("/moderation-reports", response_model=list[AdminModerationReportResponse])
+def list_moderation_reports(
+    status: str | None = Query(default="pending"),
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return AdminService(db, settings).list_moderation_reports(auth, status=status)
+
+
+@router.post(
+    "/moderation-reports/{report_id}:release",
+    response_model=AdminModerationReportResponse,
+)
+def release_moderation_report(
+    report_id: str,
+    payload: ModerationReviewRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return AdminService(db, settings).release_moderation_report(auth, report_id, notes=payload.notes)
+
+
+@router.post(
+    "/moderation-reports/{report_id}:reject",
+    response_model=AdminModerationReportResponse,
+)
+def reject_moderation_report(
+    report_id: str,
+    payload: ModerationReviewRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return AdminService(db, settings).reject_moderation_report(auth, report_id, notes=payload.notes)

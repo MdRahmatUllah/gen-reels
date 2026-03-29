@@ -16,11 +16,14 @@ from app.integrations.azure import (
     TextProvider,
 )
 from app.integrations.media import (
+    AzureOpenAIImageProvider,
+    AzureOpenAISpeechProvider,
     ImageProvider,
     SpeechProvider,
     StubImageProvider,
     StubSpeechProvider,
     StubVideoProvider,
+    VeoVideoProvider,
     VideoProvider,
 )
 from app.models.entities import ExecutionMode, LocalWorker, LocalWorkerStatus, WorkspaceProviderCredential
@@ -291,10 +294,33 @@ class RoutingService:
         )
         if decision.execution_mode == ExecutionMode.local:
             return None, decision
-        return (
-            StubImageProvider(provider_name=decision.provider_name, provider_model=decision.provider_model),
-            decision,
-        )
+        if self.settings.use_stub_providers or self.settings.environment == "test":
+            return (
+                StubImageProvider(provider_name=decision.provider_name, provider_model=decision.provider_model),
+                decision,
+            )
+        if decision.execution_mode == ExecutionMode.byo:
+            return (
+                AzureOpenAIImageProvider(
+                    self.settings,
+                    endpoint=str(decision.public_config.get("endpoint") or self.settings.azure_openai_endpoint or ""),
+                    api_key=str(decision.secret_config.get("api_key") or ""),
+                    deployment=str(
+                        decision.public_config.get("deployment")
+                        or decision.public_config.get("model")
+                        or decision.provider_model
+                    ),
+                    api_version=str(
+                        decision.public_config.get("api_version")
+                        or self.settings.azure_openai_image_api_version
+                    ),
+                    model=str(
+                        decision.public_config.get("model_name") or self.settings.azure_openai_image_model
+                    ),
+                ),
+                decision,
+            )
+        return AzureOpenAIImageProvider(self.settings), decision
 
     def build_video_provider_for_workspace(
         self,
@@ -307,10 +333,16 @@ class RoutingService:
         )
         if decision.execution_mode == ExecutionMode.local:
             return None, decision
-        return (
-            StubVideoProvider(provider_name=decision.provider_name, provider_model=decision.provider_model),
-            decision,
-        )
+        if self.settings.use_stub_providers or self.settings.environment == "test":
+            return (
+                StubVideoProvider(
+                    settings=self.settings,
+                    provider_name=decision.provider_name,
+                    provider_model=decision.provider_model,
+                ),
+                decision,
+            )
+        return VeoVideoProvider(self.settings), decision
 
     def build_speech_provider_for_workspace(
         self,
@@ -319,7 +351,33 @@ class RoutingService:
         decision = self.resolve_runtime_route(workspace_id, "speech", requires_tts=True)
         if decision.execution_mode == ExecutionMode.local:
             return None, decision
-        return (
-            StubSpeechProvider(provider_name=decision.provider_name, provider_model=decision.provider_model),
-            decision,
-        )
+        if self.settings.use_stub_providers or self.settings.environment == "test":
+            return (
+                StubSpeechProvider(provider_name=decision.provider_name, provider_model=decision.provider_model),
+                decision,
+            )
+        if decision.execution_mode == ExecutionMode.byo:
+            return (
+                AzureOpenAISpeechProvider(
+                    self.settings,
+                    endpoint=str(decision.public_config.get("endpoint") or self.settings.azure_openai_endpoint or ""),
+                    api_key=str(decision.secret_config.get("api_key") or ""),
+                    deployment=str(
+                        decision.public_config.get("deployment")
+                        or decision.public_config.get("model")
+                        or decision.provider_model
+                    ),
+                    api_version=str(
+                        decision.public_config.get("api_version")
+                        or self.settings.azure_openai_speech_api_version
+                    ),
+                    model=str(
+                        decision.public_config.get("model_name") or self.settings.azure_openai_speech_model
+                    ),
+                    default_voice=str(
+                        decision.public_config.get("voice") or self.settings.azure_openai_speech_voice
+                    ),
+                ),
+                decision,
+            )
+        return AzureOpenAISpeechProvider(self.settings), decision

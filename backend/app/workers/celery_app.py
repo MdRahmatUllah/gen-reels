@@ -25,10 +25,16 @@ celery_app.conf.update(
         "planning.generate_scene_plan": {"queue": "planning"},
         "planning.generate_prompt_pairs": {"queue": "planning"},
         "planning.expire_stale_jobs": {"queue": "planning"},
-        "render.expire_stale_jobs": {"queue": "render"},
-        "render.execute_job": {"queue": "render"},
-        "billing.reconcile_usage": {"queue": "planning"},
-        "workspace.refresh_local_workers": {"queue": "planning"},
+        "render.expire_stale_jobs": {"queue": "maintenance"},
+        "render.execute_job": {"queue": "frame"},
+        "billing.reconcile_usage": {"queue": "maintenance"},
+        "workspace.refresh_local_workers": {"queue": "maintenance"},
+        "notifications.deliver_email": {"queue": "notifications"},
+        "notifications.deliver_webhook": {"queue": "notifications"},
+        "maintenance.process_frame_pair_review_timeouts": {"queue": "maintenance"},
+        "maintenance.cleanup_expired_assets": {"queue": "maintenance"},
+        "maintenance.archive_old_quarantine_records": {"queue": "maintenance"},
+        "maintenance.refresh_provider_health": {"queue": "maintenance"},
     },
     beat_schedule={
         "expire-stale-planning-jobs": {
@@ -46,6 +52,22 @@ celery_app.conf.update(
         "refresh-local-workers": {
             "task": "workspace.refresh_local_workers",
             "schedule": crontab(minute="*/2"),
+        },
+        "process-frame-pair-review-timeouts": {
+            "task": "maintenance.process_frame_pair_review_timeouts",
+            "schedule": crontab(minute="0"),
+        },
+        "cleanup-expired-assets": {
+            "task": "maintenance.cleanup_expired_assets",
+            "schedule": crontab(hour="2", minute="0"),
+        },
+        "archive-old-quarantine-records": {
+            "task": "maintenance.archive_old_quarantine_records",
+            "schedule": crontab(day_of_week="0", hour="3", minute="0"),
+        },
+        "refresh-provider-health": {
+            "task": "maintenance.refresh_provider_health",
+            "schedule": crontab(minute="*/5"),
         },
     },
 )

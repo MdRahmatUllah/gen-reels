@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, status
+import json
+import time
+
+from fastapi import APIRouter, Depends, Header, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_db_dep, get_settings_dep, require_auth
@@ -111,8 +115,49 @@ def regenerate_frame_pair(
 @standalone_router.get("/{render_job_id}/events", response_model=list[RenderEventResponse])
 def get_render_events(
     render_job_id: str,
+    after_sequence: int | None = Query(default=None),
     auth: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db_dep),
     settings=Depends(get_settings_dep),
 ):
-    return RenderService(db, settings).list_render_events(auth, render_job_id)
+    return RenderService(db, settings).list_render_events(
+        auth,
+        render_job_id,
+        after_sequence=after_sequence,
+    )
+
+
+@standalone_router.get("/{render_job_id}/stream")
+def stream_render_events(
+    render_job_id: str,
+    request: Request,
+    after_sequence: int | None = Query(default=None),
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    service = RenderService(db, settings)
+    render_job = service._get_render_job_for_auth(auth, render_job_id)
+    initial_events = service.list_render_events(auth, render_job_id, after_sequence=after_sequence)
+    redis_client = request.app.state.redis
+
+    async def event_stream():
+        for event in initial_events:
+            yield f"data: {json.dumps(event, default=str)}\n\n"
+        pubsub = redis_client.pubsub()
+        pubsub.subscribe(service._render_event_channel(render_job.id))
+        try:
+            last_heartbeat_at = time.monotonic()
+            while True:
+                if await request.is_disconnected():
+                    break
+                message = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message and message.get("data"):
+                    yield f"data: {message['data']}\n\n"
+                if time.monotonic() - last_heartbeat_at >= settings.render_event_stream_heartbeat_seconds:
+                    yield ": keep-alive\n\n"
+                    last_heartbeat_at = time.monotonic()
+        finally:
+            pubsub.close()
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

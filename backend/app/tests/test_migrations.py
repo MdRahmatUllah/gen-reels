@@ -42,6 +42,12 @@ def test_alembic_upgrade_and_downgrade(tmp_path: Path, monkeypatch):
     assert "workspace_execution_policies" in inspector.get_table_names()
     assert "local_workers" in inspector.get_table_names()
     assert "local_worker_heartbeats" in inspector.get_table_names()
+    assert "render_events" in inspector.get_table_names()
+    assert "moderation_reports" in inspector.get_table_names()
+    assert "plans" in inspector.get_table_names()
+    assert "notification_preferences" in inspector.get_table_names()
+    assert "notification_events" in inspector.get_table_names()
+    assert "workspace_auth_configurations" in inspector.get_table_names()
 
     command.downgrade(alembic_cfg, "base")
     inspector = inspect(engine)

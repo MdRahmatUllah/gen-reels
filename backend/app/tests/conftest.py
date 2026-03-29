@@ -12,7 +12,7 @@ from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import configure_session_factory, get_engine, get_session_factory
 from app.main import create_app
-from app.models.entities import Project, User, Workspace, WorkspaceMember, WorkspaceRole
+from app.models.entities import Plan, Project, User, Workspace, WorkspaceMember, WorkspaceRole
 
 
 @pytest.fixture
@@ -50,6 +50,42 @@ def seeded_auth(client: TestClient):
     settings = get_settings()
     session = get_session_factory(settings.database_url)()
     try:
+        session.add_all(
+            [
+                Plan(
+                    slug="free",
+                    name="Free",
+                    monthly_credit_allowance=100,
+                    monthly_render_limit=3,
+                    max_concurrent_renders=1,
+                    max_scenes_per_render=10,
+                ),
+                Plan(
+                    slug="creator",
+                    name="Creator",
+                    monthly_credit_allowance=1000,
+                    monthly_render_limit=20,
+                    max_concurrent_renders=2,
+                    max_scenes_per_render=18,
+                ),
+                Plan(
+                    slug="pro",
+                    name="Pro",
+                    monthly_credit_allowance=5000,
+                    monthly_render_limit=100,
+                    max_concurrent_renders=4,
+                    max_scenes_per_render=24,
+                ),
+                Plan(
+                    slug="studio",
+                    name="Studio",
+                    monthly_credit_allowance=25000,
+                    monthly_render_limit=500,
+                    max_concurrent_renders=10,
+                    max_scenes_per_render=40,
+                ),
+            ]
+        )
         user = User(
             email="admin@example.com",
             full_name="Reels Admin",

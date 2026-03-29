@@ -50,6 +50,11 @@ class ExecutionPolicyUpdateRequest(BaseModel):
     video: ModalityExecutionPolicyRequest | None = None
     speech: ModalityExecutionPolicyRequest | None = None
     preferred_local_worker_id: UUID | None = None
+    pause_render_generation: bool | None = None
+    pause_image_generation: bool | None = None
+    pause_video_generation: bool | None = None
+    pause_audio_generation: bool | None = None
+    pause_reason: str | None = None
 
 
 class ExecutionPolicyResponse(BaseModel):
@@ -61,8 +66,43 @@ class ExecutionPolicyResponse(BaseModel):
     video: ModalityExecutionPolicyResponse
     speech: ModalityExecutionPolicyResponse
     preferred_local_worker_id: UUID | None
+    pause_render_generation: bool = False
+    pause_image_generation: bool = False
+    pause_video_generation: bool = False
+    pause_audio_generation: bool = False
+    pause_reason: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class WorkspaceAuthConfigurationCreateRequest(BaseModel):
+    provider_type: Literal["oidc", "saml"]
+    display_name: str = Field(min_length=1, max_length=255)
+    config_public: dict[str, object] = Field(default_factory=dict)
+    secret_config: dict[str, str] = Field(default_factory=dict)
+    is_enabled: bool = True
+
+
+class WorkspaceAuthConfigurationUpdateRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    config_public: dict[str, object] | None = None
+    secret_config: dict[str, str] | None = None
+    is_enabled: bool | None = None
+
+
+class WorkspaceAuthConfigurationResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    created_by_user_id: UUID | None
+    updated_by_user_id: UUID | None
+    provider_type: str
+    display_name: str
+    config_public: dict[str, object]
+    is_enabled: bool
+    last_validated_at: datetime | None
+    last_validation_error: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class LocalWorkerRegisterRequest(BaseModel):

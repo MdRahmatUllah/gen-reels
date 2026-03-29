@@ -14,10 +14,12 @@ from sqlalchemy import text
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.errors import ApiError
+from app.core.jwt import decode_token
 from app.core.logging import CorrelationIdMiddleware, configure_logging
 from app.core.rate_limit import RateLimitMiddleware
-from app.db.session import get_engine
+from app.db.session import get_engine, get_session_factory
 from app.integrations.storage import build_storage_client
+from app.services.billing_service import BillingService
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,29 @@ def create_app() -> FastAPI:
     app.add_middleware(CorrelationIdMiddleware)
     app.add_middleware(RateLimitMiddleware)
     app.include_router(api_router, prefix=get_settings().api_v1_prefix)
+
+    @app.middleware("http")
+    async def quota_headers_middleware(request: Request, call_next):
+        response = await call_next(request)
+        settings = request.app.state.settings
+        token = request.cookies.get(settings.access_cookie_name)
+        if not token:
+            return response
+        try:
+            payload = decode_token(token, settings.jwt_public_key_resolved, expected_type="access")
+            workspace_id = payload.get("workspace_id")
+            if not workspace_id:
+                return response
+            session = get_session_factory(settings.database_url)()
+            try:
+                headers = BillingService(session, settings).quota_headers_for_workspace(workspace_id)
+            finally:
+                session.close()
+            for name, value in headers.items():
+                response.headers[name] = value
+        except Exception:
+            return response
+        return response
 
     @app.exception_handler(ApiError)
     async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
