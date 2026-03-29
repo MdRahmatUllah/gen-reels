@@ -43,9 +43,16 @@
 - The provider settings model now supports provider selection plus user-entered model names and deployment-like metadata rather than assuming a single hardcoded provider.
 - Azure-focused routing can be selected for text generation through the platform configuration flow.
 
+## Validation Flow In Use
+- `POST /api/v1/workspace/provider-credentials/{credential_id}:validate` is implemented and persists validation metadata on the credential record.
+- Supported Azure-backed providers perform an outbound backend validation check instead of config-only validation.
+- `azure_openai_text` uses a low-cost live chat-completions probe.
+- `azure_openai_image` and `azure_openai_speech` use deployment endpoint probes that validate endpoint, API version, deployment path, and API key without activating those routes from the browser.
+- `azure_content_safety` performs a live moderation probe against the configured endpoint.
+- Providers that are currently storage-only in the UI return an explicit `unsupported` validation status rather than a misleading success state.
+- Network or provider outages return an explicit `unreachable` validation status so users can distinguish connectivity issues from bad credentials.
+
 ## Remaining Gaps
-- Add `POST /api/v1/workspace/provider-credentials/{credential_id}:validate` or equivalent validation-on-save semantics with persisted validation status.
-- Surface `last_validated_at`, validation status, and validation error details in a first-class way once backend validation exists.
 - Expand runtime provider adapters for providers that are currently stored in the UI but not yet fully routable.
 
 ## Development Architecture Rules

@@ -43,7 +43,6 @@
 
 ## Remaining Screen Work
 - Admin queue/workspace pages still need contract alignment or scope reduction.
-- Legacy routes still using `mock-api.ts` should be moved onto shared live adapters.
 - The live path should stop depending on `mock-service.ts` wrappers where direct hook-to-live-api usage is practical.
 
 ## Optimistic Update Rules

@@ -11,8 +11,8 @@
 - [x] Error response handling contract normalized for the frontend client
 - [x] Project render list or equivalent summary route added
 - [x] Provider credential update endpoint added
-- [ ] Provider credential validation behavior added
-- [ ] Any required admin workspace summary contract added or frontend admin scope trimmed
+- [x] Provider credential validation behavior added
+- [x] Any required admin workspace summary contract added or frontend admin scope trimmed
 
 ## Frontend Readiness Checklist
 - [x] `api-client.ts` handles nested backend error envelopes
@@ -24,8 +24,8 @@
 - [x] Brand kits are live-backed
 - [x] Scene comments are live-backed
 - [x] Template cloning is live-backed
-- [ ] Hooks under `frontend/src/hooks` no longer depend on `mock-service.ts` in the live path
-- [ ] Legacy route pages no longer depend on `mock-api.ts` in the live path
+- [x] Hooks under `frontend/src/hooks` no longer depend on `mock-service.ts` in the live path
+- [x] Legacy route pages no longer depend on `mock-api.ts` in the live path
 
 ## Verification Checklist
 - [x] Frontend build passes
@@ -36,13 +36,13 @@
 - [x] Brief -> ideas -> script -> scenes -> renders -> exports works in live mode
 - [x] Workspace switch updates backend-backed shell state
 - [x] Provider credential create/update/revoke works from UI
-- [ ] Provider credential validate works from UI
+- [x] Provider credential validate works from UI with persisted status, provider error details, and remote Azure connectivity checks for supported providers
 - [x] No raw secret is exposed in list/detail responses
 
 ## Mock Cleanup Checklist
 - [x] `components/ui.tsx` no longer reads shell data from local-only mocks
-- [ ] Hooks under `frontend/src/hooks` no longer use `mock-service.ts` as a compatibility layer
-- [ ] Legacy route pages no longer use `mock-api.ts` for live mode
+- [x] Hooks under `frontend/src/hooks` no longer use `mock-service.ts` as a compatibility layer for live mode
+- [x] Legacy route pages no longer use `mock-api.ts` for live mode
 - [ ] Remaining mock code, if any, is explicitly isolated for mock-only mode
 
 ## Rollout Smoke Test
@@ -59,4 +59,4 @@
 - The frontend can operate in live mode through the real backend for the target creator workflow and current settings/collaboration screens.
 - Static dev login is preserved as a simple seeded backend login flow.
 - Platform-managed provider credentials are implemented as the backend-owned source of runtime secrets.
-- The remaining work is now narrow and explicit: provider validation, admin alignment, mock-wrapper cleanup, and fuller automated verification.
+- The remaining work is now narrow and explicit: admin alignment, further mock-wrapper cleanup, broader provider runtime support, and fuller automated verification.

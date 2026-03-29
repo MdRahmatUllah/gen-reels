@@ -108,6 +108,8 @@ function formatDate(value: string | null): string {
 function validationBadgeStatus(credential: ProviderCredentialRecord): string {
   if (credential.validationStatus === "valid") return "validated";
   if (credential.validationStatus === "invalid") return "invalid";
+  if (credential.validationStatus === "unsupported") return "validation unavailable";
+  if (credential.validationStatus === "unreachable") return "provider unreachable";
   return "not validated";
 }
 
@@ -483,7 +485,11 @@ export function ProviderSettingsPage() {
                         <span className="text-xs text-slate-500">
                           {credential.validationStatus === "not_validated"
                             ? "Not validated yet"
-                            : `Validated ${formatDate(credential.lastValidatedAt)}`}
+                            : credential.validationStatus === "unsupported"
+                              ? "Remote validation is not available for this provider yet"
+                              : credential.validationStatus === "unreachable"
+                                ? `Last validation attempt ${formatDate(credential.lastValidatedAt)}`
+                                : `Validated ${formatDate(credential.lastValidatedAt)}`}
                         </span>
                         {credential.validationError ? (
                           <span className="text-xs text-rose-300">{credential.validationError}</span>

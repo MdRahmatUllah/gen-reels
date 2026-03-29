@@ -465,7 +465,12 @@ export interface AdminRenderRow {
 export type ExecutionMode = "hosted" | "byo" | "local";
 export type ProviderModality = "text" | "moderation" | "image" | "video" | "speech";
 export type ProviderGenerationType = "text" | "moderation" | "image" | "video" | "audio";
-export type ProviderValidationStatus = "not_validated" | "valid" | "invalid";
+export type ProviderValidationStatus =
+  | "not_validated"
+  | "valid"
+  | "invalid"
+  | "unsupported"
+  | "unreachable";
 
 export interface ProviderCatalogField {
   key: "endpoint" | "apiVersion" | "deployment" | "modelName" | "voice" | "apiKey";

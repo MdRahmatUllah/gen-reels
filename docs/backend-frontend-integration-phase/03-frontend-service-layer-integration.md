@@ -14,7 +14,7 @@
 - [frontend/src/lib/live-api.ts](f:/my-projects/reels-generation/frontend/src/lib/live-api.ts): endpoint-specific live calls plus DTO-to-UI mapping
 - [frontend/src/lib/provider-catalog.ts](f:/my-projects/reels-generation/frontend/src/lib/provider-catalog.ts): provider/type/model metadata used by the settings UI
 - [frontend/src/lib/mock-service.ts](f:/my-projects/reels-generation/frontend/src/lib/mock-service.ts): transitional compatibility layer that routes to live adapters in live mode
-- [frontend/src/lib/mock-api.ts](f:/my-projects/reels-generation/frontend/src/lib/mock-api.ts): older mock-only layer still used by some legacy pages
+- `mock-api.ts`: retired after the legacy route layer was moved onto the shared service path
 
 ## Query Key Strategy In Practice
 - `["auth", "session"]`
@@ -60,8 +60,8 @@
 - Keep mock mode only as an explicit alternate adapter path.
 
 ### Legacy Route Cleanup
-- Replace remaining `mock-api.ts` imports in [frontend/src/routes/app-pages.tsx](f:/my-projects/reels-generation/frontend/src/routes/app-pages.tsx) and [frontend/src/routes/admin-pages.tsx](f:/my-projects/reels-generation/frontend/src/routes/admin-pages.tsx).
-- Route legacy pages through the same live services/hooks already used by feature pages.
+- Keep legacy pages routed through the same live services/hooks already used by feature pages.
+- Avoid reintroducing a second mock adapter layer after retiring `mock-api.ts`.
 
 ### Test Coverage
 - Add focused mapper tests around auth, project summaries, render summaries, provider credentials, and local workers.

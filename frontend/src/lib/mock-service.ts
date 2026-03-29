@@ -1,7 +1,7 @@
 /**
  * Stateful mock service that simulates the backend API.
  * All data lives in-memory. Idea and script generation use realistic delays.
- * This replaces the old static mock-api.ts for Phase 1 interactive flows.
+ * This is the remaining explicit mock-mode adapter after retiring the old mock-api layer.
  */
 import type {
   AuthSession,

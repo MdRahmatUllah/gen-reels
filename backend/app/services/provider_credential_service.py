@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 from uuid import UUID
 
+import httpx
 from sqlalchemy import select
 
 from app.api.deps import AuthContext
@@ -122,6 +123,168 @@ class ProviderCredentialService:
             errors.append("Endpoint must be a valid http or https URL.")
 
         return errors
+
+    @staticmethod
+    def _validation_probe_error(response: httpx.Response) -> str | None:
+        status_code = response.status_code
+        response_text = response.text.strip()
+        lowered = response_text.lower()
+
+        if status_code < 400:
+            return None
+        if status_code in {401, 403}:
+            return "The provider rejected the supplied API key."
+        if status_code == 404:
+            return "The configured endpoint, deployment, or API version could not be found."
+        if status_code in {400, 405, 422}:
+            if any(
+                token in lowered
+                for token in (
+                    "api-version",
+                    "unsupported api version",
+                    "deployment not found",
+                    "resource not found",
+                    "no route matched",
+                )
+            ):
+                return "The configured endpoint, deployment, or API version was rejected by the provider."
+            if any(
+                token in lowered
+                for token in (
+                    "missing",
+                    "required",
+                    "invalid request",
+                    "expected",
+                    "must provide",
+                    "body",
+                    "json",
+                    "voice",
+                    "prompt",
+                    "messages",
+                    "input",
+                )
+            ):
+                return None
+        if status_code >= 500:
+            return "The provider is temporarily unavailable, so validation could not complete."
+        return response_text[:300] if response_text else f"Validation failed with HTTP {status_code}."
+
+    @staticmethod
+    def _azure_endpoint(public_config: dict[str, object]) -> str:
+        return str(public_config.get("endpoint") or "").strip().rstrip("/")
+
+    def _validate_azure_openai_text(
+        self,
+        public_config: dict[str, object],
+        secret_config: dict[str, object],
+    ) -> tuple[str, str | None]:
+        endpoint = self._azure_endpoint(public_config)
+        api_version = str(public_config.get("api_version") or "").strip()
+        deployment = str(public_config.get("deployment") or "").strip()
+        api_key = str(secret_config.get("api_key") or "").strip()
+        try:
+            response = httpx.post(
+                f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}",
+                headers={"api-key": api_key, "Content-Type": "application/json"},
+                json={
+                    "messages": [{"role": "user", "content": "Reply with ok."}],
+                    "temperature": 0,
+                    "max_tokens": 1,
+                },
+                timeout=20.0,
+            )
+        except httpx.TimeoutException:
+            return "unreachable", "Azure OpenAI timed out before validation completed."
+        except httpx.HTTPError as exc:
+            return "unreachable", f"Azure OpenAI could not be reached: {exc}"
+
+        if response.status_code in {408, 429} or response.status_code >= 500:
+            return "unreachable", "Azure OpenAI is temporarily unavailable, so validation could not complete."
+        error_message = self._validation_probe_error(response)
+        return ("invalid", error_message) if error_message else ("valid", None)
+
+    def _validate_azure_openai_probe(
+        self,
+        public_config: dict[str, object],
+        secret_config: dict[str, object],
+        *,
+        path: str,
+    ) -> tuple[str, str | None]:
+        endpoint = self._azure_endpoint(public_config)
+        api_version = str(public_config.get("api_version") or "").strip()
+        deployment = str(public_config.get("deployment") or "").strip()
+        api_key = str(secret_config.get("api_key") or "").strip()
+        try:
+            response = httpx.post(
+                f"{endpoint}/openai/deployments/{deployment}/{path}?api-version={api_version}",
+                headers={"api-key": api_key, "Content-Type": "application/json"},
+                json={},
+                timeout=20.0,
+            )
+        except httpx.TimeoutException:
+            return "unreachable", "Azure OpenAI timed out before validation completed."
+        except httpx.HTTPError as exc:
+            return "unreachable", f"Azure OpenAI could not be reached: {exc}"
+
+        if response.status_code in {408, 429} or response.status_code >= 500:
+            return "unreachable", "Azure OpenAI is temporarily unavailable, so validation could not complete."
+        error_message = self._validation_probe_error(response)
+        return ("invalid", error_message) if error_message else ("valid", None)
+
+    def _validate_azure_content_safety(
+        self,
+        public_config: dict[str, object],
+        secret_config: dict[str, object],
+    ) -> tuple[str, str | None]:
+        endpoint = self._azure_endpoint(public_config)
+        api_version = str(public_config.get("api_version") or "").strip()
+        api_key = str(secret_config.get("api_key") or "").strip()
+        try:
+            response = httpx.post(
+                f"{endpoint}/contentsafety/text:analyze?api-version={api_version}",
+                headers={
+                    "Ocp-Apim-Subscription-Key": api_key,
+                    "Content-Type": "application/json",
+                },
+                json={"text": "Validation probe"},
+                timeout=20.0,
+            )
+        except httpx.TimeoutException:
+            return "unreachable", "Azure Content Safety timed out before validation completed."
+        except httpx.HTTPError as exc:
+            return "unreachable", f"Azure Content Safety could not be reached: {exc}"
+
+        if response.status_code in {408, 429} or response.status_code >= 500:
+            return "unreachable", "Azure Content Safety is temporarily unavailable, so validation could not complete."
+        error_message = self._validation_probe_error(response)
+        return ("invalid", error_message) if error_message else ("valid", None)
+
+    def _validate_remote_provider(
+        self,
+        credential: WorkspaceProviderCredential,
+        secret_config: dict[str, object],
+    ) -> tuple[str, str | None]:
+        public_config = dict(credential.public_config or {})
+        if credential.provider_key == "azure_openai_text":
+            return self._validate_azure_openai_text(public_config, secret_config)
+        if credential.provider_key == "azure_openai_image":
+            return self._validate_azure_openai_probe(
+                public_config,
+                secret_config,
+                path="images/generations",
+            )
+        if credential.provider_key == "azure_openai_speech":
+            return self._validate_azure_openai_probe(
+                public_config,
+                secret_config,
+                path="audio/speech",
+            )
+        if credential.provider_key == "azure_content_safety":
+            return self._validate_azure_content_safety(public_config, secret_config)
+        return (
+            "unsupported",
+            "Remote validation is not implemented for this provider in the current build.",
+        )
 
     def _credential(
         self,
@@ -278,10 +441,14 @@ class ProviderCredentialService:
         secret_config = decrypt_json(self.settings, credential.secret_payload_encrypted)
         errors = self._validate_secret_and_config(credential, secret_config)
         validated_at = datetime.now(UTC)
-        error_message = "; ".join(errors) if errors else None
+        if errors:
+            status = "invalid"
+            error_message = "; ".join(errors)
+        else:
+            status, error_message = self._validate_remote_provider(credential, secret_config)
         self._set_validation_metadata(
             credential,
-            status="invalid" if errors else "valid",
+            status=status,
             validated_at=validated_at,
             error_message=error_message,
         )
@@ -292,7 +459,7 @@ class ProviderCredentialService:
             event_type="workspace.provider_credential_validated",
             target_type="workspace_provider_credential",
             target_id=str(credential.id),
-            payload={"status": "invalid" if errors else "valid", "provider_key": credential.provider_key},
+            payload={"status": status, "provider_key": credential.provider_key},
         )
         self.db.commit()
         self.db.refresh(credential)

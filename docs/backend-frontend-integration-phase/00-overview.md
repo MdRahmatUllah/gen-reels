@@ -20,7 +20,6 @@
 - Frontend live adapter layer: [frontend/src/lib/live-api.ts](f:/my-projects/reels-generation/frontend/src/lib/live-api.ts)
 - Frontend auth/session bridge: [frontend/src/lib/auth.tsx](f:/my-projects/reels-generation/frontend/src/lib/auth.tsx)
 - Frontend mock wrapper still used as a compatibility layer: [frontend/src/lib/mock-service.ts](f:/my-projects/reels-generation/frontend/src/lib/mock-service.ts)
-- Frontend legacy mock data layer: [frontend/src/lib/mock-api.ts](f:/my-projects/reels-generation/frontend/src/lib/mock-api.ts)
 - Frontend provider UI: [frontend/src/features/settings/ProviderSettingsPage.tsx](f:/my-projects/reels-generation/frontend/src/features/settings/ProviderSettingsPage.tsx)
 - Backend API router: [backend/app/api/router.py](f:/my-projects/reels-generation/backend/app/api/router.py)
 - Backend auth routes: [backend/app/api/routes/auth.py](f:/my-projects/reels-generation/backend/app/api/routes/auth.py)
@@ -56,8 +55,8 @@
 - Several screens still pass through `mock-service.ts` as a compatibility adapter, even though the live path underneath now uses backend APIs.
 
 ## Remaining Risks
-- The live path is not yet fully isolated from `mock-service.ts` and `mock-api.ts`, which makes future maintenance noisier than it needs to be.
-- Provider credential validation is not yet a dedicated backend-validated flow with persisted validation status.
+- The live path is not yet fully isolated from `mock-service.ts`, which makes future maintenance noisier than it needs to be.
+- Provider credential validation is implemented with persisted status metadata, including remote Azure validation for supported runtime providers and explicit unsupported/unreachable states for the rest.
 - Admin/workspace screens still do not align 1:1 with backend admin contracts.
 - Not all stored provider options are routable at runtime yet; some are storage-only until provider adapters are added.
 
@@ -73,8 +72,8 @@
 
 ## Recommended Execution Sequence From Here
 1. Finish doc sync and use it as the implementation truth source
-2. Isolate remaining live-path dependencies away from `mock-service.ts` and `mock-api.ts`
-3. Add provider credential validation behavior and surfaced validation status
+2. Isolate remaining live-path dependencies away from `mock-service.ts`
+3. Expand provider validation coverage and keep surfaced validation status aligned with backend support
 4. Align or trim admin/workspace screens to current backend capabilities
 5. Expand backend/provider runtime adapters beyond the currently supported BYO paths
 6. Run fuller backend/frontend test coverage and Docker smoke verification

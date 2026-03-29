@@ -12,7 +12,7 @@
 - TanStack Query remains the primary server-state abstraction in [frontend/src/app/AppProviders.tsx](f:/my-projects/reels-generation/frontend/src/app/AppProviders.tsx).
 - The real backend adapter layer now lives in [frontend/src/lib/live-api.ts](f:/my-projects/reels-generation/frontend/src/lib/live-api.ts).
 - [frontend/src/lib/mock-service.ts](f:/my-projects/reels-generation/frontend/src/lib/mock-service.ts) still exists, but many live-mode hooks now delegate through it into `live-api.ts` rather than returning local-only mock state.
-- Legacy route pages still carry some `mock-api.ts` usage in [frontend/src/lib/mock-api.ts](f:/my-projects/reels-generation/frontend/src/lib/mock-api.ts), so the adapter boundary is improved but not fully cleaned up yet.
+- The older `mock-api.ts` layer has been retired; the remaining cleanup work is now concentrated in `mock-service.ts`.
 
 ### Current Live-Integrated Frontend Areas
 - Auth/session: [frontend/src/lib/auth.tsx](f:/my-projects/reels-generation/frontend/src/lib/auth.tsx)
@@ -67,4 +67,4 @@
 - The frontend already had the right query-oriented shape, which made targeted live adapters practical without a major architectural rewrite.
 - The backend already contained most of the domain building blocks needed for provider credential management and workflow execution.
 - The biggest improvement so far has been adapter alignment, not domain invention.
-- The biggest remaining cleanup work is reducing the compatibility-layer dependence on `mock-service.ts` and trimming legacy pages still tied to `mock-api.ts`.
+- The biggest remaining cleanup work is reducing the compatibility-layer dependence on `mock-service.ts`.

@@ -14,7 +14,7 @@
   - `POST /api/v1/auth/workspace/select`
   - CORS preflight and credential headers for the frontend origin
   - provider credential create/update/revoke behavior
-  - provider validation behavior once implemented
+  - provider validation behavior, including `valid`, `invalid`, `unsupported`, and `unreachable` states
   - non-disclosure of raw secret payload after save
   - render list/detail/cancel/retry compatibility with frontend needs
   - scene comment target handling, including `scene_segment`
@@ -25,7 +25,7 @@
   - project list and brief update
   - generate idea/script/scene-plan flow with async refetch
   - render create/detail/refetch behavior
-  - provider settings save/revoke and future validation state
+  - provider settings save/revoke and persisted validation state display
   - mapper coverage for auth, projects, renders, provider credentials, and local workers
 
 ## Manual End-to-End Validation
@@ -51,10 +51,10 @@
   2. remove direct mock imports from route pages
   3. remove shell compatibility dependence on mock wrappers
   4. retire dead helper functions from `mock-service.ts`
-  5. retire unused `mock-api.ts` exports
+  5. keep `mock-api.ts` retired
 - If mock mode remains supported for UI-only work, keep it as an explicit alternate adapter path.
 
 ## Done Criteria For Cleanup
-- Live mode path no longer depends on `mock-service.ts` or `mock-api.ts`.
+- Live mode path no longer depends on `mock-service.ts` or any retired parallel mock layer.
 - Remaining mock code, if any, is intentionally isolated and not accidentally used by live hooks.
 - Documentation and README notes reflect the real implemented integration state.

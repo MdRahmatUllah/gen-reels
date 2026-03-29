@@ -14,7 +14,7 @@
 | Auth session shape | Frontend expected a narrower `AuthSession` | Live auth/session mapping is implemented | Continue cleanup of any legacy assumptions |
 | Generation flow | Frontend expected sync payloads | Accepted-job and refetch flow is wired for core workflow pages | Add more formal smoke coverage |
 | Render listing | Project render list endpoint missing | Implemented through backend render layer | Verify Docker smoke coverage |
-| Provider settings | Generic provider-key CRUD did not match backend model | Provider credential plus execution policy flow is implemented | Add validation endpoint/validation-on-save behavior |
+| Provider settings | Generic provider-key CRUD did not match backend model | Provider credential plus execution policy flow is implemented, including persisted validation metadata and remote Azure validation probes | Expand runtime adapters for storage-only providers as needed |
 | Brand kits | Mock-only settings integration | Live-backed through frontend adapters | Add tests |
 | Scene comments | Mock-only and invalid collaboration target | Live-backed; `scene_segment` target implemented | Add tests |
 | Template cloning | Mock-only | Live-backed through backend template project creation | Add tests |
@@ -33,13 +33,13 @@
 - `LocalWorker`: adapted from backend worker capability metadata into the current settings page shape.
 
 ## Remaining Backend Additions
-- Add provider credential validation endpoint or validation-on-save semantics with persisted validation metadata.
+- Provider credential validation route exists and persists status metadata; remaining work is limited to expanding remote validation/runtime support for storage-only providers.
 - Add backend tests for CORS, provider credential update and revoke rules, render list behavior, and comment target coverage.
 - Add either an admin workspace summary endpoint or reduce the frontend admin scope to match existing backend views.
 
 ## Remaining Frontend Gaps
 - Remove live-path dependence on [frontend/src/lib/mock-service.ts](f:/my-projects/reels-generation/frontend/src/lib/mock-service.ts) compatibility wrappers where hooks can call live adapters directly.
-- Reduce or replace [frontend/src/lib/mock-api.ts](f:/my-projects/reels-generation/frontend/src/lib/mock-api.ts) usage in remaining legacy and admin pages.
+- Keep the retired `mock-api.ts` layer deleted and avoid reintroducing a second mock adapter path.
 - Add mapper-level tests around the most fragile DTO conversions.
 
 ## Admin And Settings Notes
