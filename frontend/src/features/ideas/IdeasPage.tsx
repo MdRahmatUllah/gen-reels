@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
@@ -23,15 +23,27 @@ export function IdeasPage() {
   });
 
   const [selectedId, setSelectedId] = useState<string | null>(project?.selectedIdeaId ?? null);
+  const [queuedGeneration, setQueuedGeneration] = useState(false);
+
+  useEffect(() => {
+    setSelectedId(project?.selectedIdeaId ?? null);
+  }, [project?.selectedIdeaId]);
+
+  useEffect(() => {
+    if ((ideaSet?.ideas.length ?? 0) > 0) {
+      setQueuedGeneration(false);
+    }
+  }, [ideaSet?.ideas.length]);
 
   if (!project || !projectId) return null;
 
   const ideas = ideaSet?.ideas ?? [];
-  const isGenerating = generateIdeas.isPending || ideaSet?.status === "running";
+  const isGenerating = queuedGeneration || generateIdeas.isPending || ideaSet?.status === "running";
   const hasIdeas = ideas.length > 0;
   const canContinue = selectedId !== null;
 
   const handleGenerate = () => {
+    setQueuedGeneration(true);
     generateIdeas.mutate();
   };
 

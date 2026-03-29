@@ -14,8 +14,8 @@ interface StudioUiStore {
 }
 
 export const useStudioUiStore = create<StudioUiStore>((set) => ({
-  activeWorkspaceId: "workspace_north_star",
-  activeProjectId: "project_aurora_serum",
+  activeWorkspaceId: "",
+  activeProjectId: "",
   selectedScenes: {},
   renderFilter: "all",
   setActiveWorkspaceId: (activeWorkspaceId) => set({ activeWorkspaceId }),

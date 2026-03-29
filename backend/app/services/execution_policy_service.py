@@ -14,6 +14,10 @@ from app.models.entities import (
     WorkspaceProviderCredential,
 )
 from app.schemas.execution import ExecutionPolicyUpdateRequest
+from app.services.provider_capabilities import (
+    HOSTED_DEFAULT_PROVIDER_KEYS_BY_MODALITY,
+    supports_runtime_byo,
+)
 from app.services.audit_service import record_audit_event
 from app.services.permissions import require_workspace_admin
 
@@ -26,11 +30,15 @@ class PolicyRoute:
 
 
 DEFAULT_POLICY = {
-    "text": PolicyRoute(ExecutionMode.hosted, "azure_openai_text", None),
-    "moderation": PolicyRoute(ExecutionMode.hosted, "azure_content_safety", None),
-    "image": PolicyRoute(ExecutionMode.hosted, "azure_openai_image", None),
-    "video": PolicyRoute(ExecutionMode.hosted, "veo_video", None),
-    "speech": PolicyRoute(ExecutionMode.hosted, "azure_openai_speech", None),
+    "text": PolicyRoute(ExecutionMode.hosted, HOSTED_DEFAULT_PROVIDER_KEYS_BY_MODALITY["text"], None),
+    "moderation": PolicyRoute(
+        ExecutionMode.hosted,
+        HOSTED_DEFAULT_PROVIDER_KEYS_BY_MODALITY["moderation"],
+        None,
+    ),
+    "image": PolicyRoute(ExecutionMode.hosted, HOSTED_DEFAULT_PROVIDER_KEYS_BY_MODALITY["image"], None),
+    "video": PolicyRoute(ExecutionMode.hosted, HOSTED_DEFAULT_PROVIDER_KEYS_BY_MODALITY["video"], None),
+    "speech": PolicyRoute(ExecutionMode.hosted, HOSTED_DEFAULT_PROVIDER_KEYS_BY_MODALITY["speech"], None),
 }
 
 
@@ -148,6 +156,12 @@ class ExecutionPolicyService:
                     "provider_credential_required",
                     f"BYO routing for {field_name} requires a credential_id.",
                 )
+            if mode == ExecutionMode.byo and not supports_runtime_byo(field_name, route.provider_key):
+                raise ApiError(
+                    400,
+                    "provider_routing_not_supported",
+                    f"BYO routing for {field_name} does not support provider {route.provider_key}.",
+                )
             if mode == ExecutionMode.byo and route.credential_id is not None:
                 credential = self.db.scalar(
                     select(WorkspaceProviderCredential).where(
@@ -166,6 +180,12 @@ class ExecutionPolicyService:
                         400,
                         "provider_credential_modality_mismatch",
                         f"The selected credential does not support {field_name}.",
+                    )
+                if credential.provider_key != route.provider_key:
+                    raise ApiError(
+                        400,
+                        "provider_credential_provider_mismatch",
+                        f"The selected credential does not match provider {route.provider_key}.",
                     )
             if mode != ExecutionMode.byo:
                 setattr(policy, f"{field_name}_credential_id", None)

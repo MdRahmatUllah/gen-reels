@@ -82,6 +82,32 @@ def resolve_workspace_target(db, workspace_id: str, target_type: str, target_id:
             raw=scene_plan,
         )
 
+    if target_type == "scene_segment":
+        segment = db.scalar(
+            select(SceneSegment)
+            .join(ScenePlan, ScenePlan.id == SceneSegment.scene_plan_id)
+            .join(Project, Project.id == ScenePlan.project_id)
+            .where(SceneSegment.id == UUID(target_id), Project.workspace_id == workspace_uuid)
+        )
+        if not segment:
+            raise ApiError(404, "target_not_found", "Comment target not found.")
+        return CollaborationTarget(
+            target_type=target_type,
+            target_id=target_id,
+            workspace_id=workspace_uuid,
+            project_id=db.scalar(
+                select(ScenePlan.project_id).where(ScenePlan.id == segment.scene_plan_id)
+            ),
+            version=None,
+            payload={
+                "id": str(segment.id),
+                "scene_index": segment.scene_index,
+                "title": segment.title,
+                "beat": segment.beat,
+            },
+            raw=segment,
+        )
+
     if target_type == "export":
         export = db.scalar(
             select(ExportRecord)

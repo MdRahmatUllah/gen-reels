@@ -5,16 +5,23 @@ import {
   mockCancelRender,
   mockRetryRenderStep,
 } from "../lib/mock-service";
+import {
+  liveGetRenders,
+  liveStartRender,
+  liveCancelRender,
+  liveRetryRenderStep,
+} from "../lib/live-api";
+import { isMockMode } from "../lib/config";
 
 export function useRenders(projectId: string) {
   return useQuery({
     queryKey: ["renders", projectId],
-    queryFn: () => mockGetRenders(projectId),
+    queryFn: () => (isMockMode() ? mockGetRenders(projectId) : liveGetRenders(projectId)),
     enabled: !!projectId,
     // Poll every 2 seconds to simulate SSE updates when the UI is mounted
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (data && data.length > 0 && data[0].status === "running") {
+      if (data && data.length > 0 && (data[0].status === "running" || data[0].status === "queued")) {
         return 1500; // Fast 1.5s refresh for fluid UI
       }
       return false; // Stop polling on error, complete, or empty
@@ -25,8 +32,8 @@ export function useRenders(projectId: string) {
 export function useStartRender(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (settings?: { subtitleStyle: string; musicDucking: string; musicTrack: string; }) => 
-      mockStartRender(projectId, settings),
+    mutationFn: (settings?: { subtitleStyle: string; musicDucking: string; musicTrack: string; }) =>
+      isMockMode() ? mockStartRender(projectId, settings) : liveStartRender(projectId, settings),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });
       qc.invalidateQueries({ queryKey: ["project", projectId] });
@@ -37,7 +44,7 @@ export function useStartRender(projectId: string) {
 export function useCancelRender(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => mockCancelRender(projectId),
+    mutationFn: () => (isMockMode() ? mockCancelRender(projectId) : liveCancelRender(projectId)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });
     },
@@ -47,7 +54,8 @@ export function useCancelRender(projectId: string) {
 export function useRetryRenderStep(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (stepId: string) => mockRetryRenderStep(projectId, stepId),
+    mutationFn: (stepId: string) =>
+      isMockMode() ? mockRetryRenderStep(projectId, stepId) : liveRetryRenderStep(projectId, stepId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });
     },

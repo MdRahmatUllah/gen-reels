@@ -25,9 +25,11 @@ class CommentResponse(BaseModel):
     target_type: str
     target_id: str
     author_user_id: UUID
+    author_name: str | None = None
     body: str
     metadata_payload: dict[str, object]
     resolved_at: datetime | None
     resolved_by_user_id: UUID | None
+    resolved_by_name: str | None = None
     created_at: datetime
     updated_at: datetime

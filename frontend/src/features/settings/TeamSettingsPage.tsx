@@ -1,14 +1,28 @@
-import { PageFrame, SectionCard } from "../../components/ui";
+import { useQuery } from "@tanstack/react-query";
+import { LoadingPage, PageFrame, SectionCard } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
-
-const teamMembers = [
-  { id: "user_1", name: "Alex Rivera", email: "alex@studio.io", role: "Admin", status: "Active" },
-  { id: "user_2", name: "Taylor Swift", email: "taylor@studio.io", role: "Editor", status: "Active" },
-  { id: "user_3", name: "Reviewer Joe", email: "joe@studio.io", role: "Reviewer", status: "Invited" },
-];
+import { liveGetWorkspaceMembers } from "../../lib/live-api";
+import { isMockMode } from "../../lib/config";
 
 export function TeamSettingsPage() {
   const { user } = useAuth();
+  const { data: teamMembers, isLoading } = useQuery({
+    queryKey: ["workspace-members"],
+    queryFn: liveGetWorkspaceMembers,
+    enabled: !isMockMode(),
+  });
+
+  const members = isMockMode()
+    ? [
+        { id: "user_1", userId: "user_1", name: "Alex Rivera", email: "alex@studio.io", role: "Admin", status: "Active" },
+        { id: "user_2", userId: "user_2", name: "Taylor Swift", email: "taylor@studio.io", role: "Editor", status: "Active" },
+        { id: "user_3", userId: "user_3", name: "Reviewer Joe", email: "joe@studio.io", role: "Reviewer", status: "Invited" },
+      ]
+    : (teamMembers ?? []);
+
+  if (isLoading && !isMockMode()) {
+    return <LoadingPage />;
+  }
 
   return (
     <PageFrame
@@ -21,15 +35,15 @@ export function TeamSettingsPage() {
             <div className="inspector-list">
               <div>
                 <span>Admins</span>
-                <strong>1</strong>
+                <strong>{members.filter((member) => member.role === "Admin").length}</strong>
               </div>
               <div>
                 <span>Editors</span>
-                <strong>1</strong>
+                <strong>{members.filter((member) => member.role === "Member" || member.role === "Editor").length}</strong>
               </div>
               <div>
                 <span>Reviewers</span>
-                <strong>1</strong>
+                <strong>{members.filter((member) => member.role === "Reviewer").length}</strong>
               </div>
             </div>
           </SectionCard>
@@ -56,10 +70,10 @@ export function TeamSettingsPage() {
               </tr>
             </thead>
             <tbody>
-              {teamMembers.map((member) => (
+              {members.map((member) => (
                 <tr key={member.id}>
-                  <td className={member.id === user?.id ? "font-semibold" : undefined}>
-                    {member.name} {member.id === user?.id ? "(You)" : ""}
+                  <td className={member.userId === user?.id ? "font-semibold" : undefined}>
+                    {member.name} {member.userId === user?.id ? "(You)" : ""}
                   </td>
                   <td className="text-secondary">{member.email}</td>
                   <td>

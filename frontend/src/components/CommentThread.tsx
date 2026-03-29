@@ -2,8 +2,16 @@ import { useState } from "react";
 
 import { useAddComment, useComments, useResolveComment } from "../hooks/use-collaboration";
 
-export function CommentThread({ targetId }: { targetId: string }) {
-  const { data: comments, isLoading } = useComments(targetId);
+export function CommentThread({
+  targetId,
+  projectId,
+  targetType = "scene_segment",
+}: {
+  targetId: string;
+  projectId?: string;
+  targetType?: string;
+}) {
+  const { data: comments, isLoading } = useComments(targetId, { projectId, targetType });
   const { mutateAsync: addComment } = useAddComment();
   const { mutateAsync: resolveComment } = useResolveComment();
   const [newComment, setNewComment] = useState("");
@@ -14,7 +22,7 @@ export function CommentThread({ targetId }: { targetId: string }) {
       return;
     }
 
-    await addComment({ targetId, text: newComment });
+    await addComment({ targetId, text: newComment, options: { projectId, targetType } });
     setNewComment("");
   };
 

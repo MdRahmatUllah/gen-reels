@@ -8,19 +8,30 @@ import {
   mockApproveScenePlan,
   mockSetScenePlanPreset,
 } from "../lib/mock-service";
+import {
+  liveGetScenePlan,
+  liveGenerateScenePlan,
+  liveGeneratePromptPairs,
+  liveUpdateScene,
+  liveApproveScenePlan,
+  liveSetScenePlanPreset,
+} from "../lib/live-api";
+import { isMockMode } from "../lib/config";
 
 export function useScenePlan(projectId: string) {
   return useQuery({
     queryKey: ["scenePlan", projectId],
-    queryFn: () => mockGetScenePlan(projectId),
+    queryFn: () => (isMockMode() ? mockGetScenePlan(projectId) : liveGetScenePlan(projectId)),
     enabled: !!projectId,
+    refetchInterval: isMockMode() ? false : 2000,
   });
 }
 
 export function useGenerateScenePlan(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => mockGenerateScenePlan(projectId),
+    mutationFn: () =>
+      isMockMode() ? mockGenerateScenePlan(projectId) : liveGenerateScenePlan(projectId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
       qc.invalidateQueries({ queryKey: ["project", projectId] });
@@ -31,7 +42,10 @@ export function useGenerateScenePlan(projectId: string) {
 export function useGeneratePromptPairs(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (sceneId: string) => mockGeneratePromptPairs(projectId, sceneId),
+    mutationFn: (sceneId: string) =>
+      isMockMode()
+        ? mockGeneratePromptPairs(projectId, sceneId)
+        : liveGeneratePromptPairs(projectId, sceneId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
     },
@@ -42,7 +56,9 @@ export function useUpdateScene(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ sceneId, updates }: { sceneId: string; updates: Partial<ScenePlan> }) =>
-      mockUpdateScene(projectId, sceneId, updates),
+      isMockMode()
+        ? mockUpdateScene(projectId, sceneId, updates)
+        : liveUpdateScene(projectId, sceneId, updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
     },
@@ -52,7 +68,8 @@ export function useUpdateScene(projectId: string) {
 export function useApproveScenePlan(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => mockApproveScenePlan(projectId),
+    mutationFn: () =>
+      isMockMode() ? mockApproveScenePlan(projectId) : liveApproveScenePlan(projectId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
       qc.invalidateQueries({ queryKey: ["project", projectId] });
@@ -64,7 +81,9 @@ export function useSetScenePlanPreset(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ type, presetId }: { type: "visual" | "voice"; presetId: string }) =>
-      mockSetScenePlanPreset(projectId, type, presetId),
+      isMockMode()
+        ? mockSetScenePlanPreset(projectId, type, presetId)
+        : liveSetScenePlanPreset(projectId, type, presetId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
     },

@@ -1,10 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
-
 import {
-  getAdminQueue,
-  getAdminRenders,
-  getAdminWorkspaces,
-} from "../lib/mock-api";
+  useAdminQueue,
+  useAdminRenders,
+  useAdminWorkspaces,
+  useReleaseQueueItem,
+  useRejectQueueItem,
+} from "../hooks/use-admin";
 import { PageFrame, SectionCard, StatusBadge } from "../components/ui";
 
 function LoadingAdminPage() {
@@ -12,7 +12,7 @@ function LoadingAdminPage() {
     <PageFrame
       eyebrow="Loading"
       title="Preparing admin view"
-      description="Admin mock data is loading."
+      description="Admin workspace data is loading."
       inspector={<div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />}
     >
       <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />
@@ -21,10 +21,9 @@ function LoadingAdminPage() {
 }
 
 export function AdminQueuePage() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-queue"],
-    queryFn: getAdminQueue,
-  });
+  const { data, isLoading } = useAdminQueue();
+  const releaseQueueItem = useReleaseQueueItem();
+  const rejectQueueItem = useRejectQueueItem();
 
   if (isLoading || !data) {
     return <LoadingAdminPage />;
@@ -34,7 +33,7 @@ export function AdminQueuePage() {
     <PageFrame
       eyebrow="Admin queue"
       title="Operational queue desk"
-      description="Admin routes are deliberately separate from the workspace navigation but keep the same visual system and layout logic."
+      description="Workspace-admin moderation and intervention items are surfaced here with the same visual system as the rest of the app."
       inspector={
         <div className="inspector-stack">
           <SectionCard title="Queue snapshot">
@@ -56,7 +55,7 @@ export function AdminQueuePage() {
         </div>
       }
     >
-      <SectionCard title="Queue items" subtitle="The admin desk focuses on execution health, provider ownership, and stuck time">
+      <SectionCard title="Queue items" subtitle="The admin desk focuses on moderation holds, provider ownership, and fast intervention.">
         <div className="table-shell">
           <table className="studio-table">
             <thead>
@@ -70,6 +69,7 @@ export function AdminQueuePage() {
                 <th>Owner</th>
                 <th>Age</th>
                 <th>Provider</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -86,6 +86,26 @@ export function AdminQueuePage() {
                   <td>{row.owner}</td>
                   <td>{row.age}</td>
                   <td>{row.provider}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="rounded-md border border-emerald-700/60 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={releaseQueueItem.isPending || rejectQueueItem.isPending}
+                        onClick={() => releaseQueueItem.mutate(row.id)}
+                      >
+                        Release
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-rose-700/60 bg-rose-950/40 px-3 py-1.5 text-xs font-medium text-rose-200 transition-colors hover:bg-rose-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={releaseQueueItem.isPending || rejectQueueItem.isPending}
+                        onClick={() => rejectQueueItem.mutate(row.id)}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -97,10 +117,7 @@ export function AdminQueuePage() {
 }
 
 export function AdminWorkspacesPage() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-workspaces"],
-    queryFn: getAdminWorkspaces,
-  });
+  const { data, isLoading } = useAdminWorkspaces();
 
   if (isLoading || !data) {
     return <LoadingAdminPage />;
@@ -109,8 +126,8 @@ export function AdminWorkspacesPage() {
   return (
     <PageFrame
       eyebrow="Admin workspaces"
-      title="Workspace fleet"
-      description="A mock control surface for plan health, seat counts, and render load visibility across customers."
+      title="Workspace health"
+      description="This view is trimmed to the current admin-accessible workspace until broader cross-workspace backend summaries are introduced."
       inspector={
         <div className="inspector-stack">
           <SectionCard title="Workspace health">
@@ -167,10 +184,7 @@ export function AdminWorkspacesPage() {
 }
 
 export function AdminRendersPage() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-renders"],
-    queryFn: getAdminRenders,
-  });
+  const { data, isLoading } = useAdminRenders();
 
   if (isLoading || !data) {
     return <LoadingAdminPage />;
@@ -179,8 +193,8 @@ export function AdminRendersPage() {
   return (
     <PageFrame
       eyebrow="Admin renders"
-      title="Cross-workspace render health"
-      description="An operations-first surface for cost, provider choice, consistency snapshot provenance, and failure triage."
+      title="Render health"
+      description="An operations-first surface for active workspace render failures, queue state, and backend-reported cost signals."
       inspector={
         <div className="inspector-stack">
           <SectionCard title="Incident bias">

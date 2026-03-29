@@ -17,6 +17,20 @@ import type {
   WorkspaceSummary,
   UserProfile,
 } from "../types/domain";
+import { isMockMode } from "./config";
+import {
+  liveGetAdminQueue,
+  liveGetAdminRenders,
+  liveGetAdminWorkspaces,
+  liveGetBillingData,
+  liveGetDashboardData,
+  liveGetPresets,
+  liveGetProjectBundle,
+  liveGetProjects,
+  liveGetSettings,
+  liveGetShellData,
+  liveGetTemplates,
+} from "./live-api";
 
 const mockDelay = (duration = 180) =>
   new Promise((resolve) => window.setTimeout(resolve, duration));
@@ -1118,6 +1132,9 @@ async function withLatency<T>(value: T): Promise<T> {
 }
 
 export async function getShellData(): Promise<ShellData> {
+  if (!isMockMode()) {
+    return liveGetShellData();
+  }
   return withLatency({
     user: currentUser,
     workspaces,
@@ -1127,6 +1144,9 @@ export async function getShellData(): Promise<ShellData> {
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
+  if (!isMockMode()) {
+    return liveGetDashboardData();
+  }
   return withLatency({
     focusProject: auroraProject,
     metrics: [
@@ -1182,43 +1202,69 @@ export async function getDashboardData(): Promise<DashboardData> {
 }
 
 export async function getProjects(): Promise<ProjectSummary[]> {
+  if (!isMockMode()) {
+    return liveGetProjects();
+  }
   return withLatency(allProjects);
 }
 
 export async function getProjectBundle(projectId: string): Promise<ProjectBundle> {
+  if (!isMockMode()) {
+    return liveGetProjectBundle(projectId);
+  }
   const bundle = projectBundles[projectId] ?? projectBundles[defaultProjectId];
   return withLatency(bundle);
 }
 
 export async function getPresets(): Promise<PresetCard[]> {
+  if (!isMockMode()) {
+    return liveGetPresets();
+  }
   return withLatency(presetCards);
 }
 
 export async function getTemplates(): Promise<TemplateCard[]> {
+  if (!isMockMode()) {
+    return liveGetTemplates();
+  }
   return withLatency(templateCards);
 }
 
 export async function getBillingData(): Promise<BillingData> {
+  if (!isMockMode()) {
+    return liveGetBillingData();
+  }
   return withLatency(billingData);
 }
 
 export async function getSettingsSections(): Promise<SettingsSection[]> {
+  if (!isMockMode()) {
+    return liveGetSettings();
+  }
   return withLatency(settingsSections);
 }
 
 export async function getAdminQueue(): Promise<AdminQueueItem[]> {
+  if (!isMockMode()) {
+    return liveGetAdminQueue();
+  }
   return withLatency(adminQueue);
 }
 
 export async function getAdminWorkspaces(): Promise<AdminWorkspaceRow[]> {
+  if (!isMockMode()) {
+    return liveGetAdminWorkspaces();
+  }
   return withLatency(adminWorkspaces);
 }
 
 export async function getAdminRenders(): Promise<AdminRenderRow[]> {
+  if (!isMockMode()) {
+    return liveGetAdminRenders();
+  }
   return withLatency(adminRenders);
 }
 
 export function getWorkspaceById(workspaceId: string): WorkspaceSummary {
   return workspaces.find((workspace) => workspace.id === workspaceId) ?? workspaces[0];
 }
-

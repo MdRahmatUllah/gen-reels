@@ -21,6 +21,7 @@ from app.schemas.execution import (
     LocalWorkerResponse,
     ProviderCredentialCreateRequest,
     ProviderCredentialResponse,
+    ProviderCredentialUpdateRequest,
     WorkspaceAuthConfigurationCreateRequest,
     WorkspaceAuthConfigurationResponse,
     WorkspaceAuthConfigurationUpdateRequest,
@@ -137,6 +138,27 @@ def create_provider_credential(
     settings=Depends(get_settings_dep),
 ):
     return ProviderCredentialService(db, settings).create_credential(auth, payload)
+
+
+@router.patch("/provider-credentials/{credential_id}", response_model=ProviderCredentialResponse)
+def patch_provider_credential(
+    credential_id: str,
+    payload: ProviderCredentialUpdateRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return ProviderCredentialService(db, settings).update_credential(auth, credential_id, payload)
+
+
+@router.post("/provider-credentials/{credential_id}:validate", response_model=ProviderCredentialResponse)
+def validate_provider_credential(
+    credential_id: str,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return ProviderCredentialService(db, settings).validate_credential(auth, credential_id)
 
 
 @router.post("/provider-credentials/{credential_id}:revoke", response_model=ProviderCredentialResponse)

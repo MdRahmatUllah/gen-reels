@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.api.deps import AuthContext
 from app.core.errors import ApiError
-from app.models.entities import Comment
+from app.models.entities import Comment, User
 from app.schemas.comments import CommentCreateRequest, CommentResolveRequest
 from app.services.audit_service import record_audit_event
 from app.services.collaboration_targets import resolve_workspace_target
@@ -19,6 +19,29 @@ from app.services.workspace_service import WorkspaceService
 class CommentService:
     def __init__(self, db) -> None:
         self.db = db
+
+    def _serialize_comments(self, comments: list[Comment]) -> list[dict[str, object]]:
+        user_ids = {
+            user_id
+            for comment in comments
+            for user_id in (comment.author_user_id, comment.resolved_by_user_id)
+            if user_id is not None
+        }
+        users_by_id = {}
+        if user_ids:
+            users_by_id = {
+                user.id: user.full_name
+                for user in self.db.scalars(select(User).where(User.id.in_(user_ids))).all()
+            }
+        payloads: list[dict[str, object]] = []
+        for comment in comments:
+            payload = comment_to_dict(comment)
+            payload["author_name"] = users_by_id.get(comment.author_user_id)
+            payload["resolved_by_name"] = (
+                users_by_id.get(comment.resolved_by_user_id) if comment.resolved_by_user_id else None
+            )
+            payloads.append(payload)
+        return payloads
 
     def list_comments(
         self,
@@ -36,7 +59,7 @@ class CommentService:
         if target_id:
             query = query.where(Comment.target_id == target_id)
         comments = self.db.scalars(query.order_by(Comment.created_at.asc())).all()
-        return [comment_to_dict(comment) for comment in comments]
+        return self._serialize_comments(comments)
 
     def create_comment(self, auth: AuthContext, payload: CommentCreateRequest) -> dict[str, object]:
         require_workspace_review(auth, message="Only reviewers, members, or admins can comment.")
@@ -78,7 +101,7 @@ class CommentService:
         )
         self.db.commit()
         self.db.refresh(comment)
-        return comment_to_dict(comment)
+        return self._serialize_comments([comment])[0]
 
     def resolve_comment(
         self,
@@ -117,4 +140,4 @@ class CommentService:
         )
         self.db.commit()
         self.db.refresh(comment)
-        return comment_to_dict(comment)
+        return self._serialize_comments([comment])[0]

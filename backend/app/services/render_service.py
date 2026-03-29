@@ -1368,6 +1368,18 @@ class RenderService(GenerationService):
         render_job = self._get_render_job_for_auth(auth, render_job_id)
         return self._render_detail_dict(render_job)
 
+    def list_renders(self, auth: AuthContext, project_id: str) -> list[dict[str, object]]:
+        project = self._get_project(project_id, auth.workspace_id)
+        render_jobs = self.db.scalars(
+            select(RenderJob)
+            .where(
+                RenderJob.project_id == project.id,
+                RenderJob.job_kind == JobKind.render_generation,
+            )
+            .order_by(RenderJob.created_at.desc())
+        ).all()
+        return [self._render_detail_dict(render_job) for render_job in render_jobs]
+
     def list_exports(self, auth: AuthContext, project_id: str) -> list[dict[str, object]]:
         project = self._get_project(project_id, auth.workspace_id)
         exports = self.db.scalars(

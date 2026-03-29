@@ -16,6 +16,15 @@ class ProviderCredentialCreateRequest(BaseModel):
     expires_at: datetime | None = None
 
 
+class ProviderCredentialUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    modality: Literal["text", "moderation", "image", "video", "speech"] | None = None
+    provider_key: str | None = Field(default=None, min_length=1, max_length=128)
+    public_config: dict[str, object] | None = None
+    secret_config: dict[str, str] | None = None
+    expires_at: datetime | None = None
+
+
 class ProviderCredentialResponse(BaseModel):
     id: UUID
     workspace_id: UUID
@@ -29,6 +38,10 @@ class ProviderCredentialResponse(BaseModel):
     revoked_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    secret_configured: bool = True
+    validation_status: str | None = None
+    last_validated_at: datetime | None = None
+    last_validation_error: str | None = None
 
 
 class ModalityExecutionPolicyRequest(BaseModel):

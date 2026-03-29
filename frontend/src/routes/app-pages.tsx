@@ -3,15 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
-  defaultProjectId,
-  getBillingData,
-  getDashboardData,
-  getPresets,
-  getProjectBundle,
-  getProjects,
-  getSettingsSections,
-  getTemplates,
-} from "../lib/mock-api";
+  mockGetBillingData,
+  mockGetDashboardData,
+  mockGetPresets,
+  mockGetProjectBundle,
+  mockGetProjects,
+  mockGetSettings,
+  mockGetTemplates,
+} from "../lib/mock-service";
 import { useBrief, useUpdateBrief } from "../hooks/use-briefs";
 
 import { useScript, useApproveScript, useGenerateScript } from "../hooks/use-scripts";
@@ -36,10 +35,10 @@ import type {
 
 function useProjectData(): { projectId: string; bundle?: ProjectBundle; isLoading: boolean } {
   const params = useParams();
-  const projectId = params.projectId ?? defaultProjectId;
+  const projectId = params.projectId ?? "project_aurora_serum";
   const { data, isLoading } = useQuery({
     queryKey: ["project-bundle", projectId],
-    queryFn: () => getProjectBundle(projectId),
+    queryFn: () => mockGetProjectBundle(projectId),
   });
 
   return { projectId, bundle: data, isLoading };
@@ -160,7 +159,7 @@ function SettingsCard({ section }: { section: SettingsSection }) {
 export function DashboardPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
-    queryFn: getDashboardData,
+    queryFn: mockGetDashboardData,
   });
 
   if (isLoading || !data) {
@@ -288,7 +287,7 @@ export function DashboardPage() {
 export function ProjectsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: getProjects,
+    queryFn: mockGetProjects,
   });
 
   if (isLoading || !data) {
@@ -301,7 +300,7 @@ export function ProjectsPage() {
       title="All active productions"
       description="Projects keep the same shell shape from brief through exports so the information architecture can survive later phases."
       actions={
-        <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${defaultProjectId}/brief`}>
+        <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${data[0]?.id ?? "project_aurora_serum"}/brief`}>
           Open default project
         </Link>
       }
@@ -530,16 +529,23 @@ export function ScriptPage() {
   const { bundle, isLoading, projectId } = useProjectData();
   const approveScript = useApproveScript(projectId);
   const generateScript = useGenerateScript(projectId);
+  const [queuedGeneration, setQueuedGeneration] = useState(false);
 
   // Get fresh script data from mock-service when available
   const { data: freshScript, isLoading: isScriptLoading } = useScript(projectId);
+
+  useEffect(() => {
+    if (freshScript && freshScript.id !== `queued-${projectId}`) {
+      setQueuedGeneration(false);
+    }
+  }, [freshScript, projectId]);
 
   if (isLoading || isScriptLoading || !bundle) {
     return <LoadingPage />;
   }
 
   // If no fresh script, show empty generation state
-  if (!freshScript && !generateScript.isPending) {
+  if (!freshScript && !generateScript.isPending && !queuedGeneration) {
     return (
       <div className="scene-empty-state">
         <div className="scene-empty-state__card">
@@ -549,7 +555,10 @@ export function ScriptPage() {
           <button 
             type="button" 
             className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" 
-            onClick={() => generateScript.mutate()}
+            onClick={() => {
+              setQueuedGeneration(true);
+              generateScript.mutate();
+            }}
           >
             Generate script
           </button>
@@ -561,7 +570,7 @@ export function ScriptPage() {
     );
   }
 
-  if (generateScript.isPending) {
+  if (generateScript.isPending || queuedGeneration || freshScript?.approvalState === "queued") {
     return (
       <PageFrame
         eyebrow="Loading"
@@ -798,7 +807,7 @@ export function ScenesPage() {
 export function PresetsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["presets"],
-    queryFn: getPresets,
+    queryFn: mockGetPresets,
   });
 
   if (isLoading || !data) {
@@ -859,7 +868,7 @@ export function PresetsPage() {
 export function TemplatesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["templates"],
-    queryFn: getTemplates,
+    queryFn: mockGetTemplates,
   });
 
   if (isLoading || !data) {
@@ -898,7 +907,7 @@ export function TemplatesPage() {
 export function SettingsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["settings"],
-    queryFn: getSettingsSections,
+    queryFn: mockGetSettings,
   });
 
   if (isLoading || !data) {
@@ -932,7 +941,7 @@ export function SettingsPage() {
 export function BillingPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["billing"],
-    queryFn: getBillingData,
+    queryFn: mockGetBillingData,
   });
 
   if (isLoading || !data) {

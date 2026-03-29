@@ -189,7 +189,7 @@ function getCurrentWorkflowStep(pathname: string): string | undefined {
 /* ─── Shell Layout ────────────────────────────────────────────────────────── */
 export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, workspaceId, selectWorkspace, isLoading: isAuthLoading } = useAuth();
   const { data, isLoading } = useQuery({
     queryKey: ["shell-data"],
     queryFn: mockGetShellData,
@@ -210,7 +210,20 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
     }
   }, [activeProjectId, routeProjectId, setActiveProjectId]);
 
-  if (isLoading || !data) {
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+    const preferredWorkspaceId = workspaceId ?? data.workspaces[0]?.id ?? "";
+    if (preferredWorkspaceId && preferredWorkspaceId !== activeWorkspaceId) {
+      setActiveWorkspaceId(preferredWorkspaceId);
+    }
+    if (!routeProjectId && !activeProjectId && data.projects[0]?.id) {
+      setActiveProjectId(data.projects[0].id);
+    }
+  }, [activeProjectId, activeWorkspaceId, data, routeProjectId, setActiveProjectId, setActiveWorkspaceId, workspaceId]);
+
+  if (isLoading || isAuthLoading || !data) {
     return (
       <div className="relative flex h-screen w-full overflow-hidden bg-base text-primary antialiased">
         <AppBackdrop />
@@ -225,10 +238,10 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
     );
   }
 
-  const activeWorkspace = findActiveWorkspace(data.workspaces, activeWorkspaceId);
+  const activeWorkspace = findActiveWorkspace(data.workspaces, activeWorkspaceId || workspaceId || data.workspaces[0]?.id || "");
   const currentProject = findActiveProject(
     data.projects,
-    routeProjectId ?? activeProjectId ?? defaultProjectId,
+    routeProjectId ?? activeProjectId ?? data.projects[0]?.id ?? defaultProjectId,
   );
   const currentWorkflowStep = getCurrentWorkflowStep(location.pathname);
 
@@ -254,7 +267,11 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
             id="workspace-select"
             className="w-full bg-card border border-border-card rounded flex-1 py-1.5 px-2 text-xs text-primary shadow-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
             value={activeWorkspace.id}
-            onChange={(event) => setActiveWorkspaceId(event.target.value)}
+            onChange={(event) => {
+              const nextWorkspaceId = event.target.value;
+              setActiveWorkspaceId(nextWorkspaceId);
+              void selectWorkspace(nextWorkspaceId);
+            }}
           >
             {data.workspaces.map((workspace) => (
               <option key={workspace.id} value={workspace.id}>

@@ -433,6 +433,7 @@ export interface AdminWorkspaceRow {
 
 export interface BrandKit {
   id: string;
+  version?: number;
   name: string;
   brandNorthStar: string;
   primaryPalette: string;
@@ -462,6 +463,82 @@ export interface AdminRenderRow {
 
 /* ─── Phase 7: Local & BYO ────────────────────────────────────────────────── */
 export type ExecutionMode = "hosted" | "byo" | "local";
+export type ProviderModality = "text" | "moderation" | "image" | "video" | "speech";
+export type ProviderGenerationType = "text" | "moderation" | "image" | "video" | "audio";
+export type ProviderValidationStatus = "not_validated" | "valid" | "invalid";
+
+export interface ProviderCatalogField {
+  key: "endpoint" | "apiVersion" | "deployment" | "modelName" | "voice" | "apiKey";
+  label: string;
+  placeholder?: string;
+  help?: string;
+  required?: boolean;
+  secret?: boolean;
+}
+
+export interface ProviderCatalogOption {
+  providerKey: string;
+  providerLabel: string;
+  modality: ProviderModality;
+  generationType: ProviderGenerationType;
+  description: string;
+  supportsActivation: boolean;
+  fields: ProviderCatalogField[];
+}
+
+export interface ProviderCredentialRecord {
+  id: string;
+  name: string;
+  modality: ProviderModality;
+  generationType: ProviderGenerationType;
+  providerKey: string;
+  providerLabel: string;
+  supportsActivation: boolean;
+  endpoint: string;
+  apiVersion: string;
+  deployment: string;
+  modelName: string;
+  voice: string;
+  secretConfigured: boolean;
+  isActive: boolean;
+  activeMode: ExecutionMode | null;
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  validationStatus: ProviderValidationStatus;
+  lastValidatedAt: string | null;
+  validationError: string | null;
+}
+
+export interface ProviderCredentialInput {
+  name: string;
+  modality: ProviderModality;
+  providerKey: string;
+  endpoint?: string;
+  apiVersion?: string;
+  deployment?: string;
+  modelName?: string;
+  voice?: string;
+  apiKey?: string;
+  setAsActiveRoute?: boolean;
+}
+
+export interface ProviderExecutionRoute {
+  mode: ExecutionMode;
+  providerKey: string;
+  providerLabel: string;
+  credentialId: string | null;
+  generationType: ProviderGenerationType;
+}
+
+export interface WorkspaceExecutionPolicy {
+  text: ProviderExecutionRoute;
+  moderation: ProviderExecutionRoute;
+  image: ProviderExecutionRoute;
+  video: ProviderExecutionRoute;
+  speech: ProviderExecutionRoute;
+}
 
 export interface ProviderKey {
   id: string;

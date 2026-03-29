@@ -5,6 +5,10 @@
  */
 import type {
   AuthSession,
+  ProviderCredentialInput,
+  ProviderCredentialRecord,
+  ProviderModality,
+  WorkspaceExecutionPolicy,
   BriefData,
   CreateProjectPayload,
   DashboardData,
@@ -29,6 +33,7 @@ import type {
   TemplateCard,
   AssetRecord,
   SettingsSection,
+  ProjectBundle,
   UsageRecord,
   InvoiceItem,
   BrandKit,
@@ -39,6 +44,75 @@ import type {
   ProviderKey,
   LocalWorker,
 } from "../types/domain";
+import { isMockMode } from "./config";
+import {
+  generationTypeFromModality,
+  getProviderCatalogOption,
+  providerLabelFromKey,
+} from "./provider-catalog";
+import {
+  liveAddProviderKey,
+  liveAddComment,
+  liveApproveScenePlan,
+  liveApproveScript,
+  liveCancelRender,
+  liveCreateProviderCredential,
+  liveCreateProject,
+  liveCreateVisualPreset,
+  liveCreateVoicePreset,
+  liveDeleteProviderCredential,
+  liveDeleteProviderKey,
+  liveGenerateIdeas,
+  liveGeneratePromptPairs,
+  liveGenerateScenePlan,
+  liveGenerateScript,
+  liveGetBrandKits,
+  liveGetAssets,
+  liveGetBilling,
+  liveGetBillingData,
+  liveGetBrief,
+  liveGetComments,
+  liveGetDashboardData,
+  liveGetExports,
+  liveGetIdeas,
+  liveGetLocalWorkers,
+  liveGetPresets,
+  liveGetProject,
+  liveGetProjectBundle,
+  liveGetProjects,
+  liveGetProviderCredentials,
+  liveGetExecutionPolicy,
+  liveGetProviderKeys,
+  liveGetRenders,
+  liveGetScenePlan,
+  liveGetScript,
+  liveGetSession,
+  liveGetSettings,
+  liveGetShellData,
+  liveGetTemplates,
+  liveGetVisualPresets,
+  liveGetVoicePresets,
+  liveCloneTemplate,
+  liveLogin,
+  liveLogout,
+  liveResolveComment,
+  liveRetryRenderStep,
+  liveSaveBrandKit,
+  liveSelectIdea,
+  liveSetScenePlanPreset,
+  liveStartRender,
+  liveUpdateBrief,
+  liveUpdateExecutionPolicyRoute,
+  liveUpdateProviderCredential,
+  liveUpdateScene,
+  liveUpdateScript,
+  liveValidateProviderCredential,
+  liveGetAdminQueue,
+  liveApproveQueueItem,
+  liveRejectQueueItem,
+  liveGetAdminWorkspaces,
+  liveGetAdminRenders,
+} from "./live-api";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 let idCounter = 1000;
@@ -157,6 +231,8 @@ interface MockState {
   brandKits: BrandKit[];
   comments: Comment[];
   providerKeys: ProviderKey[];
+  providerCredentials: ProviderCredentialRecord[];
+  executionPolicy: WorkspaceExecutionPolicy;
   localWorkers: LocalWorker[];
 }
 
@@ -184,6 +260,71 @@ const seedVoicePresets: VoicePreset[] = [
   { id: "voice_confident", name: "Confident Narrator", description: "Clear, authoritative, measured pacing", tone: "authoritative", pacing: "measured", accent: "neutral" },
   { id: "voice_warm", name: "Warm Storyteller", description: "Friendly, conversational, approachable", tone: "warm", pacing: "natural", accent: "neutral" },
   { id: "voice_editorial", name: "Ava Editorial", description: "Polished, calm, premium feel", tone: "polished", pacing: "calm", accent: "neutral" },
+];
+
+const mockExecutionDefaults: WorkspaceExecutionPolicy = {
+  text: {
+    mode: "byo",
+    providerKey: "azure_openai_text",
+    providerLabel: "Azure OpenAI",
+    credentialId: "cred_text_azure",
+    generationType: "text",
+  },
+  moderation: {
+    mode: "hosted",
+    providerKey: "azure_content_safety",
+    providerLabel: "Azure Content Safety",
+    credentialId: null,
+    generationType: "moderation",
+  },
+  image: {
+    mode: "hosted",
+    providerKey: "azure_openai_image",
+    providerLabel: "Azure OpenAI Images",
+    credentialId: null,
+    generationType: "image",
+  },
+  video: {
+    mode: "hosted",
+    providerKey: "veo_video",
+    providerLabel: "Google Veo",
+    credentialId: null,
+    generationType: "video",
+  },
+  speech: {
+    mode: "hosted",
+    providerKey: "azure_openai_speech",
+    providerLabel: "Azure OpenAI Audio",
+    credentialId: null,
+    generationType: "audio",
+  },
+};
+
+const seedProviderCredentials: ProviderCredentialRecord[] = [
+  {
+    id: "cred_text_azure",
+    name: "Azure OpenAI Text",
+    modality: "text",
+    generationType: "text",
+    providerKey: "azure_openai_text",
+    providerLabel: "Azure OpenAI",
+    supportsActivation: true,
+    endpoint: "https://studio-dev.openai.azure.com",
+    apiVersion: "2024-10-21",
+    deployment: "gpt-4.1",
+    modelName: "gpt-4.1",
+    voice: "",
+    secretConfigured: true,
+    isActive: true,
+    activeMode: "byo",
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    lastUsedAt: new Date(Date.now() - 3600000).toISOString(),
+    revokedAt: null,
+    validationStatus: "valid",
+    lastValidatedAt: new Date(Date.now() - 7200000).toISOString(),
+    validationError: null,
+  },
 ];
 
 const state: MockState = {
@@ -224,6 +365,8 @@ const state: MockState = {
   providerKeys: [
     { id: "pk_1", provider: "openai", keyPrefix: "sk-...d92k", createdAt: new Date(Date.now() - 86400000).toISOString() },
   ],
+  providerCredentials: [...seedProviderCredentials],
+  executionPolicy: { ...mockExecutionDefaults },
   localWorkers: [
     {
       id: "lw_mac_studio",
@@ -313,6 +456,9 @@ function generateScriptFromIdea(idea: IdeaCandidate, brief: BriefData): ScriptDa
 
 /* ─── Auth API ────────────────────────────────────────────────────────────── */
 export async function mockLogin(credentials: LoginCredentials): Promise<AuthSession> {
+  if (!isMockMode()) {
+    return liveLogin(credentials);
+  }
   await randomDelay(400, 1000);
 
   if (credentials.email === "alex@studio.io" && credentials.password === "password123") {
@@ -324,11 +470,17 @@ export async function mockLogin(credentials: LoginCredentials): Promise<AuthSess
 }
 
 export async function mockLogout(): Promise<void> {
+  if (!isMockMode()) {
+    return liveLogout();
+  }
   await randomDelay(200, 400);
   state.isAuthenticated = false;
 }
 
 export async function mockGetSession(): Promise<AuthSession | null> {
+  if (!isMockMode()) {
+    return liveGetSession();
+  }
   await delay(100);
   if (!state.isAuthenticated) return null;
   return { user: state.user, workspaceId: state.activeWorkspaceId };
@@ -336,18 +488,84 @@ export async function mockGetSession(): Promise<AuthSession | null> {
 
 /* ─── Project API ─────────────────────────────────────────────────────────── */
 export async function mockGetProjects(): Promise<ProjectSummary[]> {
+  if (!isMockMode()) {
+    return liveGetProjects();
+  }
   await randomDelay();
   return Array.from(state.projects.values());
 }
 
 export async function mockGetProject(projectId: string): Promise<ProjectSummary> {
+  if (!isMockMode()) {
+    return liveGetProject(projectId);
+  }
   await randomDelay(100, 300);
   const project = state.projects.get(projectId);
   if (!project) throw new Error(`Project ${projectId} not found`);
   return project;
 }
 
+export async function mockGetProjectBundle(projectId: string): Promise<ProjectBundle> {
+  if (!isMockMode()) {
+    return liveGetProjectBundle(projectId);
+  }
+  await randomDelay(250, 450);
+
+  const project = state.projects.get(projectId);
+  if (!project) {
+    throw new Error("Project not found");
+  }
+
+  const brief = state.briefs.get(projectId) ?? {
+    objective: "",
+    hook: "",
+    targetAudience: "",
+    callToAction: "",
+    brandNorthStar: "",
+    guardrails: [],
+    mustInclude: [],
+    approvalSteps: [],
+  };
+  const script = state.scripts.get(projectId) ?? {
+    id: `script_${projectId}_empty`,
+    versionLabel: "v0",
+    approvalState: "draft",
+    lastEdited: new Date().toISOString(),
+    totalWords: 0,
+    readingTimeLabel: "0s",
+    fullText: "",
+    lines: [],
+  };
+  const scenePlanSet = state.scenePlanSets.get(projectId) ?? {
+    id: `scene_plan_${projectId}_empty`,
+    projectId,
+    status: "idle",
+    approvalState: "draft",
+    approvedAt: null,
+    scenes: [],
+    segments: [],
+    totalDurationSec: 0,
+    warningsCount: 0,
+    visualPresetId: null,
+    voicePresetId: null,
+  };
+  const renderJobs = state.renderJobs.get(projectId) ? [state.renderJobs.get(projectId)!] : [];
+  const exports = state.exports.get(projectId) ?? [];
+
+  return {
+    project,
+    brief,
+    script,
+    scenes: scenePlanSet.scenes,
+    renderJobs,
+    exports,
+  };
+}
+
 export async function mockCreateProject(payload: CreateProjectPayload): Promise<ProjectSummary> {
+  if (!isMockMode()) {
+    return liveCreateProject(payload);
+  }
   await randomDelay(300, 600);
   const id = nextId("project");
   const project: ProjectSummary = {
@@ -372,6 +590,9 @@ export async function mockCreateProject(payload: CreateProjectPayload): Promise<
 
 /* ─── Brief API ───────────────────────────────────────────────────────────── */
 export async function mockGetBrief(projectId: string): Promise<BriefData> {
+  if (!isMockMode()) {
+    return liveGetBrief(projectId);
+  }
   await randomDelay(100, 300);
   const brief = state.briefs.get(projectId);
   if (!brief) throw new Error(`Brief for ${projectId} not found`);
@@ -379,6 +600,9 @@ export async function mockGetBrief(projectId: string): Promise<BriefData> {
 }
 
 export async function mockUpdateBrief(projectId: string, data: Partial<BriefData>): Promise<BriefData> {
+  if (!isMockMode()) {
+    return liveUpdateBrief(projectId, data);
+  }
   await randomDelay(200, 400);
   const existing = state.briefs.get(projectId);
   if (!existing) throw new Error(`Brief for ${projectId} not found`);
@@ -399,11 +623,17 @@ export async function mockUpdateBrief(projectId: string, data: Partial<BriefData
 
 /* ─── Ideas API ───────────────────────────────────────────────────────────── */
 export async function mockGetIdeas(projectId: string): Promise<IdeaSet | null> {
+  if (!isMockMode()) {
+    return liveGetIdeas(projectId);
+  }
   await randomDelay(100, 200);
   return state.ideaSets.get(projectId) ?? null;
 }
 
 export async function mockGenerateIdeas(projectId: string): Promise<IdeaSet> {
+  if (!isMockMode()) {
+    return liveGenerateIdeas(projectId);
+  }
   // Mark as generating
   const pendingSet: IdeaSet = {
     id: nextId("ideaset"),
@@ -446,6 +676,9 @@ export async function mockGenerateIdeas(projectId: string): Promise<IdeaSet> {
 }
 
 export async function mockSelectIdea(projectId: string, ideaId: string): Promise<ProjectSummary> {
+  if (!isMockMode()) {
+    return liveSelectIdea(projectId, ideaId);
+  }
   await randomDelay(200, 400);
   const project = state.projects.get(projectId);
   if (!project) throw new Error(`Project ${projectId} not found`);
@@ -467,11 +700,17 @@ export async function mockSelectIdea(projectId: string, ideaId: string): Promise
 
 /* ─── Script API ──────────────────────────────────────────────────────────── */
 export async function mockGetScript(projectId: string): Promise<ScriptData | null> {
+  if (!isMockMode()) {
+    return liveGetScript(projectId);
+  }
   await randomDelay(100, 200);
   return state.scripts.get(projectId) ?? null;
 }
 
 export async function mockGenerateScript(projectId: string): Promise<ScriptData> {
+  if (!isMockMode()) {
+    return liveGenerateScript(projectId);
+  }
   await delay(2500 + Math.random() * 2000);
 
   const project = state.projects.get(projectId);
@@ -500,6 +739,9 @@ export async function mockGenerateScript(projectId: string): Promise<ScriptData>
 }
 
 export async function mockUpdateScript(projectId: string, updates: Partial<ScriptData>): Promise<ScriptData> {
+  if (!isMockMode()) {
+    return liveUpdateScript(projectId, updates);
+  }
   await randomDelay(200, 400);
   const existing = state.scripts.get(projectId);
   if (!existing) throw new Error("No script to update");
@@ -515,6 +757,9 @@ export async function mockUpdateScript(projectId: string, updates: Partial<Scrip
 }
 
 export async function mockApproveScript(projectId: string): Promise<ScriptData> {
+  if (!isMockMode()) {
+    return liveApproveScript(projectId);
+  }
   await randomDelay(200, 400);
   const existing = state.scripts.get(projectId);
   if (!existing) throw new Error("No script to approve");
@@ -538,6 +783,9 @@ export async function mockApproveScript(projectId: string): Promise<ScriptData> 
 
 /* ─── Shell / Dashboard (reuse existing static data shape) ────────────────── */
 export async function mockGetShellData(): Promise<ShellData> {
+  if (!isMockMode()) {
+    return liveGetShellData();
+  }
   await randomDelay(100, 300);
   return {
     user: state.user,
@@ -551,6 +799,9 @@ export async function mockGetShellData(): Promise<ShellData> {
 }
 
 export async function mockGetDashboardData(): Promise<DashboardData> {
+  if (!isMockMode()) {
+    return liveGetDashboardData();
+  }
   await randomDelay(200, 500);
   const projects = Array.from(state.projects.values());
   const focusProject = projects[0] ?? makeSeedProject("empty", "No projects yet", "brief");
@@ -581,6 +832,9 @@ export async function mockGetDashboardData(): Promise<DashboardData> {
 
 /* ─── Stub APIs for pages not yet interactive ─────────────────────────────── */
 export async function mockGetBillingData(): Promise<BillingData> {
+  if (!isMockMode()) {
+    return liveGetBillingData();
+  }
   await randomDelay();
   return {
     planName: "Pro",
@@ -599,6 +853,9 @@ export async function mockGetBillingData(): Promise<BillingData> {
 }
 
 export async function mockGetPresets(): Promise<PresetCard[]> {
+  if (!isMockMode()) {
+    return liveGetPresets();
+  }
   await randomDelay();
   return [
     { id: "vp_1", name: "Warm Cinematic", category: "visual", description: "Golden hour tones with filmic grain", tags: ["warm", "cinematic"], status: "active" },
@@ -609,6 +866,9 @@ export async function mockGetPresets(): Promise<PresetCard[]> {
 // Replaced by global template library
 
 export async function mockGetSettings(): Promise<SettingsSection[]> {
+  if (!isMockMode()) {
+    return liveGetSettings();
+  }
   await randomDelay();
   return [
     { title: "Workspace", description: "General workspace configuration", items: [{ label: "Name", value: "North Star Studio" }, { label: "Plan", value: "Pro" }] },
@@ -636,6 +896,9 @@ function durationWarning(durationSec: number, totalDuration?: number): string | 
 }
 
 export async function mockGetScenePlan(projectId: string): Promise<ScenePlanSet | null> {
+  if (!isMockMode()) {
+    return liveGetScenePlan(projectId);
+  }
   await randomDelay(100, 200);
   return state.scenePlanSets.get(projectId) ?? null;
 }
@@ -688,6 +951,9 @@ const gradients = [
 ];
 
 export async function mockGenerateScenePlan(projectId: string): Promise<ScenePlanSet> {
+  if (!isMockMode()) {
+    return liveGenerateScenePlan(projectId);
+  }
   await delay(2000 + Math.random() * 1500);
 
   const script = state.scripts.get(projectId);
@@ -775,6 +1041,9 @@ export async function mockGenerateScenePlan(projectId: string): Promise<ScenePla
 }
 
 export async function mockGeneratePromptPairs(projectId: string, sceneId: string): Promise<ScenePlan> {
+  if (!isMockMode()) {
+    return liveGeneratePromptPairs(projectId, sceneId);
+  }
   await delay(1200 + Math.random() * 800);
 
   const planSet = state.scenePlanSets.get(projectId);
@@ -800,6 +1069,9 @@ export async function mockGeneratePromptPairs(projectId: string, sceneId: string
 }
 
 export async function mockUpdateScene(projectId: string, sceneId: string, updates: Partial<ScenePlan>): Promise<ScenePlan> {
+  if (!isMockMode()) {
+    return liveUpdateScene(projectId, sceneId, updates);
+  }
   await randomDelay(200, 400);
 
   const planSet = state.scenePlanSets.get(projectId);
@@ -834,6 +1106,9 @@ export async function mockUpdateScene(projectId: string, sceneId: string, update
 }
 
 export async function mockApproveScenePlan(projectId: string): Promise<ScenePlanSet> {
+  if (!isMockMode()) {
+    return liveApproveScenePlan(projectId);
+  }
   await randomDelay(300, 600);
 
   const planSet = state.scenePlanSets.get(projectId);
@@ -858,16 +1133,25 @@ export async function mockApproveScenePlan(projectId: string): Promise<ScenePlan
 
 /* ─── Preset API (Phase 2) ────────────────────────────────────────────────── */
 export async function mockGetVisualPresets(): Promise<VisualPreset[]> {
+  if (!isMockMode()) {
+    return liveGetVisualPresets();
+  }
   await randomDelay(100, 200);
   return [...state.visualPresets];
 }
 
 export async function mockGetVoicePresets(): Promise<VoicePreset[]> {
+  if (!isMockMode()) {
+    return liveGetVoicePresets();
+  }
   await randomDelay(100, 200);
   return [...state.voicePresets];
 }
 
 export async function mockCreateVisualPreset(preset: Omit<VisualPreset, "id">): Promise<VisualPreset> {
+  if (!isMockMode()) {
+    return liveCreateVisualPreset(preset);
+  }
   await randomDelay(200, 400);
   const created: VisualPreset = { ...preset, id: nextId("vp") };
   state.visualPresets.push(created);
@@ -875,6 +1159,9 @@ export async function mockCreateVisualPreset(preset: Omit<VisualPreset, "id">): 
 }
 
 export async function mockCreateVoicePreset(preset: Omit<VoicePreset, "id">): Promise<VoicePreset> {
+  if (!isMockMode()) {
+    return liveCreateVoicePreset(preset);
+  }
   await randomDelay(200, 400);
   const created: VoicePreset = { ...preset, id: nextId("voicep") };
   state.voicePresets.push(created);
@@ -886,6 +1173,9 @@ export async function mockSetScenePlanPreset(
   type: "visual" | "voice",
   presetId: string,
 ): Promise<ScenePlanSet> {
+  if (!isMockMode()) {
+    return liveSetScenePlanPreset(projectId, type, presetId);
+  }
   await randomDelay(100, 200);
   const planSet = state.scenePlanSets.get(projectId);
   if (!planSet) throw new Error("No scene plan found");
@@ -900,6 +1190,9 @@ export async function mockSetScenePlanPreset(
 /* ─── Render MVP Simulator (Phase 3) ──────────────────────────────────────── */
 
 export async function mockGetRenders(projectId: string): Promise<RenderJob[]> {
+  if (!isMockMode()) {
+    return liveGetRenders(projectId);
+  }
   await randomDelay(100, 200);
   // Using the active one mapped to this projectId (we use single job per project in mock)
   const job = state.renderJobs.get(projectId);
@@ -907,11 +1200,17 @@ export async function mockGetRenders(projectId: string): Promise<RenderJob[]> {
 }
 
 export async function mockGetExports(projectId: string): Promise<ExportArtifact[]> {
+  if (!isMockMode()) {
+    return liveGetExports(projectId);
+  }
   await randomDelay(100, 200);
   return state.exports.get(projectId) || [];
 }
 
 export async function mockCancelRender(projectId: string): Promise<void> {
+  if (!isMockMode()) {
+    return liveCancelRender(projectId);
+  }
   await randomDelay(100, 200);
   const job = state.renderJobs.get(projectId);
   if (job && job.status === "running") {
@@ -924,6 +1223,9 @@ export async function mockCancelRender(projectId: string): Promise<void> {
 }
 
 export async function mockRetryRenderStep(projectId: string, stepId: string): Promise<RenderJob> {
+  if (!isMockMode()) {
+    return liveRetryRenderStep(projectId, stepId);
+  }
   await randomDelay(200, 400);
   const job = state.renderJobs.get(projectId);
   if (!job) throw new Error("Render job not found");
@@ -953,6 +1255,9 @@ export async function mockStartRender(
   projectId: string, 
   settings?: { subtitleStyle?: string; musicDucking?: string; musicTrack?: string }
 ): Promise<RenderJob> {
+  if (!isMockMode()) {
+    return liveStartRender(projectId, settings as { subtitleStyle: string; musicDucking: string; musicTrack: string } | undefined);
+  }
   await randomDelay(300, 600);
   const planSet = state.scenePlanSets.get(projectId);
   const project = state.projects.get(projectId);
@@ -1164,6 +1469,9 @@ export async function renderSimulatorLoop(projectId: string) {
 /* ─── Phase 4: Billing & Admin API Exports ────────────────────────────────── */
 
 export async function mockGetBilling(): Promise<BillingData> {
+  if (!isMockMode()) {
+    return liveGetBilling();
+  }
   await delay(400);
   const ws = state.workspaces.find(w => w.id === state.activeWorkspaceId)!;
   const totalUsage = state.usageRecords.reduce((sum, rec) => sum + rec.credits, 0);
@@ -1184,6 +1492,9 @@ export async function mockGetBilling(): Promise<BillingData> {
 }
 
 export async function mockGetAdminQueue(): Promise<AdminQueueItem[]> {
+  if (!isMockMode()) {
+    return liveGetAdminQueue();
+  }
   await delay(300);
   const queue: AdminQueueItem[] = [];
   for (const [projectId, job] of state.renderJobs.entries()) {
@@ -1206,6 +1517,9 @@ export async function mockGetAdminQueue(): Promise<AdminQueueItem[]> {
 }
 
 export async function mockApproveQueueItem(jobId: string): Promise<void> {
+  if (!isMockMode()) {
+    return liveApproveQueueItem(jobId);
+  }
   await delay(400);
   for (const [projectId, job] of state.renderJobs.entries()) {
     if (job.id === jobId) {
@@ -1227,6 +1541,9 @@ export async function mockApproveQueueItem(jobId: string): Promise<void> {
 }
 
 export async function mockRejectQueueItem(jobId: string): Promise<void> {
+  if (!isMockMode()) {
+    return liveRejectQueueItem(jobId);
+  }
   await delay(400);
   for (const [projectId, job] of state.renderJobs.entries()) {
     if (job.id === jobId) {
@@ -1240,6 +1557,9 @@ export async function mockRejectQueueItem(jobId: string): Promise<void> {
 }
 
 export async function mockGetAdminWorkspaces(): Promise<AdminWorkspaceRow[]> {
+  if (!isMockMode()) {
+    return liveGetAdminWorkspaces();
+  }
   await delay(300);
   return state.workspaces.map(ws => ({
     id: ws.id,
@@ -1254,6 +1574,9 @@ export async function mockGetAdminWorkspaces(): Promise<AdminWorkspaceRow[]> {
 }
 
 export async function mockGetAdminRenders(): Promise<AdminRenderRow[]> {
+  if (!isMockMode()) {
+    return liveGetAdminRenders();
+  }
   await delay(300);
   const renders: AdminRenderRow[] = [];
   for (const [projectId, job] of state.renderJobs.entries()) {
@@ -1275,16 +1598,25 @@ export async function mockGetAdminRenders(): Promise<AdminRenderRow[]> {
 /* ─── Phase 5: Polish & Ecosystem ─────────────────────────────────────────── */
 
 export async function mockGetAssets(): Promise<AssetRecord[]> {
+  if (!isMockMode()) {
+    return liveGetAssets();
+  }
   await randomDelay(300, 500);
   return state.assets;
 }
 
 export async function mockGetTemplates(): Promise<TemplateCard[]> {
+  if (!isMockMode()) {
+    return liveGetTemplates();
+  }
   await randomDelay(300, 500);
   return state.templates;
 }
 
 export async function mockCloneTemplate(templateId: string): Promise<string> {
+  if (!isMockMode()) {
+    return liveCloneTemplate(templateId);
+  }
   await randomDelay(800, 1200);
   const template = state.templates.find(t => t.id === templateId);
   if (!template) throw new Error("Template not found");
@@ -1305,11 +1637,17 @@ export async function mockCloneTemplate(templateId: string): Promise<string> {
 /* ─── Phase 6: Collaboration & Studio ─────────────────────────────────────── */
 
 export async function mockGetBrandKits(): Promise<BrandKit[]> {
+  if (!isMockMode()) {
+    return liveGetBrandKits();
+  }
   await randomDelay(300, 500);
   return state.brandKits;
 }
 
 export async function mockSaveBrandKit(kit: BrandKit): Promise<BrandKit> {
+  if (!isMockMode()) {
+    return liveSaveBrandKit(kit);
+  }
   await randomDelay(400, 800);
   const existing = state.brandKits.findIndex((b) => b.id === kit.id);
   if (existing >= 0) {
@@ -1321,12 +1659,25 @@ export async function mockSaveBrandKit(kit: BrandKit): Promise<BrandKit> {
   return kit;
 }
 
-export async function mockGetComments(targetId: string): Promise<Comment[]> {
+export async function mockGetComments(
+  targetId: string,
+  options: { projectId?: string; targetType?: string } = {},
+): Promise<Comment[]> {
+  if (!isMockMode()) {
+    return liveGetComments(targetId, options);
+  }
   await randomDelay(200, 400);
   return state.comments.filter((c) => c.targetId === targetId);
 }
 
-export async function mockAddComment(targetId: string, text: string): Promise<Comment> {
+export async function mockAddComment(
+  targetId: string,
+  text: string,
+  options: { projectId?: string; targetType?: string } = {},
+): Promise<Comment> {
+  if (!isMockMode()) {
+    return liveAddComment(targetId, text, options);
+  }
   await randomDelay(300, 600);
   const newComment: Comment = {
     id: nextId("comment"),
@@ -1341,6 +1692,9 @@ export async function mockAddComment(targetId: string, text: string): Promise<Co
 }
 
 export async function mockResolveComment(commentId: string): Promise<void> {
+  if (!isMockMode()) {
+    return liveResolveComment(commentId);
+  }
   await randomDelay(200, 400);
   const comment = state.comments.find((c) => c.id === commentId);
   if (comment) {
@@ -1350,30 +1704,266 @@ export async function mockResolveComment(commentId: string): Promise<void> {
 
 /* ─── Phase 7: Local & BYO ────────────────────────────────────────────────── */
 
-export async function mockGetProviderKeys(): Promise<ProviderKey[]> {
+function legacyProviderFamily(providerKey: string): ProviderKey["provider"] {
+  if (providerKey.includes("eleven")) return "elevenlabs";
+  if (providerKey.includes("stability")) return "stability";
+  if (providerKey.includes("runway") || providerKey.includes("kling") || providerKey.includes("veo")) {
+    return "runway";
+  }
+  return "openai";
+}
+
+function defaultMockRoute(modality: ProviderModality): WorkspaceExecutionPolicy[ProviderModality] {
+  return {
+    ...mockExecutionDefaults[modality],
+  };
+}
+
+function syncMockProviderCredentialState(): void {
+  state.providerCredentials = state.providerCredentials.map((credential) => {
+    const activeRoute = state.executionPolicy[credential.modality];
+    const isActive = activeRoute.credentialId === credential.id;
+    return {
+      ...credential,
+      isActive,
+      activeMode: isActive ? activeRoute.mode : null,
+    };
+  });
+}
+
+function applyMockExecutionRoute(
+  modality: ProviderModality,
+  providerKey: string,
+  credentialId: string | null,
+  mode: "hosted" | "byo" | "local",
+): WorkspaceExecutionPolicy {
+  state.executionPolicy = {
+    ...state.executionPolicy,
+    [modality]: {
+      mode,
+      providerKey,
+      providerLabel: providerLabelFromKey(providerKey),
+      credentialId,
+      generationType: generationTypeFromModality(modality),
+    },
+  };
+  syncMockProviderCredentialState();
+  return state.executionPolicy;
+}
+
+export async function mockGetExecutionPolicy(): Promise<WorkspaceExecutionPolicy> {
+  if (!isMockMode()) {
+    return liveGetExecutionPolicy();
+  }
+  await randomDelay(150, 250);
+  return { ...state.executionPolicy };
+}
+
+export async function mockUpdateExecutionPolicyRoute(
+  modality: ProviderModality,
+  providerKey: string,
+  credentialId: string | null,
+  mode: "hosted" | "byo" | "local",
+): Promise<WorkspaceExecutionPolicy> {
+  if (!isMockMode()) {
+    return liveUpdateExecutionPolicyRoute(modality, providerKey, credentialId, mode);
+  }
+  await randomDelay(150, 250);
+  return applyMockExecutionRoute(modality, providerKey, credentialId, mode);
+}
+
+export async function mockGetProviderCredentials(): Promise<ProviderCredentialRecord[]> {
+  if (!isMockMode()) {
+    return liveGetProviderCredentials();
+  }
   await randomDelay(200, 400);
-  return state.providerKeys;
+  syncMockProviderCredentialState();
+  return [...state.providerCredentials];
+}
+
+export async function mockCreateProviderCredential(
+  input: ProviderCredentialInput,
+): Promise<ProviderCredentialRecord> {
+  if (!isMockMode()) {
+    return liveCreateProviderCredential(input);
+  }
+  await randomDelay(400, 700);
+  const option = getProviderCatalogOption(input.providerKey);
+  const created: ProviderCredentialRecord = {
+    id: nextId("cred"),
+    name: input.name.trim(),
+    modality: input.modality,
+    generationType: generationTypeFromModality(input.modality),
+    providerKey: input.providerKey,
+    providerLabel: option?.providerLabel ?? providerLabelFromKey(input.providerKey),
+    supportsActivation: option?.supportsActivation ?? false,
+    endpoint: input.endpoint?.trim() ?? "",
+    apiVersion: input.apiVersion?.trim() ?? "",
+    deployment: input.deployment?.trim() ?? "",
+    modelName: input.modelName?.trim() ?? "",
+    voice: input.voice?.trim() ?? "",
+    secretConfigured: Boolean(input.apiKey?.trim()),
+    isActive: false,
+    activeMode: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastUsedAt: null,
+    revokedAt: null,
+    validationStatus: "not_validated",
+    lastValidatedAt: null,
+    validationError: null,
+  };
+  state.providerCredentials = [created, ...state.providerCredentials];
+  if (input.setAsActiveRoute && created.supportsActivation) {
+    applyMockExecutionRoute(input.modality, input.providerKey, created.id, "byo");
+  } else {
+    syncMockProviderCredentialState();
+  }
+  return state.providerCredentials.find((credential) => credential.id === created.id) ?? created;
+}
+
+export async function mockUpdateProviderCredential(
+  credentialId: string,
+  input: ProviderCredentialInput,
+): Promise<ProviderCredentialRecord> {
+  if (!isMockMode()) {
+    return liveUpdateProviderCredential(credentialId, input);
+  }
+  await randomDelay(300, 600);
+  const option = getProviderCatalogOption(input.providerKey);
+  state.providerCredentials = state.providerCredentials.map((credential) => {
+    if (credential.id !== credentialId) {
+      return credential;
+    }
+    return {
+      ...credential,
+      name: input.name.trim(),
+      modality: input.modality,
+      generationType: generationTypeFromModality(input.modality),
+      providerKey: input.providerKey,
+      providerLabel: option?.providerLabel ?? providerLabelFromKey(input.providerKey),
+      supportsActivation: option?.supportsActivation ?? false,
+      endpoint: input.endpoint?.trim() ?? "",
+      apiVersion: input.apiVersion?.trim() ?? "",
+      deployment: input.deployment?.trim() ?? "",
+      modelName: input.modelName?.trim() ?? "",
+      voice: input.voice?.trim() ?? "",
+      secretConfigured: credential.secretConfigured || Boolean(input.apiKey?.trim()),
+      updatedAt: new Date().toISOString(),
+      validationStatus: "not_validated",
+      lastValidatedAt: null,
+      validationError: null,
+    };
+  });
+  if (input.setAsActiveRoute && (option?.supportsActivation ?? false)) {
+    applyMockExecutionRoute(input.modality, input.providerKey, credentialId, "byo");
+  } else {
+    syncMockProviderCredentialState();
+  }
+  const updated = state.providerCredentials.find((credential) => credential.id === credentialId);
+  if (!updated) {
+    throw new Error("Provider credential not found");
+  }
+  return updated;
+}
+
+export async function mockDeleteProviderCredential(id: string): Promise<void> {
+  if (!isMockMode()) {
+    return liveDeleteProviderCredential(id);
+  }
+  await randomDelay(300, 600);
+  const credential = state.providerCredentials.find((entry) => entry.id === id);
+  state.providerCredentials = state.providerCredentials.filter((entry) => entry.id !== id);
+  if (credential && state.executionPolicy[credential.modality].credentialId === id) {
+    state.executionPolicy = {
+      ...state.executionPolicy,
+      [credential.modality]: defaultMockRoute(credential.modality),
+    };
+  }
+  syncMockProviderCredentialState();
+}
+
+export async function mockValidateProviderCredential(
+  credentialId: string,
+): Promise<ProviderCredentialRecord> {
+  if (!isMockMode()) {
+    return liveValidateProviderCredential(credentialId);
+  }
+  await randomDelay(250, 400);
+  const validationTime = new Date().toISOString();
+  state.providerCredentials = state.providerCredentials.map((credential) =>
+    credential.id === credentialId
+      ? {
+          ...credential,
+          validationStatus: credential.secretConfigured ? "valid" : "invalid",
+          lastValidatedAt: validationTime,
+          validationError: credential.secretConfigured ? null : "API key is missing.",
+        }
+      : credential,
+  );
+  const updated = state.providerCredentials.find((credential) => credential.id === credentialId);
+  if (!updated) {
+    throw new Error("Provider credential not found");
+  }
+  return updated;
+}
+
+export async function mockGetProviderKeys(): Promise<ProviderKey[]> {
+  if (!isMockMode()) {
+    return liveGetProviderKeys();
+  }
+  await randomDelay(200, 400);
+  return state.providerCredentials.map((credential) => ({
+    id: credential.id,
+    provider: legacyProviderFamily(credential.providerKey),
+    keyPrefix: credential.providerKey,
+    createdAt: credential.createdAt,
+  }));
 }
 
 export async function mockAddProviderKey(provider: ProviderKey["provider"], key: string): Promise<ProviderKey> {
-  await randomDelay(500, 800);
-  // Security constraint: The actual API key is never returned or stored in readable form by the mock.
-  const newKey: ProviderKey = {
-    id: nextId("pk"),
-    provider,
-    keyPrefix: `sk-...${key.slice(-4)}`,
-    createdAt: new Date().toISOString(),
+  if (!isMockMode()) {
+    return liveAddProviderKey(provider, key);
+  }
+  const created = await mockCreateProviderCredential({
+    name: `${provider} credential`,
+    modality:
+      provider === "openai"
+        ? "text"
+        : provider === "stability"
+          ? "image"
+          : provider === "elevenlabs"
+            ? "speech"
+            : "video",
+    providerKey:
+      provider === "openai"
+        ? "azure_openai_text"
+        : provider === "stability"
+          ? "stability_image"
+          : provider === "elevenlabs"
+            ? "elevenlabs_speech"
+            : "runway_video",
+    apiKey: key,
+  });
+  return {
+    id: created.id,
+    provider: legacyProviderFamily(created.providerKey),
+    keyPrefix: created.providerKey,
+    createdAt: created.createdAt,
   };
-  state.providerKeys.push(newKey);
-  return newKey;
 }
 
 export async function mockDeleteProviderKey(id: string): Promise<void> {
-  await randomDelay(300, 600);
-  state.providerKeys = state.providerKeys.filter((k) => k.id !== id);
+  if (!isMockMode()) {
+    return liveDeleteProviderKey(id);
+  }
+  await mockDeleteProviderCredential(id);
 }
 
 export async function mockGetLocalWorkers(): Promise<LocalWorker[]> {
+  if (!isMockMode()) {
+    return liveGetLocalWorkers();
+  }
   await randomDelay(200, 400);
   return state.localWorkers;
 }

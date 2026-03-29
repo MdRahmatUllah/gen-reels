@@ -14,10 +14,15 @@ export class ApiError extends Error {
 }
 
 /* ─── Core fetch wrapper ──────────────────────────────────────────────────── */
+interface RequestOptions {
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
 async function request<T>(
   method: string,
   path: string,
-  body?: unknown,
+  options: RequestOptions = {},
 ): Promise<T> {
   if (isMockMode()) {
     // In mock mode, the mock service intercepts calls via the hooks layer.
@@ -28,22 +33,26 @@ async function request<T>(
   const url = `${config.apiBaseUrl}/api/v1${path}`;
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...options.headers,
   };
+  if (options.body !== undefined) {
+    headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+  }
 
   const response = await fetch(url, {
     method,
     headers,
     credentials: "include", // HttpOnly cookies for auth
-    body: body ? JSON.stringify(body) : undefined,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
+    const normalizedError = errorBody.error ?? errorBody;
     throw new ApiError(
       response.status,
-      errorBody.code ?? "unknown_error",
-      errorBody.message ?? response.statusText,
+      normalizedError.code ?? "unknown_error",
+      normalizedError.message ?? response.statusText,
       errorBody.details,
     );
   }
@@ -57,8 +66,12 @@ async function request<T>(
 
 /* ─── Public API methods ──────────────────────────────────────────────────── */
 export const api = {
-  get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
-  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
-  delete: <T>(path: string) => request<T>("DELETE", path),
+  get: <T>(path: string, headers?: Record<string, string>) => request<T>("GET", path, { headers }),
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    request<T>("POST", path, { body, headers }),
+  patch: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    request<T>("PATCH", path, { body, headers }),
+  put: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    request<T>("PUT", path, { body, headers }),
+  delete: <T>(path: string, headers?: Record<string, string>) => request<T>("DELETE", path, { headers }),
 } as const;

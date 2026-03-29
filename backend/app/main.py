@@ -8,6 +8,7 @@ import uvicorn
 from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -48,10 +49,24 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(title="Reels Generation Backend", version="0.1.0", lifespan=lifespan)
+    allowed_origins = {settings.frontend_base_url.rstrip("/")}
+    if settings.frontend_base_url.startswith("http://localhost:"):
+        allowed_origins.add(settings.frontend_base_url.replace("localhost", "127.0.0.1", 1).rstrip("/"))
+    if settings.frontend_base_url.startswith("http://127.0.0.1:"):
+        allowed_origins.add(settings.frontend_base_url.replace("127.0.0.1", "localhost", 1).rstrip("/"))
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(allowed_origins),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-Quota-Credits-Remaining", "X-Quota-Credits-Total"],
+    )
     app.add_middleware(CorrelationIdMiddleware)
     app.add_middleware(RateLimitMiddleware)
-    app.include_router(api_router, prefix=get_settings().api_v1_prefix)
+    app.include_router(api_router, prefix=settings.api_v1_prefix)
 
     @app.middleware("http")
     async def quota_headers_middleware(request: Request, call_next):

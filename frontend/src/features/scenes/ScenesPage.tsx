@@ -6,6 +6,7 @@ import type { ScenePlan, ScenePlanSet } from "../../types/domain";
 import { CommentThread } from "../../components/CommentThread";
 import { ConflictResolutionModal } from "../../components/ConflictResolutionModal";
 import { mockUpdateScene } from "../../lib/mock-service";
+import { isMockMode } from "../../lib/config";
 
 /* ─── Shimmer placeholder ─────────────────────────────────────────────────── */
 function SceneShimmer() {
@@ -376,6 +377,7 @@ export function ScenesPage() {
   const approvePlan = useApproveScenePlan(projectId);
 
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+  const [queuedGeneration, setQueuedGeneration] = useState(false);
 
   // Auto-select first scene
   useEffect(() => {
@@ -383,6 +385,12 @@ export function ScenesPage() {
       setSelectedSceneId(planSet.scenes[0].id);
     }
   }, [planSet, selectedSceneId]);
+
+  useEffect(() => {
+    if ((planSet?.scenes.length ?? 0) > 0) {
+      setQueuedGeneration(false);
+    }
+  }, [planSet?.scenes.length]);
 
   const selectedScene = useMemo(() => {
     if (!planSet) return null;
@@ -393,11 +401,8 @@ export function ScenesPage() {
   const hasPlan = planSet && planSet.scenes.length > 0;
 
   const handleGenerate = useCallback(() => {
-    generatePlan.mutate(undefined, {
-      onSuccess: (result) => {
-        if (result.scenes.length > 0) setSelectedSceneId(result.scenes[0].id);
-      },
-    });
+    setQueuedGeneration(true);
+    generatePlan.mutate();
   }, [generatePlan]);
 
   const handleApprove = useCallback(() => {
@@ -419,7 +424,7 @@ export function ScenesPage() {
   }, [planSet, projectId]);
 
   /* ─── Empty state ─────────────────────────────────────────────────────── */
-  if (!isLoading && !hasPlan && !generatePlan.isPending) {
+  if (!isLoading && !hasPlan && !generatePlan.isPending && !queuedGeneration) {
     return (
       <div className="scene-empty-state">
         <div className="scene-empty-state__card">
@@ -438,7 +443,7 @@ export function ScenesPage() {
   }
 
   /* ─── Loading state ───────────────────────────────────────────────────── */
-  if (isLoading || generatePlan.isPending) {
+  if (isLoading || generatePlan.isPending || queuedGeneration || planSet?.status === "running") {
     return (
       <div className="flex flex-col gap-6 px-7 py-6 pb-12 w-full max-w-7xl mx-auto animate-fade-in-up">
         <SceneShimmer />
@@ -467,9 +472,11 @@ export function ScenesPage() {
           </Link>
           {!isApproved ? (
             <>
-              <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={triggerGhostEdit}>
-                Trigger Ghost Edit
-              </button>
+              {isMockMode() ? (
+                <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={triggerGhostEdit}>
+                  Trigger Ghost Edit
+                </button>
+              ) : null}
               <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" onClick={handleGenerate} disabled={generatePlan.isPending}>
                 Regenerate plan
               </button>
@@ -583,7 +590,7 @@ export function ScenesPage() {
               )}
             </div>
             
-            <CommentThread targetId={selectedScene.id} />
+            <CommentThread projectId={projectId} targetId={selectedScene.id} targetType="scene_segment" />
           </>
         ) : null}
       </div>

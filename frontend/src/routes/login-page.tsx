@@ -9,8 +9,8 @@ export function LoginPage() {
   const { login, error, isLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("alex@studio.io");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("admin@example.com");
+  const [password, setPassword] = useState("ChangeMe123!");
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -63,7 +63,7 @@ export function LoginPage() {
             type="password"
             value={password}
             onChange={setPassword}
-            placeholder="password123"
+            placeholder="ChangeMe123!"
             disabled={isLoading}
           />
 
@@ -82,7 +82,7 @@ export function LoginPage() {
             {isLoading ? "Signing in..." : "Sign in"}
           </button>
 
-          <p className="text-center text-xs text-muted">Demo: alex@studio.io / password123</p>
+          <p className="text-center text-xs text-muted">Dev login: admin@example.com / ChangeMe123!</p>
         </form>
       </div>
     </div>

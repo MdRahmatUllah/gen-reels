@@ -41,6 +41,16 @@ def create_render(
     )
 
 
+@router.get("/{project_id}/renders", response_model=list[RenderJobResponse])
+def list_renders(
+    project_id: str,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return RenderService(db, settings).list_renders(auth, project_id)
+
+
 @router.get("/{project_id}/exports", response_model=list[ExportResponse])
 def list_exports(
     project_id: str,
