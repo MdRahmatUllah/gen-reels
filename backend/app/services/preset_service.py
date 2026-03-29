@@ -84,8 +84,22 @@ class PresetService:
         payload: VisualPresetUpdateRequest,
     ) -> dict[str, object]:
         preset = self.get_visual_preset(auth.workspace_id, preset_id)
+        if payload.version is not None and payload.version != preset.version:
+            raise ApiError(
+                409,
+                "visual_preset_conflict",
+                "This visual preset changed since you last loaded it.",
+                details={
+                    "expected_version": payload.version,
+                    "current_version": preset.version,
+                    "current": visual_preset_to_dict(preset),
+                },
+            )
         for field_name in payload.model_fields_set:
+            if field_name == "version":
+                continue
             setattr(preset, field_name, getattr(payload, field_name))
+        preset.version += 1
         record_audit_event(
             self.db,
             workspace_id=preset.workspace_id,
@@ -139,8 +153,22 @@ class PresetService:
         payload: VoicePresetUpdateRequest,
     ) -> dict[str, object]:
         preset = self.get_voice_preset(auth.workspace_id, preset_id)
+        if payload.version is not None and payload.version != preset.version:
+            raise ApiError(
+                409,
+                "voice_preset_conflict",
+                "This voice preset changed since you last loaded it.",
+                details={
+                    "expected_version": payload.version,
+                    "current_version": preset.version,
+                    "current": voice_preset_to_dict(preset),
+                },
+            )
         for field_name in payload.model_fields_set:
+            if field_name == "version":
+                continue
             setattr(preset, field_name, getattr(payload, field_name))
+        preset.version += 1
         record_audit_event(
             self.db,
             workspace_id=preset.workspace_id,

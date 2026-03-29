@@ -25,7 +25,8 @@ export function useRenders(projectId: string) {
 export function useStartRender(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => mockStartRender(projectId),
+    mutationFn: (settings?: { subtitleStyle: string; musicDucking: string; musicTrack: string; }) => 
+      mockStartRender(projectId, settings),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });
       qc.invalidateQueries({ queryKey: ["project", projectId] });

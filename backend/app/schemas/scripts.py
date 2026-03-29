@@ -18,6 +18,7 @@ class ScriptLineWriteRequest(BaseModel):
 
 
 class ScriptPatchRequest(BaseModel):
+    version: int | None = Field(default=None, ge=1)
     approval_state: str = "draft"
     lines: list[ScriptLineWriteRequest]
     metadata: dict[str, Any] = Field(default_factory=dict)

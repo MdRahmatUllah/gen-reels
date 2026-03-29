@@ -2,19 +2,35 @@ from __future__ import annotations
 
 from app.models.entities import (
     Asset,
+    BrandKit,
+    Comment,
     IdeaCandidate,
     IdeaSet,
     JobStatus,
+    PromptHistoryEntry,
     Project,
     ProjectBrief,
+    ProjectTemplate,
+    ReviewRequest,
     RenderJob,
     RenderStep,
     ScenePlan,
     SceneSegment,
     ScriptVersion,
+    TemplateVersion,
     VisualPreset,
     VoicePreset,
     ExportRecord,
+    WebhookDelivery,
+    WebhookEndpoint,
+    WorkspaceApiKey,
+    WorkspaceMember,
+    User,
+)
+from app.services.project_profiles import (
+    normalize_audio_mix_profile,
+    normalize_export_profile,
+    normalize_subtitle_style_profile,
 )
 
 
@@ -23,10 +39,15 @@ def project_to_dict(project: Project) -> dict[str, object]:
         "id": project.id,
         "workspace_id": project.workspace_id,
         "owner_user_id": project.owner_user_id,
+        "source_template_version_id": project.source_template_version_id,
+        "brand_kit_id": project.brand_kit_id,
         "title": project.title,
         "client": project.client,
         "aspect_ratio": project.aspect_ratio,
         "duration_target_sec": project.duration_target_sec,
+        "subtitle_style_profile": normalize_subtitle_style_profile(project.subtitle_style_profile),
+        "export_profile": normalize_export_profile(project.export_profile),
+        "audio_mix_profile": normalize_audio_mix_profile(project.audio_mix_profile),
         "stage": project.stage.value,
         "active_brief_id": project.active_brief_id,
         "selected_idea_id": project.selected_idea_id,
@@ -90,6 +111,7 @@ def script_version_to_dict(script_version: ScriptVersion) -> dict[str, object]:
         "based_on_idea_id": script_version.based_on_idea_id,
         "parent_version_id": script_version.parent_version_id,
         "version_number": script_version.version_number,
+        "version": script_version.version,
         "source_type": script_version.source_type.value,
         "approval_state": script_version.approval_state,
         "approved_at": script_version.approved_at,
@@ -143,6 +165,7 @@ def scene_plan_to_dict(scene_plan: ScenePlan, segments: list[SceneSegment]) -> d
         "consistency_pack_id": scene_plan.consistency_pack_id,
         "parent_scene_plan_id": scene_plan.parent_scene_plan_id,
         "version_number": scene_plan.version_number,
+        "version": scene_plan.version,
         "source_type": scene_plan.source_type.value,
         "approval_state": scene_plan.approval_state,
         "approved_at": scene_plan.approved_at,
@@ -161,6 +184,7 @@ def visual_preset_to_dict(preset: VisualPreset) -> dict[str, object]:
         "id": preset.id,
         "workspace_id": preset.workspace_id,
         "created_by_user_id": preset.created_by_user_id,
+        "version": preset.version,
         "name": preset.name,
         "description": preset.description,
         "prompt_prefix": preset.prompt_prefix,
@@ -180,6 +204,7 @@ def voice_preset_to_dict(preset: VoicePreset) -> dict[str, object]:
         "id": preset.id,
         "workspace_id": preset.workspace_id,
         "created_by_user_id": preset.created_by_user_id,
+        "version": preset.version,
         "name": preset.name,
         "description": preset.description,
         "provider_voice": preset.provider_voice,
@@ -269,6 +294,12 @@ def asset_to_dict(asset: Asset, *, download_url: str | None = None) -> dict[str,
         "width": asset.width,
         "height": asset.height,
         "frame_rate": asset.frame_rate,
+        "library_label": asset.library_label,
+        "is_library_asset": asset.is_library_asset,
+        "is_reusable": asset.is_reusable,
+        "reused_from_asset_id": asset.reused_from_asset_id,
+        "continuity_score": asset.continuity_score,
+        "reuse_count": asset.reuse_count,
         "quarantine_bucket_name": asset.quarantine_bucket_name,
         "quarantine_object_name": asset.quarantine_object_name,
         "quarantined_at": asset.quarantined_at,
@@ -296,9 +327,191 @@ def export_to_dict(export: ExportRecord, *, download_url: str | None = None) -> 
         "bucket_name": export.bucket_name,
         "object_name": export.object_name,
         "duration_ms": export.duration_ms,
+        "subtitle_style_profile": normalize_subtitle_style_profile(export.subtitle_style_profile),
+        "export_profile": normalize_export_profile(export.export_profile),
+        "audio_mix_profile": normalize_audio_mix_profile(export.audio_mix_profile),
         "metadata_payload": export.metadata_payload,
         "download_url": download_url,
         "completed_at": export.completed_at,
         "created_at": export.created_at,
         "updated_at": export.updated_at,
+    }
+
+
+def template_version_to_dict(version: TemplateVersion) -> dict[str, object]:
+    return {
+        "id": version.id,
+        "template_id": version.template_id,
+        "source_project_id": version.source_project_id,
+        "created_by_user_id": version.created_by_user_id,
+        "version_number": version.version_number,
+        "snapshot_payload": version.snapshot_payload,
+        "created_at": version.created_at,
+    }
+
+
+def template_to_dict(
+    template: ProjectTemplate,
+    *,
+    latest_version: TemplateVersion | None = None,
+    versions: list[TemplateVersion] | None = None,
+) -> dict[str, object]:
+    payload = {
+        "id": template.id,
+        "workspace_id": template.workspace_id,
+        "created_by_user_id": template.created_by_user_id,
+        "name": template.name,
+        "description": template.description,
+        "version": template.version,
+        "is_archived": template.is_archived,
+        "created_at": template.created_at,
+        "updated_at": template.updated_at,
+        "latest_version": template_version_to_dict(latest_version) if latest_version else None,
+    }
+    if versions is not None:
+        payload["versions"] = [template_version_to_dict(version) for version in versions]
+    return payload
+
+
+def prompt_history_to_dict(entry: PromptHistoryEntry) -> dict[str, object]:
+    return {
+        "id": entry.id,
+        "workspace_id": entry.workspace_id,
+        "project_id": entry.project_id,
+        "scene_plan_id": entry.scene_plan_id,
+        "scene_segment_id": entry.scene_segment_id,
+        "render_job_id": entry.render_job_id,
+        "render_step_id": entry.render_step_id,
+        "provider_run_id": entry.provider_run_id,
+        "asset_id": entry.asset_id,
+        "export_id": entry.export_id,
+        "prompt_role": entry.prompt_role,
+        "prompt_text": entry.prompt_text,
+        "source_asset_id": entry.source_asset_id,
+        "source_prompt_history_id": entry.source_prompt_history_id,
+        "metadata_payload": entry.metadata_payload,
+        "created_at": entry.created_at,
+    }
+
+
+def brand_kit_to_dict(brand_kit: BrandKit) -> dict[str, object]:
+    return {
+        "id": brand_kit.id,
+        "workspace_id": brand_kit.workspace_id,
+        "created_by_user_id": brand_kit.created_by_user_id,
+        "default_visual_preset_id": brand_kit.default_visual_preset_id,
+        "default_voice_preset_id": brand_kit.default_voice_preset_id,
+        "name": brand_kit.name,
+        "description": brand_kit.description,
+        "version": brand_kit.version,
+        "status": brand_kit.status.value,
+        "enforcement_mode": brand_kit.enforcement_mode.value,
+        "is_default": brand_kit.is_default,
+        "required_terms": brand_kit.required_terms,
+        "banned_terms": brand_kit.banned_terms,
+        "subtitle_style_override": brand_kit.subtitle_style_override,
+        "export_profile_override": brand_kit.export_profile_override,
+        "audio_mix_profile_override": brand_kit.audio_mix_profile_override,
+        "brand_rules": brand_kit.brand_rules,
+        "created_at": brand_kit.created_at,
+        "updated_at": brand_kit.updated_at,
+    }
+
+
+def comment_to_dict(comment: Comment) -> dict[str, object]:
+    return {
+        "id": comment.id,
+        "workspace_id": comment.workspace_id,
+        "project_id": comment.project_id,
+        "target_type": comment.target_type,
+        "target_id": comment.target_id,
+        "author_user_id": comment.author_user_id,
+        "body": comment.body,
+        "metadata_payload": comment.metadata_payload,
+        "resolved_at": comment.resolved_at,
+        "resolved_by_user_id": comment.resolved_by_user_id,
+        "created_at": comment.created_at,
+        "updated_at": comment.updated_at,
+    }
+
+
+def review_request_to_dict(review: ReviewRequest) -> dict[str, object]:
+    return {
+        "id": review.id,
+        "workspace_id": review.workspace_id,
+        "project_id": review.project_id,
+        "target_type": review.target_type.value,
+        "target_id": review.target_id,
+        "requested_by_user_id": review.requested_by_user_id,
+        "assigned_to_user_id": review.assigned_to_user_id,
+        "requested_version": review.requested_version,
+        "status": review.status.value,
+        "request_notes": review.request_notes,
+        "decision_notes": review.decision_notes,
+        "decided_by_user_id": review.decided_by_user_id,
+        "decided_at": review.decided_at,
+        "created_at": review.created_at,
+        "updated_at": review.updated_at,
+    }
+
+
+def workspace_member_to_dict(member: WorkspaceMember, user: User) -> dict[str, object]:
+    return {
+        "id": member.id,
+        "workspace_id": member.workspace_id,
+        "user_id": member.user_id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": member.role.value,
+        "is_default": member.is_default,
+        "created_at": member.created_at,
+        "updated_at": member.updated_at,
+    }
+
+
+def workspace_api_key_to_dict(api_key: WorkspaceApiKey) -> dict[str, object]:
+    return {
+        "id": api_key.id,
+        "workspace_id": api_key.workspace_id,
+        "created_by_user_id": api_key.created_by_user_id,
+        "name": api_key.name,
+        "role_scope": api_key.role_scope.value,
+        "key_prefix": api_key.key_prefix,
+        "last_used_at": api_key.last_used_at,
+        "expires_at": api_key.expires_at,
+        "revoked_at": api_key.revoked_at,
+        "created_at": api_key.created_at,
+    }
+
+
+def webhook_endpoint_to_dict(endpoint: WebhookEndpoint) -> dict[str, object]:
+    return {
+        "id": endpoint.id,
+        "workspace_id": endpoint.workspace_id,
+        "created_by_user_id": endpoint.created_by_user_id,
+        "name": endpoint.name,
+        "target_url": endpoint.target_url,
+        "event_types": endpoint.event_types,
+        "is_active": endpoint.is_active,
+        "last_tested_at": endpoint.last_tested_at,
+        "created_at": endpoint.created_at,
+        "updated_at": endpoint.updated_at,
+    }
+
+
+def webhook_delivery_to_dict(delivery: WebhookDelivery) -> dict[str, object]:
+    return {
+        "id": delivery.id,
+        "endpoint_id": delivery.endpoint_id,
+        "workspace_id": delivery.workspace_id,
+        "event_type": delivery.event_type,
+        "replay_id": delivery.replay_id,
+        "signature": delivery.signature,
+        "status": delivery.status.value,
+        "payload": delivery.payload,
+        "response_status_code": delivery.response_status_code,
+        "response_body": delivery.response_body,
+        "attempt_count": delivery.attempt_count,
+        "created_at": delivery.created_at,
+        "delivered_at": delivery.delivered_at,
     }

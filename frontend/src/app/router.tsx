@@ -7,21 +7,20 @@ import { IdeasPage } from "../features/ideas/IdeasPage";
 import { ScenesPage } from "../features/scenes/ScenesPage";
 import { RendersPage } from "../features/renders/RendersPage";
 import { ExportsPage } from "../features/exports/ExportsPage";
+import { BillingPage } from "../features/billing/BillingPage";
 import {
-  BillingPage,
   DashboardPage,
   PresetsPage,
   ProjectBriefPage,
   ProjectsPage,
   ScriptPage,
   SettingsPage,
-  TemplatesPage,
 } from "../routes/app-pages";
-import {
-  AdminQueuePage,
-  AdminRendersPage,
-  AdminWorkspacesPage,
-} from "../routes/admin-pages";
+import { TemplatesPage } from "../features/templates/TemplatesPage";
+import { AssetsPage } from "../features/assets/AssetsPage";
+import { AdminQueuePage } from "../features/admin/AdminQueuePage";
+import { AdminRendersPage } from "../features/admin/AdminRendersPage";
+import { AdminWorkspacesPage } from "../features/admin/AdminWorkspacesPage";
 
 export const router = createBrowserRouter([
   {
@@ -83,6 +82,10 @@ export const router = createBrowserRouter([
       {
         path: "templates",
         element: <TemplatesPage />,
+      },
+      {
+        path: "assets",
+        element: <AssetsPage />,
       },
       {
         path: "settings",

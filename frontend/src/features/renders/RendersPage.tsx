@@ -17,6 +17,8 @@ import {
   useRetryRenderStep,
 } from "../../hooks/use-renders";
 import type { RenderJob, RenderStep } from "../../types/domain";
+import { RenderSettingsModal } from "./RenderSettingsModal";
+import { useState } from "react";
 
 function formatDuration(sec: number) {
   const m = Math.floor(sec / 60);
@@ -65,6 +67,7 @@ function RenderStepTable({ steps, onRetry }: { steps: RenderStep[], onRetry: (id
             <th>Step</th>
             <th>Status</th>
             <th>Delta</th>
+            <th>Cost</th>
             <th>Clip</th>
             <th>Narration</th>
             <th>Next action</th>
@@ -76,9 +79,12 @@ function RenderStepTable({ steps, onRetry }: { steps: RenderStep[], onRetry: (id
               <td>{step.sceneId}</td>
               <td>{step.name}</td>
               <td>
-                <StatusBadge status={step.status} />
+                <StatusBadge status={step.status as any} />
               </td>
               <td>{formatSignedSeconds(step.durationDeltaSec)}</td>
+              <td style={{ color: "var(--color-ink-lighter)" }}>
+                {step.status === "completed" ? `${step.creditCost || 5} cr` : "--"}
+              </td>
               <td>{step.clipStatus}</td>
               <td>{step.narrationStatus}</td>
               <td>
@@ -86,6 +92,10 @@ function RenderStepTable({ steps, onRetry }: { steps: RenderStep[], onRetry: (id
                   <button className="button button--secondary" onClick={() => onRetry(step.id)} style={{ padding: '4px 8px', fontSize: '12px', minHeight: 'unset' }}>
                     Retry
                   </button>
+                ) : step.status === "blocked" ? (
+                  <span style={{ fontSize: '11px', color: 'var(--color-warning-dark)', fontWeight: 'var(--font-weight-medium)' }}>
+                    Admin review required
+                  </span>
                 ) : (
                   step.nextAction
                 )}
@@ -108,6 +118,8 @@ export function RendersPage() {
   const { mutate: startRender, isPending: isStarting } = useStartRender(project?.id || "");
   const { mutate: cancelRender } = useCancelRender(project?.id || "");
   const { mutate: retryStep } = useRetryRenderStep(project?.id || "");
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   if (projectLoading || !project) {
     return <LoadingPage />;
@@ -146,7 +158,7 @@ export function RendersPage() {
           {!activeRender && (
              <button
                className="button button--primary"
-               onClick={() => startRender()}
+               onClick={() => setShowSettingsModal(true)}
                disabled={isStarting}
              >
                {isStarting ? "Starting..." : "Begin render generation →"}
@@ -266,6 +278,17 @@ export function RendersPage() {
         <EmptyState
           title="Ready to Render"
           description="You have approved your Scene Plan. Generate a render to start the FFmpeg + AI composition pipeline."
+        />
+      )}
+      
+      {showSettingsModal && (
+        <RenderSettingsModal 
+          onClose={() => setShowSettingsModal(false)}
+          onConfirm={(settings) => {
+            startRender(settings);
+            setShowSettingsModal(false);
+          }}
+          isStarting={isStarting}
         />
       )}
     </PageFrame>

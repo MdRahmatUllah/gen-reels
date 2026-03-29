@@ -29,7 +29,13 @@ import type {
   BillingData,
   PresetCard,
   TemplateCard,
+  AssetRecord,
   SettingsSection,
+  UsageRecord,
+  InvoiceItem,
+  AdminQueueItem,
+  AdminWorkspaceRow,
+  AdminRenderRow,
 } from "../types/domain";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -142,7 +148,25 @@ interface MockState {
   exports: Map<string, ExportArtifact[]>;
   visualPresets: VisualPreset[];
   voicePresets: VoicePreset[];
+  usageRecords: UsageRecord[];
+  invoices: InvoiceItem[];
+  assets: AssetRecord[];
+  templates: TemplateCard[];
 }
+
+const seedTemplates: TemplateCard[] = [
+  { id: "tpl_skincare", name: "Premium Skincare Launch", description: "Soft lighting, ASMR pacing, and clinical text callouts.", duration: "15-30s", scenes: 6, style: "Minimal" },
+  { id: "tpl_founder", name: "Founder Story Talking Head", description: "Direct camera appeal with b-roll intercut.", duration: "45-60s", scenes: 12, style: "Documentary" },
+  { id: "tpl_howto", name: "Step-by-Step Tutorial", description: "Numbered beats, top-down angles, energetic pacing.", duration: "30-45s", scenes: 8, style: "Energetic" },
+];
+
+const seedAssets: AssetRecord[] = [
+  { id: "ast_1", type: "video", sourceProjectId: "project_aurora_serum", sourceSceneId: "scene_1", thumbnailUrl: "https://images.unsplash.com/photo-1615397323861-1250ec46be22?q=80&w=200&auto=format&fit=crop", url: "#", prompt: "A slow pan over glowing serum bottle", tags: ["skincare", "bottle", "slow-pan", "approved"], createdAt: new Date(Date.now() - 86400000).toISOString() },
+  { id: "ast_2", type: "image", sourceProjectId: "project_aurora_serum", sourceSceneId: "scene_2", thumbnailUrl: "https://images.unsplash.com/photo-1596755389378-c11d4d1253e2?q=80&w=200&auto=format&fit=crop", url: "#", prompt: "Drip of serum on face", tags: ["skincare", "macro"], createdAt: new Date(Date.now() - 186400000).toISOString() },
+  { id: "ast_3", type: "audio", sourceProjectId: null, sourceSceneId: null, thumbnailUrl: "https://images.unsplash.com/photo-1620288627223-53302f4e8c74?q=80&w=200&auto=format&fit=crop", url: "#", prompt: "Ambient corporate 1", tags: ["music", "corporate", "ambient", "cleared"], createdAt: new Date(Date.now() - 286400000).toISOString() },
+  { id: "ast_4", type: "video", sourceProjectId: "project_glow", sourceSceneId: "scene_4", thumbnailUrl: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?q=80&w=200&auto=format&fit=crop", url: "#", prompt: "Woman smiling applying cream", tags: ["lifestyle", "application"], createdAt: new Date(Date.now() - 386400000).toISOString() },
+  { id: "ast_5", type: "image", sourceProjectId: "project_x", sourceSceneId: null, thumbnailUrl: "https://images.unsplash.com/photo-1571781564993-4a1251993cc0?q=80&w=200&auto=format&fit=crop", url: "#", prompt: "Clean white studio background", tags: ["background", "minimal"], createdAt: new Date(Date.now() - 486400000).toISOString() },
+];
 
 const seedVisualPresets: VisualPreset[] = [
   { id: "vp_editorial", name: "Editorial Clean", description: "Cool daylight, matte surfaces, negative space", category: "Beauty", style: "editorial", palette: "Frosted cobalt / ivory", lighting: "Cool daylight, diffused" },
@@ -181,6 +205,12 @@ const state: MockState = {
   exports: new Map(),
   visualPresets: [...seedVisualPresets],
   voicePresets: [...seedVoicePresets],
+  usageRecords: [],
+  invoices: [
+    { id: "inv_01", label: "Pro plan subscription", amount: "$1,200", date: "Mar 1", status: "paid" }
+  ],
+  assets: [...seedAssets],
+  templates: [...seedTemplates],
 };
 
 /* ─── Idea Generation Templates ───────────────────────────────────────────── */
@@ -547,12 +577,7 @@ export async function mockGetPresets(): Promise<PresetCard[]> {
   ];
 }
 
-export async function mockGetTemplates(): Promise<TemplateCard[]> {
-  await randomDelay();
-  return [
-    { id: "tpl_1", name: "Product Launch 60s", description: "Hook → Problem → Solution → CTA", duration: "60s", scenes: 6, style: "Minimal" },
-  ];
-}
+// Replaced by global template library
 
 export async function mockGetSettings(): Promise<SettingsSection[]> {
   await randomDelay();
@@ -668,6 +693,7 @@ export async function mockGenerateScenePlan(projectId: string): Promise<ScenePla
       status: "draft",
       keyframeStatus: "Awaiting generation",
       notes: [],
+      promptHistory: [],
       palette: meta.palette,
       audioCue: meta.audioCue,
       thumbnailLabel: beatTitle.substring(0, 16),
@@ -726,6 +752,12 @@ export async function mockGeneratePromptPairs(projectId: string, sceneId: string
 
   const scene = planSet.scenes.find((s) => s.id === sceneId);
   if (!scene) throw new Error(`Scene ${sceneId} not found`);
+
+  // History tracking for Phase 5 lineage
+  if (scene.startImagePrompt || scene.endImagePrompt) {
+    if (!scene.promptHistory) scene.promptHistory = [];
+    scene.promptHistory.unshift(`[${new Date().toLocaleTimeString()}] Start: ${scene.startImagePrompt.substring(0, 40)}... | End: ${scene.endImagePrompt.substring(0, 40)}...`);
+  }
 
   const brief = state.briefs.get(projectId);
   scene.startImagePrompt = `Opening frame — ${scene.shotType.toLowerCase()}, ${brief?.brandNorthStar ?? "premium editorial"}, setting up: ${scene.narration.substring(0, 60)}`;
@@ -877,7 +909,10 @@ export async function mockRetryRenderStep(projectId: string, stepId: string): Pr
 }
 
 // Spawns the SSE Simulator
-export async function mockStartRender(projectId: string): Promise<RenderJob> {
+export async function mockStartRender(
+  projectId: string, 
+  settings?: { subtitleStyle?: string; musicDucking?: string; musicTrack?: string }
+): Promise<RenderJob> {
   await randomDelay(300, 600);
   const planSet = state.scenePlanSets.get(projectId);
   const project = state.projects.get(projectId);
@@ -911,7 +946,7 @@ export async function mockStartRender(projectId: string): Promise<RenderJob> {
     consistencyPackSnapshotId: `cps_${projectId}_${Date.now()}`,
     sseState: "Live SSE connected",
     nextAction: "Initializing pipelines...",
-    musicTrack: "Ambient Corporate 1",
+    musicTrack: settings?.musicTrack || "Ambient Corporate 1",
     allowExportWithoutMusic: false,
     checks: [
       { id: "c1", label: "Consistency pack provenance", status: "pass", detail: "All clips reference locked snapshot." },
@@ -920,7 +955,13 @@ export async function mockStartRender(projectId: string): Promise<RenderJob> {
     events: [
       { id: nextId("evt"), time: new Date().toLocaleTimeString(), label: "Job Created", detail: "Render job queued for execution", tone: "neutral" }
     ],
-    metrics: { lufsTarget: "-14 LUFS", truePeak: "-1.0 dBTP", musicDucking: "-12 dB", subtitleState: "Burned" }
+    metrics: { 
+      lufsTarget: "-14 LUFS", 
+      truePeak: "-1.0 dBTP", 
+      musicDucking: settings?.musicDucking || "-12 dB", 
+      subtitleState: "Burned",
+      subtitleStyle: settings?.subtitleStyle || "Default"
+    }
   };
 
   state.renderJobs.set(projectId, job);
@@ -976,6 +1017,22 @@ export async function renderSimulatorLoop(projectId: string) {
     await new Promise(r => setTimeout(r, TICK_MS));
     if (job.status !== "running") return;
     
+    // Simulate Moderation Block (random high chance on first step for testing)
+    if (i === 0 && !step.name.includes("Fixed") && Math.random() > 0.5) {
+      step.status = "blocked";
+      step.clipStatus = "Flagged";
+      step.narrationStatus = "Generated";
+      step.name += " (Blocked)";
+      step.nextAction = "Awaiting manual operator review";
+      
+      job.status = "blocked";
+      job.sseState = "Halted on moderation block";
+      job.nextAction = "Admin review required for flagged content.";
+      pushEvent("Moderation Block", `Scene ${i+1} flagged by trust and safety heuristics`, "warning");
+      state.renderJobs.set(projectId, { ...job });
+      return; 
+    }
+
     // Random intermittent failure check
     // If it's the second scene and we haven't failed yet, fail it manually
     if (i === 1 && !step.name.includes("Fixed")) {
@@ -996,7 +1053,7 @@ export async function renderSimulatorLoop(projectId: string) {
     }
 
     // Success path for step
-    step.name = step.name.replace(" (Failed)", " (Fixed)"); // In case it was a retry
+    step.name = step.name.replace(" (Failed)", " (Fixed)").replace(" (Blocked)", " (Fixed)"); 
     step.status = "completed";
     step.clipStatus = "Rendered";
     step.narrationStatus = "Aligned";
@@ -1004,6 +1061,21 @@ export async function renderSimulatorLoop(projectId: string) {
     step.nextAction = "Complete";
     job.progress = Math.floor(((i + 1) / totalSteps) * 100) - 2;
     pushEvent("Scene Completed", `Frames and clip encoded for Scene ${i+1}`, "success");
+
+    // Deduct Cost 
+    const cost = step.creditCost || 5;
+    const ws = state.workspaces.find(w => w.id === state.activeWorkspaceId);
+    if (ws) {
+      ws.creditsRemaining -= cost;
+      state.usageRecords.push({
+        id: nextId("usr"),
+        projectId,
+        description: `Scene ${i+1} compute`,
+        credits: cost,
+        timestamp: new Date().toLocaleTimeString()
+      });
+    }
+
     state.renderJobs.set(projectId, { ...job });
   }
 
@@ -1048,3 +1120,142 @@ export async function renderSimulatorLoop(projectId: string) {
   state.renderJobs.set(projectId, { ...job });
 }
 
+
+/* ─── Phase 4: Billing & Admin API Exports ────────────────────────────────── */
+
+export async function mockGetBilling(): Promise<BillingData> {
+  await delay(400);
+  const ws = state.workspaces.find(w => w.id === state.activeWorkspaceId)!;
+  const totalUsage = state.usageRecords.reduce((sum, rec) => sum + rec.credits, 0);
+
+  return {
+    planName: ws.plan,
+    cycleLabel: "Mar 1 - Mar 31",
+    creditsRemaining: ws.creditsRemaining,
+    creditsTotal: ws.creditsTotal,
+    projectedSpend: "$" + ((totalUsage / 100) * 1.5).toFixed(2), // purely mock math
+    usageBreakdown: [
+      { category: "Image frame-pairs", usage: `${state.usageRecords.length} calls`, unitCost: "5 credits", total: `${totalUsage} credits` },
+    ],
+    invoices: state.invoices,
+  };
+}
+
+export async function mockGetAdminQueue(): Promise<AdminQueueItem[]> {
+  await delay(300);
+  const queue: AdminQueueItem[] = [];
+  for (const [projectId, job] of state.renderJobs.entries()) {
+    if (job.status === "failed" || job.status === "blocked") {
+      const failingStep = job.steps.find(s => s.status === "failed" || s.status === "blocked");
+      queue.push({
+        id: job.id,
+        workspace: "North Star Studio",
+        project: projectId,
+        step: failingStep?.name || "Pipeline",
+        status: job.status,
+        retries: failingStep?.name.includes("Fixed") ? 1 : 0,
+        owner: "System",
+        age: "2m",
+        provider: "Kling / ElevenLabs",
+      });
+    }
+  }
+  return queue;
+}
+
+export async function mockApproveQueueItem(jobId: string): Promise<void> {
+  await delay(400);
+  for (const [projectId, job] of state.renderJobs.entries()) {
+    if (job.id === jobId) {
+      const blockedStep = job.steps.find(s => s.status === "blocked");
+      if (blockedStep) {
+        blockedStep.status = "running";
+        blockedStep.clipStatus = "Generating frames...";
+        blockedStep.nextAction = "Resuming from moderation";
+      }
+      job.status = "running";
+      job.sseState = "Operator forced release";
+      job.nextAction = "Resuming from checkpoint.";
+      state.renderJobs.set(projectId, { ...job });
+      
+      void renderSimulatorLoop(projectId);
+      break;
+    }
+  }
+}
+
+export async function mockRejectQueueItem(jobId: string): Promise<void> {
+  await delay(400);
+  for (const [projectId, job] of state.renderJobs.entries()) {
+    if (job.id === jobId) {
+      job.status = "failed";
+      job.sseState = "Operator rejected content";
+      job.nextAction = "Job permanently halted due to policy violation.";
+      state.renderJobs.set(projectId, { ...job });
+      break;
+    }
+  }
+}
+
+export async function mockGetAdminWorkspaces(): Promise<AdminWorkspaceRow[]> {
+  await delay(300);
+  return state.workspaces.map(ws => ({
+    id: ws.id,
+    name: ws.name,
+    plan: ws.plan,
+    seats: ws.seats,
+    creditsRemaining: ws.creditsRemaining.toString(),
+    renderLoad: "Normal",
+    health: "Healthy",
+    renewalDate: "2026-04-01"
+  }));
+}
+
+export async function mockGetAdminRenders(): Promise<AdminRenderRow[]> {
+  await delay(300);
+  const renders: AdminRenderRow[] = [];
+  for (const [projectId, job] of state.renderJobs.entries()) {
+     renders.push({
+       id: job.id,
+       project: projectId,
+       workspace: "North Star",
+       status: job.status,
+       provider: "Kling",
+       cost: (job.progress > 0 ? "15 credits" : "0 credits"),
+       stuckFor: (job.status === "failed" || job.status === "blocked") ? "2m" : "-",
+       issue: job.sseState,
+       snapshot: job.consistencyPackSnapshotId,
+     });
+  }
+  return renders;
+}
+
+/* ─── Phase 5: Polish & Ecosystem ─────────────────────────────────────────── */
+
+export async function mockGetAssets(): Promise<AssetRecord[]> {
+  await randomDelay(300, 500);
+  return state.assets;
+}
+
+export async function mockGetTemplates(): Promise<TemplateCard[]> {
+  await randomDelay(300, 500);
+  return state.templates;
+}
+
+export async function mockCloneTemplate(templateId: string): Promise<string> {
+  await randomDelay(800, 1200);
+  const template = state.templates.find(t => t.id === templateId);
+  if (!template) throw new Error("Template not found");
+
+  const newProjectId = nextId("project_cloned");
+  const newProject = makeSeedProject(newProjectId, `Copy of ${template.name}`, "brief");
+  
+  // Clone brief structure
+  const clonedBrief = { ...seedBrief };
+  clonedBrief.objective = `Based on ${template.name}`;
+  
+  state.projects.set(newProjectId, newProject);
+  state.briefs.set(newProjectId, clonedBrief);
+  
+  return newProjectId;
+}

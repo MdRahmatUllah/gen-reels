@@ -30,12 +30,13 @@ from app.models.entities import (
     ScriptSource,
     ScriptVersion,
     StepKind,
-    WorkspaceRole,
 )
 from app.schemas.scripts import ScriptPatchRequest
 from app.services.audit_service import record_audit_event
 from app.services.billing_service import BillingService
+from app.services.brand_kit_service import BrandKitService
 from app.services.moderation_service import moderate_text_or_raise
+from app.services.permissions import require_workspace_edit
 from app.services.presenters import (
     idea_set_to_dict,
     job_to_dict,
@@ -61,10 +62,10 @@ class GenerationService:
         return project
 
     def _assert_mutation_rights(self, project: Project, auth: AuthContext) -> None:
-        if auth.workspace_role == WorkspaceRole.admin:
-            return
-        if str(project.owner_user_id) != auth.user_id:
-            raise ApiError(403, "forbidden", "Only the project owner or workspace admin can perform this action.")
+        require_workspace_edit(
+            auth,
+            message="Only workspace members or admins can perform this action.",
+        )
 
     def _hash_request(self, payload: dict[str, object]) -> str:
         encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
@@ -393,6 +394,17 @@ class GenerationService:
         )
         if not parent:
             raise ApiError(404, "script_not_found", "Script version not found.")
+        if payload.version is not None and payload.version != parent.version:
+            raise ApiError(
+                409,
+                "script_version_conflict",
+                "This script changed since you last loaded it.",
+                details={
+                    "expected_version": payload.version,
+                    "current_version": parent.version,
+                    "current": script_version_to_dict(parent),
+                },
+            )
         if payload.approval_state == "approved":
             raise ApiError(
                 400,
@@ -407,6 +419,10 @@ class GenerationService:
             or 0
         ) + 1
         lines = [line.model_dump() for line in payload.lines]
+        script_text = "\n".join(
+            f"{line.get('beat', '')}\n{line.get('narration', '')}\n{line.get('caption', '')}" for line in lines
+        )
+        BrandKitService(self.db).validate_text_against_brand_kit(project, script_text)
         total_words = sum(len(str(line["narration"]).split()) for line in lines)
         estimated_duration = sum(int(line["duration_sec"]) for line in lines)
         script = ScriptVersion(
@@ -415,6 +431,7 @@ class GenerationService:
             created_by_user_id=UUID(auth.user_id),
             parent_version_id=parent.id,
             version_number=next_version,
+            version=1,
             source_type=ScriptSource.manual,
             approval_state="draft",
             total_words=total_words,

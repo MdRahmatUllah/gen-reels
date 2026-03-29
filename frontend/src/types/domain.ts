@@ -161,6 +161,7 @@ export interface ScenePlan {
   status: WorkflowStatus;
   keyframeStatus: string;
   notes: string[];
+  promptHistory: string[]; // Phase 5 lineage tracking
   palette: string;
   audioCue: string;
   thumbnailLabel: string;
@@ -225,6 +226,7 @@ export interface RenderStep {
   narrationStatus: string;
   consistency: string;
   nextAction: string;
+  creditCost?: number;
 }
 
 export interface RenderEvent {
@@ -258,6 +260,7 @@ export interface RenderJob {
     truePeak: string;
     musicDucking: string;
     subtitleState: string;
+    subtitleStyle?: string; // Phase 5 Custom style
   };
 }
 
@@ -277,6 +280,19 @@ export interface ExportArtifact {
   createdAt: string;
   gradient: string;
   ratio: string;
+}
+
+/* ─── Assets Library (Phase 5) ───────────────────────────────────────────── */
+export interface AssetRecord {
+  id: string;
+  type: "image" | "video" | "audio";
+  sourceProjectId: string | null;
+  sourceSceneId: string | null;
+  thumbnailUrl: string;
+  url: string;
+  prompt: string;
+  tags: string[];
+  createdAt: string;
 }
 
 /* ─── Presets ─────────────────────────────────────────────────────────────── */
@@ -315,6 +331,14 @@ export interface InvoiceItem {
   amount: string;
   date: string;
   status: string;
+}
+
+export interface UsageRecord {
+  id: string;
+  projectId: string;
+  description: string;
+  credits: number;
+  timestamp: string;
 }
 
 /* ─── Settings ────────────────────────────────────────────────────────────── */

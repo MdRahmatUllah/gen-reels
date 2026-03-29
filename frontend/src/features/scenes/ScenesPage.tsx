@@ -497,9 +497,10 @@ export function ScenesPage() {
           </div>
 
           {selectedScene ? (
-            <div className="surface-card">
-              <h3 className="section-heading">Scene {selectedScene.index}</h3>
-              <div className="inspector-list">
+            <>
+              <div className="surface-card">
+                <h3 className="section-heading">Scene {selectedScene.index}</h3>
+                <div className="inspector-list">
                 <div>
                   <span>Continuity</span>
                   <strong>{selectedScene.continuityScore}/100</strong>
@@ -518,8 +519,24 @@ export function ScenesPage() {
                 </div>
               </div>
             </div>
-          ) : null}
-        </div>
+            
+            <div className="surface-card">
+              <h3 className="section-heading">Prompt Lineage</h3>
+              {(!selectedScene.promptHistory || selectedScene.promptHistory.length === 0) ? (
+                <p className="body-copy" style={{ fontSize: "12px", color: "var(--color-ink-lighter)" }}>No previous prompt versions logged.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
+                  {selectedScene.promptHistory.map((h, i) => (
+                    <div key={i} style={{ fontSize: "11px", color: "var(--color-ink-lighter)", padding: "8px", background: "var(--color-background)", border: "1px dashed var(--color-border)", borderRadius: "4px", lineHeight: "1.4" }}>
+                      {h}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : null}
+      </div>
       </div>
     </div>
   );

@@ -56,6 +56,7 @@ class SceneSegmentResponse(BaseModel):
 
 
 class ScenePlanPatchRequest(BaseModel):
+    version: int | None = Field(default=None, ge=1)
     visual_preset_id: str | None = None
     voice_preset_id: str | None = None
     segments: list[SceneSegmentWriteRequest] = Field(default_factory=list)
@@ -71,6 +72,7 @@ class ScenePlanResponse(BaseModel):
     consistency_pack_id: UUID | None
     parent_scene_plan_id: UUID | None
     version_number: int
+    version: int
     source_type: str
     approval_state: str
     approved_at: datetime | None

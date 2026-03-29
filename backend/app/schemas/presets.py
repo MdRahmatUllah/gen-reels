@@ -18,6 +18,7 @@ class VisualPresetCreateRequest(BaseModel):
 
 
 class VisualPresetUpdateRequest(BaseModel):
+    version: int | None = Field(default=None, ge=1)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     prompt_prefix: str | None = None
@@ -33,6 +34,7 @@ class VisualPresetResponse(BaseModel):
     id: UUID
     workspace_id: UUID
     created_by_user_id: UUID | None
+    version: int
     name: str
     description: str
     prompt_prefix: str
@@ -56,6 +58,7 @@ class VoicePresetCreateRequest(BaseModel):
 
 
 class VoicePresetUpdateRequest(BaseModel):
+    version: int | None = Field(default=None, ge=1)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     provider_voice: str | None = None
@@ -69,6 +72,7 @@ class VoicePresetResponse(BaseModel):
     id: UUID
     workspace_id: UUID
     created_by_user_id: UUID | None
+    version: int
     name: str
     description: str
     provider_voice: str

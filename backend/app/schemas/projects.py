@@ -14,6 +14,7 @@ class ProjectCreateRequest(BaseModel):
     client: str | None = Field(default=None, max_length=255)
     aspect_ratio: str = "9:16"
     duration_target_sec: int = Field(default=90, ge=60, le=120)
+    brand_kit_id: str | None = None
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -25,16 +26,25 @@ class ProjectUpdateRequest(BaseModel):
     archived: bool | None = None
     default_visual_preset_id: str | None = None
     default_voice_preset_id: str | None = None
+    brand_kit_id: str | None = None
+    subtitle_style_profile: dict[str, Any] | None = None
+    export_profile: dict[str, Any] | None = None
+    audio_mix_profile: dict[str, Any] | None = None
 
 
 class ProjectResponse(BaseModel):
     id: UUID
     workspace_id: UUID
     owner_user_id: UUID
+    source_template_version_id: UUID | None
+    brand_kit_id: UUID | None
     title: str
     client: str | None
     aspect_ratio: str
     duration_target_sec: int
+    subtitle_style_profile: dict[str, Any]
+    export_profile: dict[str, Any]
+    audio_mix_profile: dict[str, Any]
     stage: str
     active_brief_id: UUID | None
     selected_idea_id: UUID | None
@@ -113,6 +123,7 @@ class ScriptVersionResponse(BaseModel):
     based_on_idea_id: UUID | None
     parent_version_id: UUID | None
     version_number: int
+    version: int
     source_type: str
     approval_state: str
     approved_at: datetime | None
@@ -135,3 +146,32 @@ class ProjectDetailResponse(BaseModel):
     script_versions: list[ScriptVersionResponse]
     scene_plans: list[dict[str, Any]]
     recent_jobs: list[JobSummary]
+
+
+class PromptHistoryResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    project_id: UUID | None
+    scene_plan_id: UUID | None
+    scene_segment_id: UUID | None
+    render_job_id: UUID | None
+    render_step_id: UUID | None
+    provider_run_id: UUID | None
+    asset_id: UUID | None
+    export_id: UUID | None
+    prompt_role: str
+    prompt_text: str
+    source_asset_id: UUID | None
+    source_prompt_history_id: UUID | None
+    metadata_payload: dict[str, Any]
+    created_at: datetime
+
+
+class ProjectLineageResponse(BaseModel):
+    project: ProjectResponse
+    source_template_version: dict[str, Any] | None = None
+    visual_preset: dict[str, Any] | None = None
+    voice_preset: dict[str, Any] | None = None
+    exports: list[dict[str, Any]]
+    library_assets: list[dict[str, Any]]
+    prompt_history: list[PromptHistoryResponse]

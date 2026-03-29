@@ -19,6 +19,7 @@ class UserSummary(OrmModel):
 
 
 class WorkspaceMembershipSummary(BaseModel):
+    member_id: UUID | None = None
     workspace_id: UUID
     workspace_name: str
     role: str

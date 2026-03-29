@@ -59,6 +59,12 @@ class AssetResponse(BaseModel):
     width: int | None
     height: int | None
     frame_rate: float | None
+    library_label: str | None
+    is_library_asset: bool
+    is_reusable: bool
+    reused_from_asset_id: UUID | None
+    continuity_score: float | None
+    reuse_count: int
     quarantine_bucket_name: str | None
     quarantine_object_name: str | None
     quarantined_at: datetime | None
@@ -84,6 +90,9 @@ class ExportResponse(BaseModel):
     bucket_name: str
     object_name: str
     duration_ms: int | None
+    subtitle_style_profile: dict[str, object]
+    export_profile: dict[str, object]
+    audio_mix_profile: dict[str, object]
     metadata_payload: dict[str, object]
     download_url: str | None = None
     completed_at: datetime | None

@@ -252,6 +252,7 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
               items={[
                 { to: "/app", label: "Dashboard" },
                 { to: "/app/projects", label: "Projects" },
+                { to: "/app/assets", label: "Assets" },
                 { to: "/app/presets", label: "Presets" },
                 { to: "/app/templates", label: "Templates" },
               ]}

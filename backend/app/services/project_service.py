@@ -4,35 +4,55 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext
 from app.core.errors import ApiError
 from app.integrations.azure import ModerationProvider
 from app.models.entities import (
+    Asset,
+    ExportRecord,
     IdeaCandidate,
     IdeaSet,
     Project,
     ProjectBrief,
     ProjectStage,
+    PromptHistoryEntry,
     RenderJob,
     ScenePlan,
     SceneSegment,
     ScriptVersion,
+    TemplateVersion,
+    VisualPreset,
+    VoicePreset,
     WorkspaceRole,
 )
 from app.schemas.projects import BriefWriteRequest, ProjectCreateRequest, ProjectUpdateRequest
 from app.services.audit_service import record_audit_event
+from app.services.brand_kit_service import BrandKitService
 from app.services.moderation_service import moderate_text_or_raise
+from app.services.permissions import require_workspace_edit
 from app.services.preset_service import PresetService
+from app.services.project_profiles import (
+    normalize_audio_mix_profile,
+    normalize_export_profile,
+    normalize_subtitle_style_profile,
+)
 from app.services.presenters import (
     brief_to_dict,
     idea_candidate_to_dict,
     idea_set_to_dict,
     job_to_dict,
+    prompt_history_to_dict,
     project_to_dict,
     scene_plan_to_dict,
     script_version_to_dict,
+    template_version_to_dict,
+    asset_to_dict,
+    export_to_dict,
+    visual_preset_to_dict,
+    voice_preset_to_dict,
 )
 
 
@@ -53,10 +73,10 @@ class ProjectService:
         return project
 
     def _assert_mutation_rights(self, project: Project, auth: AuthContext) -> None:
-        if auth.workspace_role == WorkspaceRole.admin:
-            return
-        if str(project.owner_user_id) != auth.user_id:
-            raise ApiError(403, "forbidden", "Only the project owner or workspace admin can update this project.")
+        require_workspace_edit(
+            auth,
+            message="Only workspace members or admins can update this project.",
+        )
 
     def list_projects(self, auth: AuthContext) -> list[dict[str, object]]:
         projects = self.db.scalars(
@@ -67,6 +87,8 @@ class ProjectService:
         return [project_to_dict(project) for project in projects]
 
     def create_project(self, auth: AuthContext, payload: ProjectCreateRequest) -> dict[str, object]:
+        brand_kit_service = BrandKitService(self.db)
+        brand_kit = brand_kit_service.resolve_brand_kit(auth.workspace_id, payload.brand_kit_id)
         project = Project(
             workspace_id=UUID(auth.workspace_id),
             owner_user_id=UUID(auth.user_id),
@@ -74,8 +96,12 @@ class ProjectService:
             client=payload.client,
             aspect_ratio=payload.aspect_ratio,
             duration_target_sec=payload.duration_target_sec,
+            subtitle_style_profile=normalize_subtitle_style_profile(None),
+            export_profile=normalize_export_profile(None),
+            audio_mix_profile=normalize_audio_mix_profile(None),
             stage=ProjectStage.brief,
         )
+        brand_kit_service.apply_brand_kit_defaults(project, brand_kit)
         self.db.add(project)
         self.db.flush()
         record_audit_event(
@@ -173,6 +199,57 @@ class ProjectService:
             "recent_jobs": [job_to_dict(job) for job in recent_jobs],
         }
 
+    def get_project_lineage(self, auth: AuthContext, project_id: str) -> dict[str, object]:
+        project = self._get_project(project_id, auth.workspace_id)
+        visual_preset = (
+            self.db.get(VisualPreset, project.default_visual_preset_id)
+            if project.default_visual_preset_id
+            else None
+        )
+        voice_preset = (
+            self.db.get(VoicePreset, project.default_voice_preset_id)
+            if project.default_voice_preset_id
+            else None
+        )
+        source_template_version = (
+            self.db.get(TemplateVersion, project.source_template_version_id)
+            if project.source_template_version_id
+            else None
+        )
+        exports = self.db.scalars(
+            select(ExportRecord)
+            .where(ExportRecord.project_id == project.id)
+            .order_by(ExportRecord.created_at.desc())
+        ).all()
+        library_assets = self.db.scalars(
+            select(Asset)
+            .where(
+                Asset.project_id == project.id,
+                or_(
+                    Asset.is_library_asset.is_(True),
+                    Asset.is_reusable.is_(True),
+                    Asset.reused_from_asset_id.is_not(None),
+                ),
+            )
+            .order_by(Asset.created_at.asc())
+        ).all()
+        prompt_history = self.db.scalars(
+            select(PromptHistoryEntry)
+            .where(PromptHistoryEntry.project_id == project.id)
+            .order_by(PromptHistoryEntry.created_at.asc())
+        ).all()
+        return {
+            "project": project_to_dict(project),
+            "source_template_version": (
+                template_version_to_dict(source_template_version) if source_template_version else None
+            ),
+            "visual_preset": visual_preset_to_dict(visual_preset) if visual_preset else None,
+            "voice_preset": voice_preset_to_dict(voice_preset) if voice_preset else None,
+            "exports": [export_to_dict(export) for export in exports],
+            "library_assets": [asset_to_dict(asset) for asset in library_assets],
+            "prompt_history": [prompt_history_to_dict(entry) for entry in prompt_history],
+        }
+
     def update_project(
         self,
         auth: AuthContext,
@@ -182,6 +259,7 @@ class ProjectService:
         project = self._get_project(project_id, auth.workspace_id)
         self._assert_mutation_rights(project, auth)
         preset_service = PresetService(self.db)
+        brand_kit_service = BrandKitService(self.db)
 
         if "title" in payload.model_fields_set and payload.title is not None:
             project.title = payload.title
@@ -210,6 +288,23 @@ class ProjectService:
             else:
                 preset = preset_service.get_voice_preset(auth.workspace_id, payload.default_voice_preset_id)
                 project.default_voice_preset_id = preset.id
+        if "brand_kit_id" in payload.model_fields_set:
+            if payload.brand_kit_id is None:
+                project.brand_kit_id = None
+            else:
+                project.brand_kit_id = brand_kit_service.get_brand_kit(auth.workspace_id, payload.brand_kit_id).id
+        if "subtitle_style_profile" in payload.model_fields_set:
+            project.subtitle_style_profile = normalize_subtitle_style_profile(payload.subtitle_style_profile)
+        if "export_profile" in payload.model_fields_set:
+            project.export_profile = normalize_export_profile(payload.export_profile)
+        if "audio_mix_profile" in payload.model_fields_set:
+            project.audio_mix_profile = normalize_audio_mix_profile(payload.audio_mix_profile)
+
+        active_brand_kit = brand_kit_service.resolve_brand_kit(
+            auth.workspace_id,
+            str(project.brand_kit_id) if project.brand_kit_id else None,
+        )
+        brand_kit_service.apply_brand_kit_defaults(project, active_brand_kit)
 
         record_audit_event(
             self.db,
@@ -271,6 +366,7 @@ class ProjectService:
             workspace_id=project.workspace_id,
             target_id=project_id,
         )
+        BrandKitService(self.db).validate_text_against_brand_kit(project, moderation_text)
 
         next_version = (
             self.db.scalar(

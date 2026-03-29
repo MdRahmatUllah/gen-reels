@@ -9,6 +9,7 @@ from app.schemas.common import MessageResponse
 from app.schemas.projects import (
     BriefVersionResponse,
     BriefWriteRequest,
+    ProjectLineageResponse,
     ProjectCreateRequest,
     ProjectDetailResponse,
     ProjectResponse,
@@ -43,6 +44,15 @@ def get_project(
     db: Session = Depends(get_db_dep),
 ):
     return ProjectService(db).get_project_detail(auth, project_id)
+
+
+@router.get("/{project_id}/lineage", response_model=ProjectLineageResponse)
+def get_project_lineage(
+    project_id: str,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+):
+    return ProjectService(db).get_project_lineage(auth, project_id)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)

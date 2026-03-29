@@ -29,6 +29,9 @@ def test_alembic_upgrade_and_downgrade(tmp_path: Path, monkeypatch):
     assert "exports" in inspector.get_table_names()
     assert "subscriptions" in inspector.get_table_names()
     assert "credit_ledger_entries" in inspector.get_table_names()
+    assert "project_templates" in inspector.get_table_names()
+    assert "template_versions" in inspector.get_table_names()
+    assert "prompt_history_entries" in inspector.get_table_names()
 
     command.downgrade(alembic_cfg, "base")
     inspector = inspect(engine)

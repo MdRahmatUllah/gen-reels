@@ -28,6 +28,7 @@ from app.models.entities import (
     ModerationReviewStatus,
     Project,
     ProjectStage,
+    PromptHistoryEntry,
     ProviderRun,
     ProviderRunStatus,
     RenderJob,
@@ -44,6 +45,11 @@ from app.services.audit_service import record_audit_event
 from app.services.billing_service import BillingService
 from app.services.generation_service import GenerationService
 from app.services.notification_service import NotificationService
+from app.services.project_profiles import (
+    normalize_audio_mix_profile,
+    normalize_export_profile,
+    normalize_subtitle_style_profile,
+)
 from app.services.presenters import asset_to_dict, export_to_dict, job_to_dict, render_step_to_dict
 
 
@@ -132,6 +138,15 @@ class RenderService(GenerationService):
             .order_by(ExportRecord.created_at.asc())
         ).all()
 
+    def _prompt_history_for_asset(self, asset_id: UUID | None) -> PromptHistoryEntry | None:
+        if not asset_id:
+            return None
+        return self.db.scalar(
+            select(PromptHistoryEntry)
+            .where(PromptHistoryEntry.asset_id == asset_id)
+            .order_by(PromptHistoryEntry.created_at.desc())
+        )
+
     def _step_key(self, step_kind: StepKind, scene_segment_id: UUID | None) -> tuple[str, str | None]:
         return step_kind.value, str(scene_segment_id) if scene_segment_id else None
 
@@ -187,6 +202,26 @@ class RenderService(GenerationService):
                 for export in exports
             ],
         }
+
+    def _resolved_project_profiles(
+        self,
+        *,
+        render_job: RenderJob,
+        project: Project | None = None,
+    ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+        subtitle_profile = normalize_subtitle_style_profile(
+            render_job.payload.get("subtitle_style_profile")
+            or (project.subtitle_style_profile if project else None)
+        )
+        export_profile = normalize_export_profile(
+            render_job.payload.get("export_profile")
+            or (project.export_profile if project else None)
+        )
+        audio_mix_profile = normalize_audio_mix_profile(
+            render_job.payload.get("audio_mix_profile")
+            or (project.audio_mix_profile if project else None)
+        )
+        return subtitle_profile, export_profile, audio_mix_profile
 
     def _latest_asset(
         self,
@@ -479,6 +514,54 @@ class RenderService(GenerationService):
         self.db.flush()
         return asset
 
+    def _record_prompt_history(
+        self,
+        *,
+        render_job: RenderJob,
+        render_step: RenderStep,
+        scene_segment: SceneSegment | None,
+        provider_run: ProviderRun | None,
+        asset: Asset | None,
+        prompt_role: str,
+        prompt_text: str,
+        source_asset_id: UUID | None = None,
+        export_id: UUID | None = None,
+        metadata_payload: dict[str, object] | None = None,
+    ) -> PromptHistoryEntry:
+        source_prompt = self._prompt_history_for_asset(source_asset_id)
+        entry = PromptHistoryEntry(
+            workspace_id=render_job.workspace_id,
+            project_id=render_job.project_id,
+            scene_plan_id=render_job.scene_plan_id,
+            scene_segment_id=scene_segment.id if scene_segment else None,
+            render_job_id=render_job.id,
+            render_step_id=render_step.id,
+            provider_run_id=provider_run.id if provider_run else None,
+            asset_id=asset.id if asset else None,
+            export_id=export_id,
+            prompt_role=prompt_role,
+            prompt_text=prompt_text,
+            source_asset_id=source_asset_id,
+            source_prompt_history_id=source_prompt.id if source_prompt else None,
+            metadata_payload=metadata_payload or {},
+        )
+        self.db.add(entry)
+        self.db.flush()
+        return entry
+
+    @staticmethod
+    def _continuity_score(segment: SceneSegment, start_asset: Asset, end_asset: Asset) -> float:
+        score = 0.72
+        if segment.scene_index == 1:
+            score += 0.12
+        if segment.chained_from_asset_id:
+            score += 0.10
+        if start_asset.width and end_asset.width and start_asset.width == end_asset.width:
+            score += 0.03
+        if start_asset.height and end_asset.height and start_asset.height == end_asset.height:
+            score += 0.03
+        return round(min(score, 0.99), 2)
+
     def queue_render_job(
         self,
         auth: AuthContext,
@@ -518,6 +601,9 @@ class RenderService(GenerationService):
             "script_version_id": str(script.id),
             "consistency_pack_id": str(scene_plan.consistency_pack_id),
             "allow_export_without_music": payload.allow_export_without_music,
+            "subtitle_style_profile": normalize_subtitle_style_profile(project.subtitle_style_profile),
+            "export_profile": normalize_export_profile(project.export_profile),
+            "audio_mix_profile": normalize_audio_mix_profile(project.audio_mix_profile),
             "voice_preset_snapshot": {
                 "id": str(voice_preset.id) if voice_preset else None,
                 "name": voice_preset.name if voice_preset else None,
@@ -708,6 +794,32 @@ class RenderService(GenerationService):
                 "frame_pair_not_ready_for_approval",
                 "This frame pair is not currently awaiting approval.",
             )
+
+        project = self.db.get(Project, render_job.project_id)
+        segment = self.db.get(SceneSegment, step.scene_segment_id) if step.scene_segment_id else None
+        start_asset = (
+            self.db.get(Asset, UUID(str(step.output_payload.get("start_image_asset_id"))))
+            if step.output_payload and step.output_payload.get("start_image_asset_id")
+            else None
+        )
+        end_asset = (
+            self.db.get(Asset, UUID(str(step.output_payload.get("end_image_asset_id"))))
+            if step.output_payload and step.output_payload.get("end_image_asset_id")
+            else None
+        )
+        if project and segment and start_asset and end_asset:
+            continuity_score = self._continuity_score(segment, start_asset, end_asset)
+            library_label = f"{project.title} scene {segment.scene_index:02d} approved frame pair"
+            for asset in (start_asset, end_asset):
+                asset.is_library_asset = True
+                asset.is_reusable = True
+                asset.library_label = library_label
+                asset.continuity_score = continuity_score
+                asset.metadata_payload = {
+                    **dict(asset.metadata_payload or {}),
+                    "approved_for_reuse": True,
+                    "approved_scene_plan_id": str(render_job.scene_plan_id) if render_job.scene_plan_id else None,
+                }
 
         step.status = JobStatus.approved
         step.is_stale = False
@@ -905,6 +1017,7 @@ class RenderService(GenerationService):
                 return True
 
             self._set_step_running(step)
+            start_source_asset_id = UUID(previous_end_asset_id) if previous_end_asset_id else None
             provider_request = {
                 "scene_index": segment.scene_index,
                 "start_prompt": segment.start_image_prompt,
@@ -970,7 +1083,39 @@ class RenderService(GenerationService):
             segment.chained_from_asset_id = UUID(previous_end_asset_id) if previous_end_asset_id else None
             segment.start_image_asset_id = start_asset.id
             segment.end_image_asset_id = end_asset.id
+            start_asset.library_label = f"Scene {segment.scene_index:02d} start frame"
+            end_asset.library_label = f"Scene {segment.scene_index:02d} end frame"
             previous_end_asset_id = str(end_asset.id)
+            self._record_prompt_history(
+                render_job=render_job,
+                render_step=step,
+                scene_segment=segment,
+                provider_run=provider_run,
+                asset=start_asset,
+                prompt_role="scene_start_frame",
+                prompt_text=segment.start_image_prompt,
+                source_asset_id=start_source_asset_id,
+                metadata_payload={
+                    "scene_index": segment.scene_index,
+                    "frame_kind": "start",
+                    "consistency_pack_id": str(render_job.consistency_pack_id) if render_job.consistency_pack_id else None,
+                },
+            )
+            self._record_prompt_history(
+                render_job=render_job,
+                render_step=step,
+                scene_segment=segment,
+                provider_run=provider_run,
+                asset=end_asset,
+                prompt_role="scene_end_frame",
+                prompt_text=segment.end_image_prompt,
+                source_asset_id=start_asset.id,
+                metadata_payload={
+                    "scene_index": segment.scene_index,
+                    "frame_kind": "end",
+                    "consistency_pack_id": str(render_job.consistency_pack_id) if render_job.consistency_pack_id else None,
+                },
+            )
             start_blocked = self._moderate_generated_asset(
                 moderation_provider=moderation_provider,
                 project=project,
@@ -1121,6 +1266,21 @@ class RenderService(GenerationService):
             provider_run,
             started_at=started,
             response_payload={"asset_id": str(raw_asset.id)},
+        )
+        self._record_prompt_history(
+            render_job=render_job,
+            render_step=step,
+            scene_segment=segment,
+            provider_run=provider_run,
+            asset=raw_asset,
+            prompt_role="scene_video",
+            prompt_text=segment.visual_prompt,
+            source_asset_id=segment.end_image_asset_id,
+            metadata_payload={
+                "scene_index": segment.scene_index,
+                "start_image_asset_id": str(segment.start_image_asset_id) if segment.start_image_asset_id else None,
+                "end_image_asset_id": str(segment.end_image_asset_id) if segment.end_image_asset_id else None,
+            },
         )
         if self._moderate_generated_asset(
             moderation_provider=moderation_provider,
@@ -1277,6 +1437,16 @@ class RenderService(GenerationService):
             started_at=started,
             response_payload={"asset_id": str(narration_asset.id)},
         )
+        self._record_prompt_history(
+            render_job=render_job,
+            render_step=step,
+            scene_segment=segment,
+            provider_run=provider_run,
+            asset=narration_asset,
+            prompt_role="narration_generation",
+            prompt_text=segment.narration_text,
+            metadata_payload={"scene_index": segment.scene_index},
+        )
         self._complete_step(step, output_payload={"asset_id": str(narration_asset.id)})
         segment.actual_voice_duration_seconds = max(1, int((narration_asset.duration_ms or 0) / 1000))
         return narration_asset
@@ -1357,12 +1527,22 @@ class RenderService(GenerationService):
         )
         return retimed_asset
 
-    def _run_music_stage(self, *, render_job: RenderJob, music_provider: MusicProvider, total_duration_seconds: int) -> Asset | None:
+    def _run_music_stage(
+        self,
+        *,
+        render_job: RenderJob,
+        music_provider: MusicProvider,
+        total_duration_seconds: int,
+        audio_mix_profile: dict[str, object],
+    ) -> Asset | None:
         step = self._get_or_create_step(
             render_job,
             step_kind=StepKind.music_preparation,
             step_index=5000,
-            input_payload={"total_duration_seconds": total_duration_seconds},
+            input_payload={
+                "total_duration_seconds": total_duration_seconds,
+                "audio_mix_profile": audio_mix_profile,
+            },
         )
         if step.status == JobStatus.completed:
             return self._latest_asset(render_job.id, asset_role=AssetRole.music_bed)
@@ -1372,7 +1552,10 @@ class RenderService(GenerationService):
             render_job=render_job,
             render_step=step,
             operation="music_preparation",
-            request_payload={"total_duration_seconds": total_duration_seconds},
+            request_payload={
+                "total_duration_seconds": total_duration_seconds,
+                "audio_mix_profile": audio_mix_profile,
+            },
             provider_name="stub_music_provider",
             provider_model="stub-music-v1",
         )
@@ -1402,6 +1585,10 @@ class RenderService(GenerationService):
             provider_run_id=provider_run.id,
             has_audio_stream=True,
         )
+        music_asset.metadata_payload = {
+            **dict(music_asset.metadata_payload or {}),
+            "audio_mix_profile": audio_mix_profile,
+        }
         self._finish_provider_run(
             provider_run,
             started_at=started,
@@ -1410,12 +1597,18 @@ class RenderService(GenerationService):
         self._complete_step(step, output_payload={"asset_id": str(music_asset.id)})
         return music_asset
 
-    def _run_subtitle_stage(self, *, render_job: RenderJob, segments: list[SceneSegment]) -> Asset | None:
+    def _run_subtitle_stage(
+        self,
+        *,
+        render_job: RenderJob,
+        segments: list[SceneSegment],
+        subtitle_style_profile: dict[str, object],
+    ) -> Asset | None:
         step = self._get_or_create_step(
             render_job,
             step_kind=StepKind.subtitle_generation,
             step_index=6000,
-            input_payload={"scene_count": len(segments)},
+            input_payload={"scene_count": len(segments), "subtitle_style_profile": subtitle_style_profile},
         )
         if step.status == JobStatus.completed:
             return self._latest_asset(render_job.id, asset_role=AssetRole.subtitle_file)
@@ -1460,6 +1653,10 @@ class RenderService(GenerationService):
                 asset_type=AssetType.subtitle,
                 asset_role=AssetRole.subtitle_file,
             )
+            subtitle_asset.metadata_payload = {
+                **dict(subtitle_asset.metadata_payload or {}),
+                "subtitle_style_profile": subtitle_style_profile,
+            }
         except Exception as exc:  # pragma: no cover - defensive guard
             step.status = JobStatus.failed
             step.error_code = "subtitle_generation_failed"
@@ -1480,12 +1677,20 @@ class RenderService(GenerationService):
         narration_assets: list[Asset],
         music_asset: Asset | None,
         subtitle_asset: Asset | None,
+        subtitle_style_profile: dict[str, object],
+        export_profile: dict[str, object],
+        audio_mix_profile: dict[str, object],
     ) -> ExportRecord:
         step = self._get_or_create_step(
             render_job,
             step_kind=StepKind.composition,
             step_index=7000,
-            input_payload={"scene_count": len(segments)},
+            input_payload={
+                "scene_count": len(segments),
+                "subtitle_style_profile": subtitle_style_profile,
+                "export_profile": export_profile,
+                "audio_mix_profile": audio_mix_profile,
+            },
         )
         if step.status == JobStatus.completed:
             existing_export = self.db.scalar(
@@ -1511,6 +1716,9 @@ class RenderService(GenerationService):
             "music_asset_id": str(music_asset.id) if music_asset else None,
             "subtitle_asset_id": str(subtitle_asset.id) if subtitle_asset else None,
             "consistency_pack_id": str(render_job.consistency_pack_id) if render_job.consistency_pack_id else None,
+            "subtitle_style_profile": subtitle_style_profile,
+            "export_profile": export_profile,
+            "audio_mix_profile": audio_mix_profile,
         }
         generated = GeneratedMedia(
             provider_name="internal_stub_composer",
@@ -1522,6 +1730,9 @@ class RenderService(GenerationService):
                 "duration_ms": sum(asset.duration_ms or 0 for asset in narration_assets),
                 "scene_count": len(segments),
                 "aspect_ratio": "9:16",
+                "subtitle_style_profile": subtitle_style_profile,
+                "export_profile": export_profile,
+                "audio_mix_profile": audio_mix_profile,
             },
         )
         export_asset = self._store_generated_asset(
@@ -1545,15 +1756,29 @@ class RenderService(GenerationService):
             asset_id=export_asset.id,
             status="completed",
             file_name=export_asset.file_name,
-            format="json",
+            format=str(export_profile.get("format") or "json"),
             bucket_name=export_asset.bucket_name,
             object_name=export_asset.object_name,
             duration_ms=generated.metadata.get("duration_ms"),
+            subtitle_style_profile=subtitle_style_profile,
+            export_profile=export_profile,
+            audio_mix_profile=audio_mix_profile,
             metadata_payload=generated.metadata,
             completed_at=datetime.now(UTC),
         )
         self.db.add(export_record)
         self.db.flush()
+        self._record_prompt_history(
+            render_job=render_job,
+            render_step=step,
+            scene_segment=None,
+            provider_run=None,
+            asset=export_asset,
+            export_id=export_record.id,
+            prompt_role="final_composition_manifest",
+            prompt_text=json.dumps(manifest, default=str),
+            metadata_payload={"scene_count": len(segments)},
+        )
         BillingService(self.db, self.settings).capture_export_usage(export_record)
         self._complete_step(step, output_payload={"asset_id": str(export_asset.id), "export_id": str(export_record.id)})
         record_audit_event(
@@ -1597,6 +1822,10 @@ class RenderService(GenerationService):
             raise AdapterError("deterministic_input", "consistency_pack_required", "Consistency pack is required.")
 
         voice_preset_snapshot = dict(render_job.payload.get("voice_preset_snapshot", {}) or {})
+        subtitle_style_profile, export_profile, audio_mix_profile = self._resolved_project_profiles(
+            render_job=render_job,
+            project=project,
+        )
         segments = self._scene_segments(scene_plan.id)
         render_job.status = JobStatus.running
         render_job.started_at = render_job.started_at or datetime.now(UTC)
@@ -1650,8 +1879,13 @@ class RenderService(GenerationService):
             render_job=render_job,
             music_provider=music_provider,
             total_duration_seconds=total_duration_seconds,
+            audio_mix_profile=audio_mix_profile,
         )
-        subtitle_asset = self._run_subtitle_stage(render_job=render_job, segments=segments)
+        subtitle_asset = self._run_subtitle_stage(
+            render_job=render_job,
+            segments=segments,
+            subtitle_style_profile=subtitle_style_profile,
+        )
         self._run_composition_stage(
             render_job=render_job,
             scene_plan=scene_plan,
@@ -1660,6 +1894,9 @@ class RenderService(GenerationService):
             narration_assets=narration_assets,
             music_asset=music_asset,
             subtitle_asset=subtitle_asset,
+            subtitle_style_profile=subtitle_style_profile,
+            export_profile=export_profile,
+            audio_mix_profile=audio_mix_profile,
         )
         project.stage = ProjectStage.exports
         render_job.status = JobStatus.completed

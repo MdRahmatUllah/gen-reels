@@ -108,6 +108,37 @@ class ModerationReviewStatus(str, enum.Enum):
     rejected = "rejected"
 
 
+class BrandKitStatus(str, enum.Enum):
+    draft = "draft"
+    active = "active"
+    archived = "archived"
+
+
+class BrandEnforcementMode(str, enum.Enum):
+    advisory = "advisory"
+    enforced = "enforced"
+
+
+class ReviewStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    cancelled = "cancelled"
+
+
+class ReviewTargetType(str, enum.Enum):
+    script_version = "script_version"
+    scene_plan = "scene_plan"
+    export = "export"
+    template_version = "template_version"
+
+
+class WebhookDeliveryStatus(str, enum.Enum):
+    queued = "queued"
+    delivered = "delivered"
+    failed = "failed"
+
+
 class SubscriptionStatus(str, enum.Enum):
     not_configured = "not_configured"
     checkout_pending = "checkout_pending"
@@ -213,6 +244,8 @@ class Project(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), index=True)
     owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    source_template_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("template_versions.id"))
+    brand_kit_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("brand_kits.id"))
     active_brief_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("project_briefs.id"))
     selected_idea_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("idea_candidates.id"))
     active_script_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("script_versions.id"))
@@ -223,6 +256,11 @@ class Project(Base, TimestampMixin):
     client: Mapped[str | None] = mapped_column(sa.String(255))
     aspect_ratio: Mapped[str] = mapped_column(sa.String(20), default="9:16", nullable=False)
     duration_target_sec: Mapped[int] = mapped_column(sa.Integer, default=90, nullable=False)
+    subtitle_style_profile: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
+    export_profile: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    audio_mix_profile: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     stage: Mapped[ProjectStage] = mapped_column(
         sa.Enum(ProjectStage), default=ProjectStage.brief, nullable=False
     )
@@ -290,6 +328,7 @@ class ScriptVersion(Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     parent_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("script_versions.id"))
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    version: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
     source_type: Mapped[ScriptSource] = mapped_column(sa.Enum(ScriptSource), nullable=False)
     approval_state: Mapped[str] = mapped_column(sa.String(64), default="draft", nullable=False)
     approved_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
@@ -307,6 +346,7 @@ class VisualPreset(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    version: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
     name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     description: Mapped[str] = mapped_column(sa.Text, nullable=False)
     prompt_prefix: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
@@ -324,6 +364,7 @@ class VoicePreset(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    version: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
     name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     description: Mapped[str] = mapped_column(sa.Text, nullable=False)
     provider_voice: Mapped[str] = mapped_column(sa.String(255), default="", nullable=False)
@@ -348,6 +389,7 @@ class ScenePlan(Base, TimestampMixin):
     consistency_pack_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("consistency_packs.id"))
     parent_scene_plan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scene_plans.id"))
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    version: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
     source_type: Mapped[ScenePlanSource] = mapped_column(sa.Enum(ScenePlanSource), nullable=False)
     approval_state: Mapped[str] = mapped_column(sa.String(64), default="draft", nullable=False)
     approved_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
@@ -475,6 +517,12 @@ class Asset(Base, TimestampMixin):
     width: Mapped[int | None] = mapped_column(sa.Integer)
     height: Mapped[int | None] = mapped_column(sa.Integer)
     frame_rate: Mapped[float | None] = mapped_column(sa.Float)
+    library_label: Mapped[str | None] = mapped_column(sa.String(255))
+    is_library_asset: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    is_reusable: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    reused_from_asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assets.id"))
+    continuity_score: Mapped[float | None] = mapped_column(sa.Float)
+    reuse_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
     quarantine_bucket_name: Mapped[str | None] = mapped_column(sa.String(255))
     quarantine_object_name: Mapped[str | None] = mapped_column(sa.String(1024))
     quarantined_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
@@ -518,6 +566,11 @@ class ExportRecord(Base, TimestampMixin):
     bucket_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     object_name: Mapped[str] = mapped_column(sa.String(1024), nullable=False, unique=True)
     duration_ms: Mapped[int | None] = mapped_column(sa.Integer)
+    subtitle_style_profile: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
+    export_profile: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    audio_mix_profile: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     metadata_payload: Mapped[dict[str, object]] = mapped_column(
         json_type(), default=dict, nullable=False
     )
@@ -630,6 +683,31 @@ class Subscription(Base, TimestampMixin):
     metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
 
 
+class ProjectTemplate(Base, TimestampMixin):
+    __tablename__ = "project_templates"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    version: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    description: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    is_archived: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+
+
+class TemplateVersion(Base):
+    __tablename__ = "template_versions"
+    __table_args__ = (UniqueConstraint("template_id", "version_number", name="uq_template_version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    template_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("project_templates.id"), nullable=False, index=True)
+    source_project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    snapshot_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
 class CreditLedgerEntry(Base):
     __tablename__ = "credit_ledger_entries"
     __table_args__ = (UniqueConstraint("idempotency_key", name="uq_credit_ledger_idempotency_key"),)
@@ -653,6 +731,27 @@ class CreditLedgerEntry(Base):
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
 
 
+class PromptHistoryEntry(Base):
+    __tablename__ = "prompt_history_entries"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    scene_plan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scene_plans.id"))
+    scene_segment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scene_segments.id"), index=True)
+    render_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_jobs.id"))
+    render_step_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_steps.id"))
+    provider_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("provider_runs.id"))
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assets.id"), index=True)
+    export_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("exports.id"), index=True)
+    prompt_role: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    prompt_text: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    source_asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assets.id"))
+    source_prompt_history_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("prompt_history_entries.id"))
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
 class ConsistencyPack(Base):
     __tablename__ = "consistency_packs"
 
@@ -663,3 +762,128 @@ class ConsistencyPack(Base):
     state: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
+class BrandKit(Base, TimestampMixin):
+    __tablename__ = "brand_kits"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    default_visual_preset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("visual_presets.id"))
+    default_voice_preset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("voice_presets.id"))
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    description: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    version: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
+    status: Mapped[BrandKitStatus] = mapped_column(
+        sa.Enum(BrandKitStatus),
+        default=BrandKitStatus.active,
+        nullable=False,
+    )
+    enforcement_mode: Mapped[BrandEnforcementMode] = mapped_column(
+        sa.Enum(BrandEnforcementMode),
+        default=BrandEnforcementMode.advisory,
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    required_terms: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
+    banned_terms: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
+    subtitle_style_override: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
+    export_profile_override: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
+    audio_mix_profile_override: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
+    brand_rules: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+
+
+class Comment(Base, TimestampMixin):
+    __tablename__ = "comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    target_type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    target_id: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    author_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    body: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+
+
+class ReviewRequest(Base, TimestampMixin):
+    __tablename__ = "review_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    target_type: Mapped[ReviewTargetType] = mapped_column(sa.Enum(ReviewTargetType), nullable=False)
+    target_id: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    requested_version: Mapped[int | None] = mapped_column(sa.Integer)
+    status: Mapped[ReviewStatus] = mapped_column(
+        sa.Enum(ReviewStatus),
+        default=ReviewStatus.pending,
+        nullable=False,
+    )
+    request_notes: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    decision_notes: Mapped[str | None] = mapped_column(sa.Text)
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class WorkspaceApiKey(Base):
+    __tablename__ = "workspace_api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    role_scope: Mapped[WorkspaceRole] = mapped_column(sa.Enum(WorkspaceRole), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    key_hash: Mapped[str] = mapped_column(sa.String(128), nullable=False, unique=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
+class WebhookEndpoint(Base, TimestampMixin):
+    __tablename__ = "webhook_endpoints"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    target_url: Mapped[str] = mapped_column(sa.String(2048), nullable=False)
+    event_types: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
+    signing_secret: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(sa.Boolean, default=True, nullable=False)
+    last_tested_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class WebhookDelivery(Base):
+    __tablename__ = "webhook_deliveries"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    endpoint_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("webhook_endpoints.id"), nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    replay_id: Mapped[str] = mapped_column(sa.String(128), nullable=False, unique=True)
+    signature: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    status: Mapped[WebhookDeliveryStatus] = mapped_column(
+        sa.Enum(WebhookDeliveryStatus),
+        default=WebhookDeliveryStatus.queued,
+        nullable=False,
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    response_status_code: Mapped[int | None] = mapped_column(sa.Integer)
+    response_body: Mapped[str | None] = mapped_column(sa.Text)
+    attempt_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+    delivered_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))

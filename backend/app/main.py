@@ -53,9 +53,12 @@ def create_app() -> FastAPI:
     @app.exception_handler(ApiError)
     async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
         correlation_id = getattr(request.state, "correlation_id", None)
+        payload = _error_payload(exc.message, exc.code, correlation_id)
+        if exc.details is not None:
+            payload["details"] = exc.details
         return JSONResponse(
             status_code=exc.status_code,
-            content=_error_payload(exc.message, exc.code, correlation_id),
+            content=payload,
         )
 
     @app.exception_handler(RequestValidationError)
