@@ -27,8 +27,11 @@ moderation_report_status = sa.Enum(
     "rejected",
     "passed",
     name="moderation_report_status",
+    create_type=False,
 )
-workspace_auth_provider_type = sa.Enum("oidc", "saml", name="workspace_auth_provider_type")
+workspace_auth_provider_type = sa.Enum(
+    "oidc", "saml", name="workspace_auth_provider_type", create_type=False
+)
 webhook_delivery_status_old = sa.Enum(
     "queued",
     "delivered",
@@ -50,9 +53,6 @@ def _dialect_name() -> str:
 
 def upgrade() -> None:
     bind = op.get_bind()
-    moderation_report_status.create(bind, checkfirst=True)
-    workspace_auth_provider_type.create(bind, checkfirst=True)
-
     if _dialect_name() == "postgresql":
         op.execute("ALTER TYPE webhook_delivery_status ADD VALUE IF NOT EXISTS 'exhausted'")
 

@@ -11,6 +11,7 @@ Requires-Dist: email-validator>=2.2.0
 Requires-Dist: fastapi>=0.115.8
 Requires-Dist: httpx>=0.28.1
 Requires-Dist: minio>=7.2.15
+Requires-Dist: Pillow>=11.1.0
 Requires-Dist: passlib[argon2]>=1.7.4
 Requires-Dist: psycopg[binary]>=3.2.4
 Requires-Dist: pydantic>=2.10.6

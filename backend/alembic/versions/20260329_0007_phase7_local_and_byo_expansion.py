@@ -7,8 +7,9 @@ Create Date: 2026-03-29 23:55:00
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+from alembic import op
 
 from app.db.types import GUID, json_type
 
@@ -19,13 +20,14 @@ branch_labels = None
 depends_on = None
 
 
-execution_mode = sa.Enum("hosted", "byo", "local", name="execution_mode")
-local_worker_status = sa.Enum("online", "offline", "revoked", name="local_worker_status")
+execution_mode = postgresql.ENUM("hosted", "byo", "local", name="execution_mode", create_type=False)
+local_worker_status = sa.Enum(
+    "online", "offline", "revoked", name="local_worker_status", create_type=False
+)
 
 
 def upgrade() -> None:
     execution_mode.create(op.get_bind(), checkfirst=True)
-    local_worker_status.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "workspace_provider_credentials",

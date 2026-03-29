@@ -5,8 +5,9 @@ Revises: 20260329_0003
 Create Date: 2026-03-29 18:15:00
 """
 
-from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+from alembic import op
 
 from app.db.types import GUID, json_type
 
@@ -17,12 +18,13 @@ branch_labels = None
 depends_on = None
 
 
-moderation_review_status = sa.Enum(
+moderation_review_status = postgresql.ENUM(
     "none",
     "pending",
     "released",
     "rejected",
     name="moderation_review_status",
+    create_type=False,
 )
 subscription_status = sa.Enum(
     "not_configured",
@@ -32,6 +34,7 @@ subscription_status = sa.Enum(
     "past_due",
     "cancelled",
     name="subscription_status",
+    create_type=False,
 )
 credit_ledger_entry_kind = sa.Enum(
     "provider_run",
@@ -39,13 +42,12 @@ credit_ledger_entry_kind = sa.Enum(
     "manual_adjustment",
     "reconciliation",
     name="credit_ledger_entry_kind",
+    create_type=False,
 )
 
 
 def upgrade() -> None:
     moderation_review_status.create(op.get_bind(), checkfirst=True)
-    subscription_status.create(op.get_bind(), checkfirst=True)
-    credit_ledger_entry_kind.create(op.get_bind(), checkfirst=True)
 
     with op.batch_alter_table("render_steps") as batch_op:
         batch_op.add_column(sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"))

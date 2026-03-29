@@ -1,0 +1,141 @@
+services:
+  worker-frame-gpu:
+    profiles: ["gpu-workers"]
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend/Dockerfile.gpu
+    working_dir: /workspace/backend
+    env_file:
+      - ../env/common.env
+      - ../env/backend.env
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q frame --loglevel=info
+    volumes:
+      - ../../backend:/workspace/backend
+      - ../../models:/models
+    networks:
+      - reels-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+
+  worker-video-gpu:
+    profiles: ["gpu-workers"]
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend/Dockerfile.gpu
+    working_dir: /workspace/backend
+    env_file:
+      - ../env/common.env
+      - ../env/backend.env
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q video --loglevel=info
+    volumes:
+      - ../../backend:/workspace/backend
+      - ../../models:/models
+    networks:
+      - reels-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+
+  worker-audio-gpu:
+    profiles: ["gpu-workers"]
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend/Dockerfile.gpu
+    working_dir: /workspace/backend
+    env_file:
+      - ../env/common.env
+      - ../env/backend.env
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=info
+    volumes:
+      - ../../backend:/workspace/backend
+      - ../../models:/models
+    networks:
+      - reels-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+
+  ollama:
+    profiles: ["local-models"]
+    image: ollama/ollama:latest
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ../../models/ollama:/root/.ollama
+    networks:
+      - reels-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+
+  comfyui:
+    profiles: ["local-models"]
+    image: yanwk/comfyui-boot:latest
+    ports:
+      - "${COMFYUI_PORT:-8188}:8188"
+    volumes:
+      - ../../models:/models
+    networks:
+      - reels-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+
+networks:
+  reels-net:
+    external: true
+    name: reels-net
+

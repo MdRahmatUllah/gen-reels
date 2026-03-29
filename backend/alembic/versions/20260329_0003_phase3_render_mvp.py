@@ -27,6 +27,7 @@ asset_type = sa.Enum(
     "reference_image",
     "upload",
     name="asset_type",
+    create_type=False,
 )
 asset_role = sa.Enum(
     "scene_start_frame",
@@ -40,6 +41,7 @@ asset_role = sa.Enum(
     "subtitle_file",
     "final_export",
     name="asset_role",
+    create_type=False,
 )
 
 
@@ -58,9 +60,6 @@ def upgrade() -> None:
         op.execute("ALTER TYPE step_kind ADD VALUE IF NOT EXISTS 'subtitle_generation'")
         op.execute("ALTER TYPE step_kind ADD VALUE IF NOT EXISTS 'clip_retime'")
         op.execute("ALTER TYPE step_kind ADD VALUE IF NOT EXISTS 'composition'")
-
-    asset_type.create(op.get_bind(), checkfirst=True)
-    asset_role.create(op.get_bind(), checkfirst=True)
 
     with op.batch_alter_table("render_jobs") as batch_op:
         batch_op.add_column(sa.Column("script_version_id", GUID(), nullable=True))

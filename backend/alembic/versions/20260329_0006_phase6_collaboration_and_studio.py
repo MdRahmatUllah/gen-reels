@@ -19,26 +19,27 @@ branch_labels = None
 depends_on = None
 
 
-brand_kit_status = sa.Enum("draft", "active", "archived", name="brand_kit_status")
-brand_enforcement_mode = sa.Enum("advisory", "enforced", name="brand_enforcement_mode")
-review_status = sa.Enum("pending", "approved", "rejected", "cancelled", name="review_status")
+brand_kit_status = sa.Enum("draft", "active", "archived", name="brand_kit_status", create_type=False)
+brand_enforcement_mode = sa.Enum(
+    "advisory", "enforced", name="brand_enforcement_mode", create_type=False
+)
+review_status = sa.Enum(
+    "pending", "approved", "rejected", "cancelled", name="review_status", create_type=False
+)
 review_target_type = sa.Enum(
     "script_version",
     "scene_plan",
     "export",
     "template_version",
     name="review_target_type",
+    create_type=False,
 )
-webhook_delivery_status = sa.Enum("queued", "delivered", "failed", name="webhook_delivery_status")
+webhook_delivery_status = sa.Enum(
+    "queued", "delivered", "failed", name="webhook_delivery_status", create_type=False
+)
 
 
 def upgrade() -> None:
-    brand_kit_status.create(op.get_bind(), checkfirst=True)
-    brand_enforcement_mode.create(op.get_bind(), checkfirst=True)
-    review_status.create(op.get_bind(), checkfirst=True)
-    review_target_type.create(op.get_bind(), checkfirst=True)
-    webhook_delivery_status.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "brand_kits",
         sa.Column("id", GUID(), primary_key=True, nullable=False),

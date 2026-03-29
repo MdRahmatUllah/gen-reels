@@ -17,7 +17,7 @@ branch_labels = None
 depends_on = None
 
 
-scene_plan_source = sa.Enum("generated", "manual", name="scene_plan_source")
+scene_plan_source = sa.Enum("generated", "manual", name="scene_plan_source", create_type=False)
 
 
 def _is_postgresql() -> bool:
@@ -30,8 +30,6 @@ def upgrade() -> None:
         op.execute("ALTER TYPE job_kind ADD VALUE IF NOT EXISTS 'prompt_pair_generation'")
         op.execute("ALTER TYPE step_kind ADD VALUE IF NOT EXISTS 'scene_plan_generation'")
         op.execute("ALTER TYPE step_kind ADD VALUE IF NOT EXISTS 'prompt_pair_generation'")
-
-    scene_plan_source.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "visual_presets",

@@ -1,0 +1,196 @@
+name: reels-generation
+
+x-backend-service: &backend-service
+  build:
+    context: ../..
+    dockerfile: infra/docker/backend/Dockerfile
+  working_dir: /workspace/backend
+  env_file:
+    - ../env/common.env
+    - ../env/backend.env
+  volumes:
+    - ../../backend:/workspace/backend
+  networks:
+    - reels-net
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+    minio-init:
+      condition: service_completed_successfully
+
+services:
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/frontend/Dockerfile
+      target: dev
+    working_dir: /workspace/frontend
+    env_file:
+      - ../env/common.env
+      - ../env/frontend.env
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    volumes:
+      - ../../frontend:/workspace/frontend
+      - frontend_node_modules:/workspace/frontend/node_modules
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    networks:
+      - reels-net
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5173 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api:
+    <<: *backend-service
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker-planning:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q planning --loglevel=info
+
+  worker-frame:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q frame --loglevel=info
+
+  worker-video:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q video --loglevel=info
+
+  worker-audio:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=info
+
+  worker-composition:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q composition --loglevel=info
+
+  worker-notifications:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q notifications --loglevel=info
+
+  worker-maintenance:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q maintenance --loglevel=info
+
+  beat:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app beat --loglevel=info
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: reels
+      POSTGRES_USER: reels
+      POSTGRES_PASSWORD: reels
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - reels-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reels -d reels"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - reels-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    env_file:
+      - ../env/common.env
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - reels-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    env_file:
+      - ../env/common.env
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ../scripts/init-minio.sh:/scripts/init-minio.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/init-minio.sh"]
+    networks:
+      - reels-net
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    networks:
+      - reels-net
+    restart: unless-stopped
+
+networks:
+  reels-net:
+    name: reels-net
+
+volumes:
+  postgres_data:
+  minio_data:
+  frontend_node_modules:
