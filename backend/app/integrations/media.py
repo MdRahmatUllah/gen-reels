@@ -91,6 +91,10 @@ def _sine_wave_wav(duration_seconds: float, *, frequency: float = 220.0) -> byte
 
 
 class StubImageProvider(ImageProvider):
+    def __init__(self, *, provider_name: str = "stub_image_provider", provider_model: str = "stub-image-v1") -> None:
+        self.provider_name = provider_name
+        self.provider_model = provider_model
+
     def generate_frame(
         self,
         *,
@@ -101,8 +105,8 @@ class StubImageProvider(ImageProvider):
         consistency_pack_state: dict[str, Any] | None,
     ) -> GeneratedMedia:
         return GeneratedMedia(
-            provider_name="stub_image_provider",
-            provider_model="stub-image-v1",
+            provider_name=self.provider_name,
+            provider_model=self.provider_model,
             content_type="image/png",
             file_extension="png",
             bytes_payload=PNG_1X1,
@@ -119,6 +123,10 @@ class StubImageProvider(ImageProvider):
 
 
 class StubVideoProvider(VideoProvider):
+    def __init__(self, *, provider_name: str = "stub_video_provider", provider_model: str = "stub-video-v1") -> None:
+        self.provider_name = provider_name
+        self.provider_model = provider_model
+
     def generate_clip(
         self,
         *,
@@ -137,8 +145,8 @@ class StubVideoProvider(VideoProvider):
             "generation_mode": "first_last_frame_stub",
         }
         return GeneratedMedia(
-            provider_name="stub_video_provider",
-            provider_model="stub-video-v1",
+            provider_name=self.provider_name,
+            provider_model=self.provider_model,
             content_type="application/json",
             file_extension="json",
             bytes_payload=json.dumps(payload, indent=2).encode("utf-8"),
@@ -153,6 +161,10 @@ class StubVideoProvider(VideoProvider):
 
 
 class StubSpeechProvider(SpeechProvider):
+    def __init__(self, *, provider_name: str = "stub_speech_provider", provider_model: str = "stub-speech-v1") -> None:
+        self.provider_name = provider_name
+        self.provider_model = provider_model
+
     def synthesize(
         self,
         *,
@@ -165,8 +177,8 @@ class StubSpeechProvider(SpeechProvider):
         frequency = 220.0 + (scene_index * 20)
         wav_bytes = _sine_wave_wav(duration_seconds, frequency=frequency)
         return GeneratedMedia(
-            provider_name="stub_speech_provider",
-            provider_model="stub-speech-v1",
+            provider_name=self.provider_name,
+            provider_model=self.provider_model,
             content_type="audio/wav",
             file_extension="wav",
             bytes_payload=wav_bytes,

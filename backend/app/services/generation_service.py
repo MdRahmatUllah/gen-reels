@@ -16,6 +16,7 @@ from app.integrations.azure import ModerationProvider, TextProvider
 from app.models.entities import (
     IdeaCandidate,
     IdeaCandidateStatus,
+    ExecutionMode,
     IdeaSet,
     JobKind,
     JobStatus,
@@ -42,6 +43,7 @@ from app.services.presenters import (
     job_to_dict,
     script_version_to_dict,
 )
+from app.services.routing_service import RoutingService
 
 
 class GenerationService:
@@ -116,6 +118,14 @@ class GenerationService:
         provider_run.status = ProviderRunStatus.completed
         provider_run.response_payload = response_payload
         BillingService(self.db, self.settings).capture_provider_run_usage(provider_run)
+
+    @staticmethod
+    def _provider_run_payload(decision) -> dict[str, object]:
+        return decision.to_payload() if decision else {}
+
+    @staticmethod
+    def _provider_execution_mode(decision):
+        return decision.execution_mode if decision else ExecutionMode.hosted
 
     def _brief_payload(self, brief: ProjectBrief) -> dict[str, object]:
         return {
@@ -501,12 +511,17 @@ class GenerationService:
             step.completed_at = datetime.now(UTC)
         self.db.commit()
 
-    def execute_idea_job(self, job_id: str, text_provider: TextProvider) -> None:
+    def execute_idea_job(self, job_id: str, text_provider: TextProvider | None = None) -> None:
         job, step = self._get_job_and_step(job_id, StepKind.idea_generation)
         project = self.db.get(Project, job.project_id)
         brief = self.db.get(ProjectBrief, project.active_brief_id if project else None) if project else None
         if not project or not brief:
             raise AdapterError("internal", "missing_job_input", "Idea generation inputs are missing.")
+        resolved_text_provider, routing_decision = (
+            (text_provider, None)
+            if text_provider is not None
+            else RoutingService(self.db, self.settings).build_text_provider_for_workspace(project.workspace_id)
+        )
 
         job.status = JobStatus.running
         job.started_at = datetime.now(UTC)
@@ -517,19 +532,33 @@ class GenerationService:
             render_step_id=step.id,
             project_id=project.id,
             workspace_id=project.workspace_id,
-            provider_name="azure_openai" if not self.settings.use_stub_providers else "stub_text_provider",
-            provider_model=self.settings.azure_openai_chat_deployment or "stub",
+            execution_mode=self._provider_execution_mode(routing_decision),
+            worker_id=routing_decision.worker_id if routing_decision else None,
+            provider_credential_id=(
+                routing_decision.provider_credential_id if routing_decision else None
+            ),
+            provider_name=(
+                routing_decision.provider_name
+                if routing_decision
+                else ("azure_openai" if not self.settings.use_stub_providers else "stub_text_provider")
+            ),
+            provider_model=(
+                routing_decision.provider_model
+                if routing_decision
+                else (self.settings.azure_openai_chat_deployment or "stub")
+            ),
             operation="idea_generation",
             request_hash=job.request_hash,
             status=ProviderRunStatus.running,
             request_payload=self._brief_payload(brief),
+            routing_decision_payload=self._provider_run_payload(routing_decision),
         )
         self.db.add(provider_run)
         self.db.commit()
 
         started = time.perf_counter()
         try:
-            output = text_provider.generate_ideas(self._brief_payload(brief))
+            output = resolved_text_provider.generate_ideas(self._brief_payload(brief))
         except AdapterError as error:
             self._finalize_provider_run(provider_run, started_at=started, error=error)
             self.db.commit()
@@ -578,13 +607,18 @@ class GenerationService:
         )
         self.db.commit()
 
-    def execute_script_job(self, job_id: str, text_provider: TextProvider) -> None:
+    def execute_script_job(self, job_id: str, text_provider: TextProvider | None = None) -> None:
         job, step = self._get_job_and_step(job_id, StepKind.script_generation)
         project = self.db.get(Project, job.project_id)
         brief = self.db.get(ProjectBrief, project.active_brief_id if project else None) if project else None
         idea = self.db.get(IdeaCandidate, project.selected_idea_id if project else None) if project else None
         if not project or not brief or not idea:
             raise AdapterError("internal", "missing_job_input", "Script generation inputs are missing.")
+        resolved_text_provider, routing_decision = (
+            (text_provider, None)
+            if text_provider is not None
+            else RoutingService(self.db, self.settings).build_text_provider_for_workspace(project.workspace_id)
+        )
 
         job.status = JobStatus.running
         job.started_at = datetime.now(UTC)
@@ -595,19 +629,33 @@ class GenerationService:
             render_step_id=step.id,
             project_id=project.id,
             workspace_id=project.workspace_id,
-            provider_name="azure_openai" if not self.settings.use_stub_providers else "stub_text_provider",
-            provider_model=self.settings.azure_openai_chat_deployment or "stub",
+            execution_mode=self._provider_execution_mode(routing_decision),
+            worker_id=routing_decision.worker_id if routing_decision else None,
+            provider_credential_id=(
+                routing_decision.provider_credential_id if routing_decision else None
+            ),
+            provider_name=(
+                routing_decision.provider_name
+                if routing_decision
+                else ("azure_openai" if not self.settings.use_stub_providers else "stub_text_provider")
+            ),
+            provider_model=(
+                routing_decision.provider_model
+                if routing_decision
+                else (self.settings.azure_openai_chat_deployment or "stub")
+            ),
             operation="script_generation",
             request_hash=job.request_hash,
             status=ProviderRunStatus.running,
             request_payload={"brief": self._brief_payload(brief), "idea": self._idea_payload(idea)},
+            routing_decision_payload=self._provider_run_payload(routing_decision),
         )
         self.db.add(provider_run)
         self.db.commit()
 
         started = time.perf_counter()
         try:
-            output = text_provider.generate_script(
+            output = resolved_text_provider.generate_script(
                 brief_payload=self._brief_payload(brief),
                 selected_idea=self._idea_payload(idea),
             )

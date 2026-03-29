@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_db_dep, get_settings_dep, require_auth
-from app.integrations.azure import build_moderation_provider
 from app.schemas.common import MessageResponse
 from app.schemas.projects import (
     BriefVersionResponse,
@@ -16,6 +15,7 @@ from app.schemas.projects import (
     ProjectUpdateRequest,
 )
 from app.services.project_service import ProjectService
+from app.services.routing_service import RoutingService
 
 router = APIRouter()
 
@@ -83,7 +83,9 @@ def create_brief_version(
     db: Session = Depends(get_db_dep),
     settings=Depends(get_settings_dep),
 ):
-    moderation_provider = build_moderation_provider(settings)
+    moderation_provider, _decision = RoutingService(db, settings).build_moderation_provider_for_workspace(
+        auth.workspace_id
+    )
     return ProjectService(db).save_brief_version(auth, project_id, payload, moderation_provider)
 
 
@@ -95,5 +97,7 @@ def patch_brief_version(
     db: Session = Depends(get_db_dep),
     settings=Depends(get_settings_dep),
 ):
-    moderation_provider = build_moderation_provider(settings)
+    moderation_provider, _decision = RoutingService(db, settings).build_moderation_provider_for_workspace(
+        auth.workspace_id
+    )
     return ProjectService(db).save_brief_version(auth, project_id, payload, moderation_provider)

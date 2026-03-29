@@ -5,14 +5,19 @@ from app.api.routes import (
     assets,
     auth,
     billing,
+    brand_kits,
+    comments,
     ideas,
+    local_workers,
     presets,
     projects,
     renders,
+    reviews,
     scene_plans,
     scripts,
     templates,
     usage,
+    workspace,
 )
 
 api_router = APIRouter()
@@ -28,4 +33,9 @@ api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
 api_router.include_router(renders.standalone_router, prefix="/renders", tags=["renders"])
 api_router.include_router(assets.router, prefix="/assets", tags=["assets"])
 api_router.include_router(templates.router, prefix="/templates", tags=["templates"])
+api_router.include_router(brand_kits.router, prefix="/brand-kits", tags=["brand-kits"])
+api_router.include_router(comments.router, prefix="/comments", tags=["comments"])
+api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+api_router.include_router(workspace.router, prefix="/workspace", tags=["workspace"])
+api_router.include_router(local_workers.router, prefix="/local-workers", tags=["local-workers"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 import redis
 import uvicorn
+from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -58,7 +59,7 @@ def create_app() -> FastAPI:
             payload["details"] = exc.details
         return JSONResponse(
             status_code=exc.status_code,
-            content=payload,
+            content=jsonable_encoder(payload),
         )
 
     @app.exception_handler(RequestValidationError)
@@ -66,10 +67,10 @@ def create_app() -> FastAPI:
         correlation_id = getattr(request.state, "correlation_id", None)
         return JSONResponse(
             status_code=422,
-            content={
+            content=jsonable_encoder({
                 **_error_payload("Request validation failed.", "validation_error", correlation_id),
                 "details": exc.errors(),
-            },
+            }),
         )
 
     @app.get("/health")

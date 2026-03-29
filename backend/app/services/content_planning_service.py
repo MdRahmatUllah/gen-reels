@@ -11,6 +11,7 @@ from app.core.errors import AdapterError, ApiError
 from app.integrations.azure import TextProvider
 from app.models.entities import (
     ConsistencyPack,
+    ExecutionMode,
     IdeaCandidate,
     JobKind,
     JobStatus,
@@ -32,9 +33,12 @@ from app.models.entities import (
 )
 from app.schemas.scene_plans import ScenePlanPatchRequest
 from app.services.audit_service import record_audit_event
+from app.services.brand_kit_service import BrandKitService
 from app.services.generation_service import GenerationService
+from app.services.permissions import require_workspace_review
 from app.services.presenters import scene_plan_to_dict, script_version_to_dict
 from app.services.preset_service import PresetService
+from app.services.routing_service import RoutingService
 
 
 class ContentPlanningService(GenerationService):
@@ -247,12 +251,21 @@ class ContentPlanningService(GenerationService):
         script_version_id: str,
     ) -> dict[str, object]:
         project = self._get_project(project_id, auth.workspace_id)
-        self._assert_mutation_rights(project, auth)
+        require_workspace_review(
+            auth,
+            message="Only reviewers, members, or admins can approve scripts.",
+        )
         script = self._get_script(project, script_version_id)
+        script_text = "\n".join(
+            f"{line.get('beat', '')}\n{line.get('narration', '')}\n{line.get('caption', '')}"
+            for line in (script.lines or [])
+        )
+        BrandKitService(self.db).validate_text_against_brand_kit(project, script_text)
 
         script.approval_state = "approved"
         script.approved_at = datetime.now(UTC)
         script.approved_by_user_id = UUID(auth.user_id)
+        script.version += 1
         project.active_script_version_id = script.id
         project.active_scene_plan_id = None
         project.stage = ProjectStage.scenes
@@ -476,6 +489,17 @@ class ContentPlanningService(GenerationService):
         project = self._get_project(project_id, auth.workspace_id)
         self._assert_mutation_rights(project, auth)
         scene_plan = self._get_scene_plan(project, scene_plan_id)
+        if payload.version is not None and payload.version != scene_plan.version:
+            raise ApiError(
+                409,
+                "scene_plan_conflict",
+                "This scene plan changed since you last loaded it.",
+                details={
+                    "expected_version": payload.version,
+                    "current_version": scene_plan.version,
+                    "current": scene_plan_to_dict(scene_plan, self._list_scene_segments(scene_plan.id)),
+                },
+            )
 
         if "segments" in payload.model_fields_set and not payload.segments:
             raise ApiError(400, "invalid_scene_plan", "Scene plan updates must include at least one scene segment.")
@@ -539,8 +563,10 @@ class ContentPlanningService(GenerationService):
             scene_plan.visual_preset_id = target_visual_preset_id
         if "voice_preset_id" in payload.model_fields_set:
             scene_plan.voice_preset_id = target_voice_preset_id
-        if payload.model_fields_set:
+        changed_fields = set(payload.model_fields_set) - {"version"}
+        if changed_fields:
             scene_plan.source_type = ScenePlanSource.manual
+            scene_plan.version += 1
         scene_plan.approval_state = "draft"
         scene_plan.approved_at = None
         scene_plan.approved_by_user_id = None
@@ -583,7 +609,10 @@ class ContentPlanningService(GenerationService):
         scene_plan_id: str,
     ) -> dict[str, object]:
         project = self._get_project(project_id, auth.workspace_id)
-        self._assert_mutation_rights(project, auth)
+        require_workspace_review(
+            auth,
+            message="Only reviewers, members, or admins can approve scene plans.",
+        )
         scene_plan = self._get_scene_plan(project, scene_plan_id)
         segments = self._list_scene_segments(scene_plan.id)
         if not segments:
@@ -637,6 +666,7 @@ class ContentPlanningService(GenerationService):
         scene_plan.approval_state = "approved"
         scene_plan.approved_at = datetime.now(UTC)
         scene_plan.approved_by_user_id = UUID(auth.user_id)
+        scene_plan.version += 1
         project.active_scene_plan_id = scene_plan.id
         project.stage = ProjectStage.scenes
         record_audit_event(
@@ -652,7 +682,7 @@ class ContentPlanningService(GenerationService):
         self.db.refresh(scene_plan)
         return scene_plan_to_dict(scene_plan, self._list_scene_segments(scene_plan.id))
 
-    def execute_scene_plan_job(self, job_id: str, text_provider: TextProvider) -> None:
+    def execute_scene_plan_job(self, job_id: str, text_provider: TextProvider | None = None) -> None:
         job, step = self._get_job_and_step(job_id, StepKind.scene_plan_generation)
         project = self.db.get(Project, job.project_id)
         brief = self.db.get(ProjectBrief, project.active_brief_id if project else None) if project else None
@@ -665,6 +695,12 @@ class ContentPlanningService(GenerationService):
         if not visual_preset or not voice_preset:
             raise AdapterError("deterministic_input", "missing_project_presets", "Project presets are required.")
 
+        resolved_text_provider, routing_decision = (
+            (text_provider, None)
+            if text_provider is not None
+            else RoutingService(self.db, self.settings).build_text_provider_for_workspace(project.workspace_id)
+        )
+
         job.status = JobStatus.running
         job.started_at = datetime.now(UTC)
         step.status = JobStatus.running
@@ -674,8 +710,21 @@ class ContentPlanningService(GenerationService):
             render_step_id=step.id,
             project_id=project.id,
             workspace_id=project.workspace_id,
-            provider_name="azure_openai" if not self.settings.use_stub_providers else "stub_text_provider",
-            provider_model=self.settings.azure_openai_chat_deployment or "stub",
+            execution_mode=routing_decision.execution_mode if routing_decision else ExecutionMode.hosted,
+            worker_id=routing_decision.worker_id if routing_decision else None,
+            provider_credential_id=(
+                routing_decision.provider_credential_id if routing_decision else None
+            ),
+            provider_name=(
+                routing_decision.provider_name
+                if routing_decision
+                else ("azure_openai" if not self.settings.use_stub_providers else "stub_text_provider")
+            ),
+            provider_model=(
+                routing_decision.provider_model
+                if routing_decision
+                else (self.settings.azure_openai_chat_deployment or "stub")
+            ),
             operation="scene_plan_generation",
             request_hash=job.request_hash,
             status=ProviderRunStatus.running,
@@ -686,13 +735,14 @@ class ContentPlanningService(GenerationService):
                 "visual_preset": self._visual_preset_payload(visual_preset),
                 "voice_preset": self._voice_preset_payload(voice_preset),
             },
+            routing_decision_payload=self._provider_run_payload(routing_decision),
         )
         self.db.add(provider_run)
         self.db.commit()
 
         started = time.perf_counter()
         try:
-            output = text_provider.generate_scene_plan(
+            output = resolved_text_provider.generate_scene_plan(
                 brief_payload=self._brief_payload(brief),
                 selected_idea=self._idea_payload(idea),
                 script_payload=self._script_payload(script),
@@ -746,7 +796,7 @@ class ContentPlanningService(GenerationService):
         )
         self.db.commit()
 
-    def execute_prompt_pair_job(self, job_id: str, text_provider: TextProvider) -> None:
+    def execute_prompt_pair_job(self, job_id: str, text_provider: TextProvider | None = None) -> None:
         job, step = self._get_job_and_step(job_id, StepKind.prompt_pair_generation)
         project = self.db.get(Project, job.project_id)
         if not project:
@@ -764,6 +814,12 @@ class ContentPlanningService(GenerationService):
         if not visual_preset:
             raise AdapterError("deterministic_input", "missing_visual_preset", "Visual preset is required.")
 
+        resolved_text_provider, routing_decision = (
+            (text_provider, None)
+            if text_provider is not None
+            else RoutingService(self.db, self.settings).build_text_provider_for_workspace(project.workspace_id)
+        )
+
         job.status = JobStatus.running
         job.started_at = datetime.now(UTC)
         step.status = JobStatus.running
@@ -773,8 +829,21 @@ class ContentPlanningService(GenerationService):
             render_step_id=step.id,
             project_id=project.id,
             workspace_id=project.workspace_id,
-            provider_name="azure_openai" if not self.settings.use_stub_providers else "stub_text_provider",
-            provider_model=self.settings.azure_openai_chat_deployment or "stub",
+            execution_mode=routing_decision.execution_mode if routing_decision else ExecutionMode.hosted,
+            worker_id=routing_decision.worker_id if routing_decision else None,
+            provider_credential_id=(
+                routing_decision.provider_credential_id if routing_decision else None
+            ),
+            provider_name=(
+                routing_decision.provider_name
+                if routing_decision
+                else ("azure_openai" if not self.settings.use_stub_providers else "stub_text_provider")
+            ),
+            provider_model=(
+                routing_decision.provider_model
+                if routing_decision
+                else (self.settings.azure_openai_chat_deployment or "stub")
+            ),
             operation="prompt_pair_generation",
             request_hash=job.request_hash,
             status=ProviderRunStatus.running,
@@ -782,13 +851,14 @@ class ContentPlanningService(GenerationService):
                 "scene_plan": self._scene_plan_provider_payload(scene_plan, segments),
                 "visual_preset": self._visual_preset_payload(visual_preset),
             },
+            routing_decision_payload=self._provider_run_payload(routing_decision),
         )
         self.db.add(provider_run)
         self.db.commit()
 
         started = time.perf_counter()
         try:
-            output = text_provider.generate_prompt_pairs(
+            output = resolved_text_provider.generate_prompt_pairs(
                 scene_plan_payload=self._scene_plan_provider_payload(scene_plan, segments),
                 visual_preset=self._visual_preset_payload(visual_preset),
             )
@@ -822,6 +892,7 @@ class ContentPlanningService(GenerationService):
         scene_plan.validation_warnings = self._scene_plan_warnings(
             total_duration_seconds=scene_plan.total_estimated_duration_seconds
         )
+        scene_plan.version += 1
         self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
         job.completed_at = datetime.now(UTC)

@@ -34,7 +34,11 @@ class ReviewService:
         if project_id:
             query = query.where(ReviewRequest.project_id == UUID(project_id))
         if status:
-            query = query.where(ReviewRequest.status == ReviewStatus(status))
+            try:
+                review_status = ReviewStatus(status)
+            except ValueError as exc:
+                raise ApiError(400, "invalid_review_status", "Unsupported review status.") from exc
+            query = query.where(ReviewRequest.status == review_status)
         reviews = self.db.scalars(query.order_by(ReviewRequest.created_at.desc())).all()
         return [review_request_to_dict(review) for review in reviews]
 

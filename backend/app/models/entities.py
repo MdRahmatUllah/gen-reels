@@ -96,6 +96,18 @@ class ProviderErrorCategory(str, enum.Enum):
     internal = "internal"
 
 
+class ExecutionMode(str, enum.Enum):
+    hosted = "hosted"
+    byo = "byo"
+    local = "local"
+
+
+class LocalWorkerStatus(str, enum.Enum):
+    online = "online"
+    offline = "offline"
+    revoked = "revoked"
+
+
 class ModerationDecision(str, enum.Enum):
     allowed = "allowed"
     blocked = "blocked"
@@ -585,6 +597,13 @@ class ProviderRun(Base):
     render_step_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_steps.id"))
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
     workspace_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("workspaces.id"))
+    execution_mode: Mapped[ExecutionMode] = mapped_column(
+        sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
+    )
+    worker_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("local_workers.id"))
+    provider_credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspace_provider_credentials.id")
+    )
     provider_name: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     provider_model: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     operation: Mapped[str] = mapped_column(sa.String(128), nullable=False)
@@ -606,6 +625,9 @@ class ProviderRun(Base):
     error_code: Mapped[str | None] = mapped_column(sa.String(64))
     error_message: Mapped[str | None] = mapped_column(sa.Text)
     cost_payload: Mapped[dict[str, object] | None] = mapped_column(json_type())
+    routing_decision_payload: Mapped[dict[str, object]] = mapped_column(
+        json_type(), default=dict, nullable=False
+    )
     started_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
@@ -850,6 +872,116 @@ class WorkspaceApiKey(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
+
+
+class WorkspaceProviderCredential(Base, TimestampMixin):
+    __tablename__ = "workspace_provider_credentials"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    modality: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    provider_key: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    public_config: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    secret_payload_encrypted: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class LocalWorker(Base, TimestampMixin):
+    __tablename__ = "local_workers"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    registered_by_api_key_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("workspace_api_keys.id"))
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    status: Mapped[LocalWorkerStatus] = mapped_column(
+        sa.Enum(LocalWorkerStatus), default=LocalWorkerStatus.online, nullable=False
+    )
+    worker_token_hash: Mapped[str] = mapped_column(sa.String(128), nullable=False, unique=True)
+    token_prefix: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    supports_ordered_reference_images: Mapped[bool] = mapped_column(
+        sa.Boolean, default=False, nullable=False
+    )
+    supports_first_last_frame_video: Mapped[bool] = mapped_column(
+        sa.Boolean, default=False, nullable=False
+    )
+    supports_tts: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    supports_clip_retime: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    last_polled_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    last_job_claimed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    last_error_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(sa.String(64))
+    last_error_message: Mapped[str | None] = mapped_column(sa.Text)
+    revoked_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class WorkspaceExecutionPolicy(Base, TimestampMixin):
+    __tablename__ = "workspace_execution_policies"
+    __table_args__ = (UniqueConstraint("workspace_id", name="uq_workspace_execution_policy_workspace"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    text_mode: Mapped[ExecutionMode] = mapped_column(
+        sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
+    )
+    text_provider_key: Mapped[str] = mapped_column(sa.String(128), default="azure_openai_text", nullable=False)
+    text_credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspace_provider_credentials.id")
+    )
+    moderation_mode: Mapped[ExecutionMode] = mapped_column(
+        sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
+    )
+    moderation_provider_key: Mapped[str] = mapped_column(
+        sa.String(128), default="azure_content_safety", nullable=False
+    )
+    moderation_credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspace_provider_credentials.id")
+    )
+    image_mode: Mapped[ExecutionMode] = mapped_column(
+        sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
+    )
+    image_provider_key: Mapped[str] = mapped_column(
+        sa.String(128), default="stub_image_provider", nullable=False
+    )
+    image_credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspace_provider_credentials.id")
+    )
+    video_mode: Mapped[ExecutionMode] = mapped_column(
+        sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
+    )
+    video_provider_key: Mapped[str] = mapped_column(
+        sa.String(128), default="stub_video_provider", nullable=False
+    )
+    video_credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspace_provider_credentials.id")
+    )
+    speech_mode: Mapped[ExecutionMode] = mapped_column(
+        sa.Enum(ExecutionMode), default=ExecutionMode.hosted, nullable=False
+    )
+    speech_provider_key: Mapped[str] = mapped_column(
+        sa.String(128), default="stub_speech_provider", nullable=False
+    )
+    speech_credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspace_provider_credentials.id")
+    )
+    preferred_local_worker_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("local_workers.id"))
+
+
+class LocalWorkerHeartbeat(Base):
+    __tablename__ = "local_worker_heartbeats"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    worker_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("local_workers.id"), nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    status: Mapped[LocalWorkerStatus] = mapped_column(sa.Enum(LocalWorkerStatus), nullable=False)
+    metadata_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
 
 

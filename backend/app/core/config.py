@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import computed_field
@@ -22,6 +23,11 @@ def _generate_dev_rsa_pair() -> tuple[str, str]:
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     ).decode()
     return private_pem, public_pem
+
+
+@lru_cache(maxsize=1)
+def _generate_dev_encryption_key() -> str:
+    return Fernet.generate_key().decode("utf-8")
 
 
 class Settings(BaseSettings):
@@ -49,6 +55,7 @@ class Settings(BaseSettings):
     local_storage_root: str = ".local-storage"
     jwt_private_key: str | None = None
     jwt_public_key: str | None = None
+    app_encryption_key: str | None = None
     jwt_access_token_ttl_minutes: int = 15
     jwt_refresh_token_ttl_days: int = 30
     access_cookie_name: str = "rg_access_token"
@@ -70,6 +77,7 @@ class Settings(BaseSettings):
     idempotency_retention_hours: int = 24
     planning_job_timeout_minutes: int = 30
     render_job_timeout_minutes: int = 120
+    local_worker_heartbeat_timeout_seconds: int = 180
     allow_export_without_music: bool = True
     use_stub_providers: bool = False
 
@@ -90,6 +98,15 @@ class Settings(BaseSettings):
         if self.environment in {"development", "test"}:
             return _generate_dev_rsa_pair()[1]
         raise ValueError("JWT_PUBLIC_KEY is required outside development and test.")
+
+    @computed_field
+    @property
+    def app_encryption_key_resolved(self) -> str:
+        if self.app_encryption_key:
+            return self.app_encryption_key
+        if self.environment in {"development", "test"}:
+            return _generate_dev_encryption_key()
+        raise ValueError("APP_ENCRYPTION_KEY is required outside development and test.")
 
     @computed_field
     @property

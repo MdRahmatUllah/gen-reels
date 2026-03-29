@@ -300,9 +300,10 @@ class ProjectService:
         if "audio_mix_profile" in payload.model_fields_set:
             project.audio_mix_profile = normalize_audio_mix_profile(payload.audio_mix_profile)
 
-        active_brand_kit = brand_kit_service.resolve_brand_kit(
-            auth.workspace_id,
-            str(project.brand_kit_id) if project.brand_kit_id else None,
+        active_brand_kit = (
+            brand_kit_service.get_brand_kit(auth.workspace_id, str(project.brand_kit_id))
+            if project.brand_kit_id
+            else None
         )
         brand_kit_service.apply_brand_kit_defaults(project, active_brand_kit)
 

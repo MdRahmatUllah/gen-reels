@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.api.deps import AuthContext
 from app.core.errors import ApiError
 from app.models.entities import (
+    BrandKit,
     Project,
     ProjectBrief,
     ProjectStage,
@@ -19,6 +20,8 @@ from app.models.entities import (
 )
 from app.schemas.templates import ProjectFromTemplateRequest, TemplateCreateRequest
 from app.services.audit_service import record_audit_event
+from app.services.brand_kit_service import BrandKitService
+from app.services.permissions import require_workspace_edit
 from app.services.project_profiles import (
     normalize_audio_mix_profile,
     normalize_export_profile,
@@ -73,6 +76,7 @@ class TemplateService:
             "project_defaults": {
                 "aspect_ratio": project.aspect_ratio,
                 "duration_target_sec": project.duration_target_sec,
+                "brand_kit_id": str(project.brand_kit_id) if project.brand_kit_id else None,
                 "default_visual_preset_id": str(project.default_visual_preset_id) if project.default_visual_preset_id else None,
                 "default_voice_preset_id": str(project.default_voice_preset_id) if project.default_voice_preset_id else None,
                 "subtitle_style_profile": normalize_subtitle_style_profile(project.subtitle_style_profile),
@@ -157,6 +161,7 @@ class TemplateService:
         template_id: str,
         payload: ProjectFromTemplateRequest,
     ) -> dict[str, object]:
+        require_workspace_edit(auth, message="Only workspace members or admins can create projects from templates.")
         template = self._get_template(auth.workspace_id, template_id)
         if template.is_archived:
             raise ApiError(400, "template_archived", "Archived templates cannot create new projects.")
@@ -171,6 +176,11 @@ class TemplateService:
             workspace_id=UUID(auth.workspace_id),
             owner_user_id=UUID(auth.user_id),
             source_template_version_id=version.id,
+            brand_kit_id=self._transferable_preset_id(
+                UUID(auth.workspace_id),
+                BrandKit,
+                project_defaults.get("brand_kit_id"),
+            ),
             title=payload.title,
             client=payload.client,
             aspect_ratio=str(project_defaults.get("aspect_ratio") or "9:16"),
@@ -190,6 +200,13 @@ class TemplateService:
             audio_mix_profile=normalize_audio_mix_profile(project_defaults.get("audio_mix_profile")),
             stage=ProjectStage.brief,
         )
+        brand_kit_service = BrandKitService(self.db)
+        active_brand_kit = (
+            brand_kit_service.get_brand_kit(auth.workspace_id, str(project.brand_kit_id))
+            if project.brand_kit_id
+            else None
+        )
+        brand_kit_service.apply_brand_kit_defaults(project, active_brand_kit)
         self.db.add(project)
         self.db.flush()
 

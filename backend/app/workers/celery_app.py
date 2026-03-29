@@ -28,6 +28,7 @@ celery_app.conf.update(
         "render.expire_stale_jobs": {"queue": "render"},
         "render.execute_job": {"queue": "render"},
         "billing.reconcile_usage": {"queue": "planning"},
+        "workspace.refresh_local_workers": {"queue": "planning"},
     },
     beat_schedule={
         "expire-stale-planning-jobs": {
@@ -41,6 +42,10 @@ celery_app.conf.update(
         "reconcile-usage-ledger": {
             "task": "billing.reconcile_usage",
             "schedule": crontab(minute="0"),
+        },
+        "refresh-local-workers": {
+            "task": "workspace.refresh_local_workers",
+            "schedule": crontab(minute="*/2"),
         },
     },
 )

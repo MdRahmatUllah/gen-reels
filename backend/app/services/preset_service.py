@@ -15,6 +15,7 @@ from app.schemas.presets import (
     VoicePresetUpdateRequest,
 )
 from app.services.audit_service import record_audit_event
+from app.services.permissions import require_workspace_edit
 from app.services.presenters import visual_preset_to_dict, voice_preset_to_dict
 
 
@@ -57,6 +58,7 @@ class PresetService:
         auth: AuthContext,
         payload: VisualPresetCreateRequest,
     ) -> dict[str, object]:
+        require_workspace_edit(auth, message="Only workspace members or admins can create presets.")
         preset = VisualPreset(
             workspace_id=UUID(auth.workspace_id),
             created_by_user_id=UUID(auth.user_id),
@@ -83,6 +85,7 @@ class PresetService:
         preset_id: str,
         payload: VisualPresetUpdateRequest,
     ) -> dict[str, object]:
+        require_workspace_edit(auth, message="Only workspace members or admins can update presets.")
         preset = self.get_visual_preset(auth.workspace_id, preset_id)
         if payload.version is not None and payload.version != preset.version:
             raise ApiError(
@@ -126,6 +129,7 @@ class PresetService:
         auth: AuthContext,
         payload: VoicePresetCreateRequest,
     ) -> dict[str, object]:
+        require_workspace_edit(auth, message="Only workspace members or admins can create presets.")
         preset = VoicePreset(
             workspace_id=UUID(auth.workspace_id),
             created_by_user_id=UUID(auth.user_id),
@@ -152,6 +156,7 @@ class PresetService:
         preset_id: str,
         payload: VoicePresetUpdateRequest,
     ) -> dict[str, object]:
+        require_workspace_edit(auth, message="Only workspace members or admins can update presets.")
         preset = self.get_voice_preset(auth.workspace_id, preset_id)
         if payload.version is not None and payload.version != preset.version:
             raise ApiError(

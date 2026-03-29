@@ -33,6 +33,8 @@ import type {
   SettingsSection,
   UsageRecord,
   InvoiceItem,
+  BrandKit,
+  Comment,
   AdminQueueItem,
   AdminWorkspaceRow,
   AdminRenderRow,
@@ -152,6 +154,8 @@ interface MockState {
   invoices: InvoiceItem[];
   assets: AssetRecord[];
   templates: TemplateCard[];
+  brandKits: BrandKit[];
+  comments: Comment[];
 }
 
 const seedTemplates: TemplateCard[] = [
@@ -211,6 +215,10 @@ const state: MockState = {
   ],
   assets: [...seedAssets],
   templates: [...seedTemplates],
+  brandKits: [
+    { id: "bk_1", name: "Aurora Global", brandNorthStar: "Luminous, premium, accessible luxury", primaryPalette: "#003366, #F2F2F2", fontFamily: "Inter" }
+  ],
+  comments: [],
 };
 
 /* ─── Idea Generation Templates ───────────────────────────────────────────── */
@@ -683,7 +691,7 @@ export async function mockGenerateScenePlan(projectId: string): Promise<ScenePla
       shotType: meta.shotType,
       motion: meta.motion,
       prompt: `${meta.shotType} shot: ${seg.narration.substring(0, 80)}`,
-      startImagePrompt: `Opening frame — ${meta.shotType.toLowerCase()}, ${brief?.brandNorthStar ?? "premium editorial"}, establishing the scene for: ${seg.narration.substring(0, 50)}`,
+      startImagePrompt: `Opening frame — ${meta.shotType.toLowerCase()}, ${state.brandKits[0]?.brandNorthStar ?? brief?.brandNorthStar ?? "premium editorial"}, establishing the scene for: ${seg.narration.substring(0, 50)}`,
       endImagePrompt: `Closing frame — ${meta.motion.toLowerCase()} completing, transitional composition ready for next scene, ${seg.narration.substring(0, 50)}`,
       continuityScore: 85 + Math.floor(Math.random() * 15),
       durationSec: seg.estimatedDurationSec,
@@ -694,7 +702,7 @@ export async function mockGenerateScenePlan(projectId: string): Promise<ScenePla
       keyframeStatus: "Awaiting generation",
       notes: [],
       promptHistory: [],
-      palette: meta.palette,
+      palette: state.brandKits[0]?.primaryPalette ?? meta.palette,
       audioCue: meta.audioCue,
       thumbnailLabel: beatTitle.substring(0, 16),
       gradient: gradients[index % gradients.length],
@@ -703,6 +711,7 @@ export async function mockGenerateScenePlan(projectId: string): Promise<ScenePla
       caption: seg.caption,
       visualDirection: script.lines[index]?.visualDirection ?? "",
       voicePacing: script.lines[index]?.voicePacing ?? "",
+      version: 1,
     };
   });
 
@@ -760,8 +769,8 @@ export async function mockGeneratePromptPairs(projectId: string, sceneId: string
   }
 
   const brief = state.briefs.get(projectId);
-  scene.startImagePrompt = `Opening frame — ${scene.shotType.toLowerCase()}, ${brief?.brandNorthStar ?? "premium editorial"}, setting up: ${scene.narration.substring(0, 60)}`;
-  scene.endImagePrompt = `Closing frame — ${scene.motion.toLowerCase()} completing, ${scene.palette}, transition-ready: ${scene.narration.substring(0, 60)}`;
+  scene.startImagePrompt = `Opening frame — ${scene.shotType.toLowerCase()}, ${state.brandKits[0]?.brandNorthStar ?? brief?.brandNorthStar ?? "premium editorial"}, setting up: ${scene.narration.substring(0, 60)}`;
+  scene.endImagePrompt = `Closing frame — ${scene.motion.toLowerCase()} completing, ${state.brandKits[0]?.primaryPalette ?? scene.palette}, transition-ready: ${scene.narration.substring(0, 60)}`;
   scene.status = "review";
   scene.keyframeStatus = "Prompts generated";
 
@@ -778,7 +787,17 @@ export async function mockUpdateScene(projectId: string, sceneId: string, update
   const sceneIndex = planSet.scenes.findIndex((s) => s.id === sceneId);
   if (sceneIndex === -1) throw new Error(`Scene ${sceneId} not found`);
 
-  const updated = { ...planSet.scenes[sceneIndex], ...updates };
+  const currentScene = planSet.scenes[sceneIndex];
+
+  // Phase 6: Optimistic Locking simulation
+  if (updates.version !== undefined && updates.version < currentScene.version) {
+    const error: any = new Error("Conflict: The scene has been modified by someone else.");
+    error.status = 409;
+    error.currentVersion = currentScene; // Attach current version to error for diffing
+    throw error;
+  }
+
+  const updated = { ...currentScene, ...updates, version: currentScene.version + 1 };
 
   // Recalculate duration warning if duration changed
   if (updates.durationSec !== undefined) {
@@ -1258,4 +1277,50 @@ export async function mockCloneTemplate(templateId: string): Promise<string> {
   state.briefs.set(newProjectId, clonedBrief);
   
   return newProjectId;
+}
+
+/* ─── Phase 6: Collaboration & Studio ─────────────────────────────────────── */
+
+export async function mockGetBrandKits(): Promise<BrandKit[]> {
+  await randomDelay(300, 500);
+  return state.brandKits;
+}
+
+export async function mockSaveBrandKit(kit: BrandKit): Promise<BrandKit> {
+  await randomDelay(400, 800);
+  const existing = state.brandKits.findIndex((b) => b.id === kit.id);
+  if (existing >= 0) {
+    state.brandKits[existing] = kit;
+  } else {
+    kit.id = nextId("bk");
+    state.brandKits.push(kit);
+  }
+  return kit;
+}
+
+export async function mockGetComments(targetId: string): Promise<Comment[]> {
+  await randomDelay(200, 400);
+  return state.comments.filter((c) => c.targetId === targetId);
+}
+
+export async function mockAddComment(targetId: string, text: string): Promise<Comment> {
+  await randomDelay(300, 600);
+  const newComment: Comment = {
+    id: nextId("comment"),
+    targetId,
+    authorName: state.user.name,
+    text,
+    timestamp: new Date().toISOString(),
+    resolved: false,
+  };
+  state.comments.push(newComment);
+  return newComment;
+}
+
+export async function mockResolveComment(commentId: string): Promise<void> {
+  await randomDelay(200, 400);
+  const comment = state.comments.find((c) => c.id === commentId);
+  if (comment) {
+    comment.resolved = true;
+  }
 }

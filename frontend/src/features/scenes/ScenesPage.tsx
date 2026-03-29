@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useScenePlan, useGenerateScenePlan, useGeneratePromptPairs, useUpdateScene, useApproveScenePlan, useSetScenePlanPreset } from "../../hooks/use-scenes";
 import { useVisualPresets, useVoicePresets } from "../../hooks/use-presets";
 import type { ScenePlan, ScenePlanSet } from "../../types/domain";
+import { CommentThread } from "../../components/CommentThread";
+import { ConflictResolutionModal } from "../../components/ConflictResolutionModal";
+import { mockUpdateScene } from "../../lib/mock-service";
 
 /* ─── Shimmer placeholder ─────────────────────────────────────────────────── */
 function SceneShimmer() {
@@ -123,10 +126,12 @@ function SceneDetailEditor({
 
   const [localScene, setLocalScene] = useState(scene);
   const [dirty, setDirty] = useState(false);
+  const [conflictData, setConflictData] = useState<{ serverVersion: ScenePlan; clientVersion: ScenePlan } | null>(null);
 
   useEffect(() => {
     setLocalScene(scene);
     setDirty(false);
+    setConflictData(null);
   }, [scene]);
 
   const handleFieldChange = useCallback((field: keyof ScenePlan, value: string | number) => {
@@ -134,10 +139,29 @@ function SceneDetailEditor({
     setDirty(true);
   }, []);
 
-  const handleSave = useCallback(() => {
-    updateScene.mutate({ sceneId: scene.id, updates: localScene });
-    setDirty(false);
+  const handleSave = useCallback(async () => {
+    try {
+      await updateScene.mutateAsync({ sceneId: scene.id, updates: localScene });
+      setDirty(false);
+      setConflictData(null);
+    } catch (err: any) {
+      if (err?.status === 409) {
+        setConflictData({
+          serverVersion: err.currentVersion,
+          clientVersion: localScene,
+        });
+      } else {
+        alert("Failed to save changes.");
+      }
+    }
   }, [localScene, scene.id, updateScene]);
+
+  const handleResolveConflict = useCallback((resolvedVersion: ScenePlan) => {
+    updateScene.mutate({ sceneId: scene.id, updates: resolvedVersion });
+    setLocalScene(resolvedVersion);
+    setDirty(false);
+    setConflictData(null);
+  }, [scene.id, updateScene]);
 
   const handlePromptUpdate = useCallback((field: "startImagePrompt" | "endImagePrompt", value: string) => {
     handleFieldChange(field, value);
@@ -284,6 +308,15 @@ function SceneDetailEditor({
           </button>
         </div>
       ) : null}
+
+      {conflictData && (
+        <ConflictResolutionModal
+          serverVersion={conflictData.serverVersion}
+          clientVersion={conflictData.clientVersion}
+          onResolve={handleResolveConflict}
+          onCancel={() => setConflictData(null)}
+        />
+      )}
     </div>
   );
 }
@@ -373,6 +406,18 @@ export function ScenesPage() {
     });
   }, [approvePlan, navigate, projectId]);
 
+  const triggerGhostEdit = useCallback(() => {
+    if (planSet && planSet.scenes.length > 0) {
+      const firstScene = planSet.scenes[0];
+      mockUpdateScene(projectId, firstScene.id, {  
+        shotType: "Extra wide shot (GHOST EDIT)", 
+        version: firstScene.version + 1  
+      }).then(() => {
+        alert("Ghost edit injected for Scene " + firstScene.index + " — please make an edit to Scene " + firstScene.index + " and try to save.");
+      });
+    }
+  }, [planSet, projectId]);
+
   /* ─── Empty state ─────────────────────────────────────────────────────── */
   if (!isLoading && !hasPlan && !generatePlan.isPending) {
     return (
@@ -422,6 +467,9 @@ export function ScenesPage() {
           </Link>
           {!isApproved ? (
             <>
+              <button type="button" className="button button--secondary" onClick={triggerGhostEdit}>
+                Trigger Ghost Edit
+              </button>
               <button type="button" className="button button--secondary" onClick={handleGenerate} disabled={generatePlan.isPending}>
                 Regenerate plan
               </button>
@@ -534,6 +582,8 @@ export function ScenesPage() {
                 </div>
               )}
             </div>
+            
+            <CommentThread targetId={selectedScene.id} />
           </>
         ) : null}
       </div>

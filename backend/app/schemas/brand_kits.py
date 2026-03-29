@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -9,8 +10,8 @@ from pydantic import BaseModel, Field
 class BrandKitCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str = ""
-    status: str = "active"
-    enforcement_mode: str = "advisory"
+    status: Literal["draft", "active", "archived"] = "active"
+    enforcement_mode: Literal["advisory", "enforced"] = "advisory"
     is_default: bool = False
     default_visual_preset_id: str | None = None
     default_voice_preset_id: str | None = None
@@ -26,8 +27,8 @@ class BrandKitUpdateRequest(BaseModel):
     version: int | None = Field(default=None, ge=1)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
-    status: str | None = None
-    enforcement_mode: str | None = None
+    status: Literal["draft", "active", "archived"] | None = None
+    enforcement_mode: Literal["advisory", "enforced"] | None = None
     is_default: bool | None = None
     default_visual_preset_id: str | None = None
     default_voice_preset_id: str | None = None

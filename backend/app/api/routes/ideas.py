@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, Header, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_db_dep, get_settings_dep, require_auth
-from app.integrations.azure import build_moderation_provider
 from app.schemas.common import JobAcceptedResponse, MessageResponse
 from app.schemas.projects import IdeaSetResponse
 from app.services.generation_service import GenerationService
+from app.services.routing_service import RoutingService
 
 router = APIRouter()
 
@@ -34,7 +34,9 @@ def generate_ideas(
     db: Session = Depends(get_db_dep),
     settings=Depends(get_settings_dep),
 ):
-    moderation_provider = build_moderation_provider(settings)
+    moderation_provider, _decision = RoutingService(db, settings).build_moderation_provider_for_workspace(
+        auth.workspace_id
+    )
     return GenerationService(db, settings).queue_idea_generation(
         auth,
         project_id,

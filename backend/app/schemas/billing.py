@@ -55,6 +55,7 @@ class UsageSummaryResponse(BaseModel):
     month_credits_used: int
     month_export_count: int
     month_provider_run_count: int
+    month_execution_mode_summary: dict[str, dict[str, int]]
     recent_entries: list[CreditLedgerEntryResponse]
 
 
@@ -63,4 +64,3 @@ class BillingUrlResponse(BaseModel):
     url: str
     provider_name: str
     status: str
-

@@ -283,7 +283,8 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
             <NavGroup
               label="Operations"
               items={[
-                { to: "/app/settings", label: "Settings" },
+                { to: "/app/settings/brand", label: "Brand Kits" },
+                { to: "/app/settings/team", label: "Team Settings" },
                 { to: "/app/billing", label: "Billing" },
                 { to: "/admin/queue", label: "Admin Queue" },
               ]}

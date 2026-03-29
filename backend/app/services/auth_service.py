@@ -89,6 +89,7 @@ class AuthService:
             },
             "workspaces": [
                 {
+                    "member_id": membership.id,
                     "workspace_id": workspace.id,
                     "workspace_name": workspace.name,
                     "role": membership.role.value,

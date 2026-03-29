@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl
@@ -8,7 +9,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 class WorkspaceApiKeyCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    role_scope: str
+    role_scope: Literal["admin", "member", "reviewer", "viewer"]
     expires_at: datetime | None = None
 
 
@@ -53,6 +54,10 @@ class WebhookEndpointResponse(BaseModel):
     last_tested_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class WebhookEndpointCreateResponse(WebhookEndpointResponse):
+    signing_secret: str
 
 
 class WebhookDeliveryResponse(BaseModel):

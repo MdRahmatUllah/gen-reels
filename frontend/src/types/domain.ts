@@ -171,6 +171,7 @@ export interface ScenePlan {
   caption: string;
   visualDirection: string;
   voicePacing: string;
+  version: number;
 }
 
 export type ScenePlanApprovalState = "draft" | "pending" | "approved";
@@ -426,6 +427,25 @@ export interface AdminWorkspaceRow {
   renderLoad: string;
   health: string;
   renewalDate: string;
+}
+
+/* ─── Phase 6: Collaboration & Studio ─────────────────────────────────────── */
+
+export interface BrandKit {
+  id: string;
+  name: string;
+  brandNorthStar: string;
+  primaryPalette: string;
+  fontFamily: string;
+}
+
+export interface Comment {
+  id: string;
+  targetId: string;
+  authorName: string;
+  text: string;
+  timestamp: string;
+  resolved: boolean;
 }
 
 export interface AdminRenderRow {

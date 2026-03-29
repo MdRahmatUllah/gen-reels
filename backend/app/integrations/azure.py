@@ -310,18 +310,28 @@ class StubTextProvider(TextProvider):
 
 
 class AzureContentSafetyProvider(ModerationProvider):
-    def __init__(self, settings: Settings) -> None:
-        if not settings.azure_content_safety_endpoint or not settings.azure_content_safety_api_key:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        endpoint: str | None = None,
+        api_key: str | None = None,
+        api_version: str | None = None,
+    ) -> None:
+        self.endpoint = endpoint or settings.azure_content_safety_endpoint
+        self.api_key = api_key or settings.azure_content_safety_api_key
+        self.api_version = api_version or settings.azure_content_safety_api_version
+        if not self.endpoint or not self.api_key:
             raise AdapterError("internal", "missing_content_safety_config", "Azure Content Safety is not configured.")
         self.settings = settings
 
     def moderate_text(self, text: str, *, target_type: str) -> ModerationResult:
         url = (
-            f"{self.settings.azure_content_safety_endpoint.rstrip('/')}"
-            f"/contentsafety/text:analyze?api-version={self.settings.azure_content_safety_api_version}"
+            f"{self.endpoint.rstrip('/')}"
+            f"/contentsafety/text:analyze?api-version={self.api_version}"
         )
         headers = {
-            "Ocp-Apim-Subscription-Key": self.settings.azure_content_safety_api_key,
+            "Ocp-Apim-Subscription-Key": self.api_key,
             "Content-Type": "application/json",
         }
         response = httpx.post(url, headers=headers, json={"text": text}, timeout=30.0)
@@ -349,23 +359,31 @@ class AzureContentSafetyProvider(ModerationProvider):
 
 
 class AzureOpenAITextProvider(TextProvider):
-    def __init__(self, settings: Settings) -> None:
-        if (
-            not settings.azure_openai_endpoint
-            or not settings.azure_openai_api_key
-            or not settings.azure_openai_chat_deployment
-        ):
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        endpoint: str | None = None,
+        api_key: str | None = None,
+        deployment: str | None = None,
+        api_version: str | None = None,
+    ) -> None:
+        self.endpoint = endpoint or settings.azure_openai_endpoint
+        self.api_key = api_key or settings.azure_openai_api_key
+        self.deployment = deployment or settings.azure_openai_chat_deployment
+        self.api_version = api_version or settings.azure_openai_api_version
+        if not self.endpoint or not self.api_key or not self.deployment:
             raise AdapterError("internal", "missing_azure_openai_config", "Azure OpenAI is not configured.")
         self.settings = settings
 
     def _request_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         url = (
-            f"{self.settings.azure_openai_endpoint.rstrip('/')}/openai/deployments/"
-            f"{self.settings.azure_openai_chat_deployment}/chat/completions"
-            f"?api-version={self.settings.azure_openai_api_version}"
+            f"{self.endpoint.rstrip('/')}/openai/deployments/"
+            f"{self.deployment}/chat/completions"
+            f"?api-version={self.api_version}"
         )
         headers = {
-            "api-key": self.settings.azure_openai_api_key,
+            "api-key": self.api_key,
             "Content-Type": "application/json",
         }
         body = {

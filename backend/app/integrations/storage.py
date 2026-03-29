@@ -51,6 +51,14 @@ class StorageClient:
     ) -> str:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def presigned_put_url(
+        self,
+        bucket_name: str,
+        object_name: str,
+        ttl_seconds: int = 300,
+    ) -> str:  # pragma: no cover - interface
+        raise NotImplementedError
+
 
 class MinioStorageClient(StorageClient):
     def __init__(self, settings: Settings) -> None:
@@ -119,6 +127,14 @@ class MinioStorageClient(StorageClient):
             expires=timedelta(seconds=ttl_seconds),
         )
 
+    def presigned_put_url(self, bucket_name: str, object_name: str, ttl_seconds: int = 300) -> str:
+        self.ensure_bucket(bucket_name)
+        return self.client.presigned_put_object(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            expires=timedelta(seconds=ttl_seconds),
+        )
+
 
 class LocalStorageClient(StorageClient):
     def __init__(self, settings: Settings) -> None:
@@ -170,6 +186,12 @@ class LocalStorageClient(StorageClient):
     def presigned_get_url(self, bucket_name: str, object_name: str, ttl_seconds: int = 300) -> str:
         del ttl_seconds
         return str(self._path_for(bucket_name, object_name))
+
+    def presigned_put_url(self, bucket_name: str, object_name: str, ttl_seconds: int = 300) -> str:
+        del ttl_seconds
+        destination = self._path_for(bucket_name, object_name)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        return str(destination)
 
 
 def build_storage_client(settings: Settings) -> StorageClient:

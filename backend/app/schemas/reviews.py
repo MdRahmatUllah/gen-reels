@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -8,7 +9,7 @@ from pydantic import BaseModel, Field
 
 class ReviewCreateRequest(BaseModel):
     project_id: str | None = None
-    target_type: str = Field(min_length=1, max_length=64)
+    target_type: Literal["script_version", "scene_plan", "export", "template_version"]
     target_id: str = Field(min_length=1, max_length=64)
     requested_version: int | None = Field(default=None, ge=1)
     assigned_to_user_id: str | None = None

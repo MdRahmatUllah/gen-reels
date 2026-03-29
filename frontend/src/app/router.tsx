@@ -14,10 +14,11 @@ import {
   ProjectBriefPage,
   ProjectsPage,
   ScriptPage,
-  SettingsPage,
 } from "../routes/app-pages";
 import { TemplatesPage } from "../features/templates/TemplatesPage";
 import { AssetsPage } from "../features/assets/AssetsPage";
+import { BrandKitPage } from "../features/settings/BrandKitPage";
+import { TeamSettingsPage } from "../features/settings/TeamSettingsPage";
 import { AdminQueuePage } from "../features/admin/AdminQueuePage";
 import { AdminRendersPage } from "../features/admin/AdminRendersPage";
 import { AdminWorkspacesPage } from "../features/admin/AdminWorkspacesPage";
@@ -88,8 +89,12 @@ export const router = createBrowserRouter([
         element: <AssetsPage />,
       },
       {
-        path: "settings",
-        element: <SettingsPage />,
+        path: "settings/brand",
+        element: <BrandKitPage />,
+      },
+      {
+        path: "settings/team",
+        element: <TeamSettingsPage />,
       },
       {
         path: "billing",

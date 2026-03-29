@@ -389,7 +389,7 @@ class WorkspaceService:
         )
         self.db.commit()
         self.db.refresh(endpoint)
-        return webhook_endpoint_to_dict(endpoint)
+        return {**webhook_endpoint_to_dict(endpoint), "signing_secret": endpoint.signing_secret}
 
     def update_webhook_endpoint(
         self,
@@ -464,6 +464,8 @@ class WorkspaceService:
         )
         if not endpoint:
             raise ApiError(404, "webhook_endpoint_not_found", "Webhook endpoint not found.")
+        if not endpoint.is_active:
+            raise ApiError(400, "webhook_endpoint_inactive", "Activate the webhook endpoint before testing it.")
         endpoint.last_tested_at = datetime.now(UTC)
         delivery = self.emit_workspace_event(
             endpoint.workspace_id,
@@ -471,6 +473,8 @@ class WorkspaceService:
             {"endpoint_id": str(endpoint.id), "name": endpoint.name},
             endpoint_ids=[endpoint.id],
         )
+        if not delivery:
+            raise ApiError(400, "webhook_endpoint_delivery_not_created", "No webhook delivery was created.")
         self.db.commit()
         return webhook_delivery_to_dict(delivery[0])
 
@@ -488,12 +492,13 @@ class WorkspaceService:
         )
         endpoints = self.db.scalars(endpoints_query).all()
         deliveries: list[WebhookDelivery] = []
-        body = json.dumps(payload, sort_keys=True, default=str)
         for endpoint in endpoints:
             if endpoint_ids is not None and endpoint.id not in endpoint_ids:
                 continue
-            if endpoint.event_types and event_type not in endpoint.event_types:
+            if endpoint.event_types and event_type not in endpoint.event_types and event_type != "workspace.webhook_test":
                 continue
+            delivery_payload = {**payload, "event_type": event_type}
+            body = json.dumps(delivery_payload, sort_keys=True, default=str)
             replay_id = str(uuid4())
             signature = hmac.new(
                 endpoint.signing_secret.encode("utf-8"),
@@ -507,7 +512,7 @@ class WorkspaceService:
                 replay_id=replay_id,
                 signature=signature,
                 status=WebhookDeliveryStatus.queued,
-                payload={**payload, "event_type": event_type},
+                payload=delivery_payload,
                 attempt_count=0,
             )
             self.db.add(delivery)

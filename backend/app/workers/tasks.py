@@ -5,17 +5,12 @@ import logging
 from app.core.config import get_settings
 from app.core.errors import AdapterError
 from app.db.session import get_session_factory
-from app.integrations.azure import build_moderation_provider, build_text_provider
-from app.integrations.media import (
-    build_image_provider,
-    build_music_provider,
-    build_speech_provider,
-    build_video_provider,
-)
+from app.integrations.media import build_music_provider
 from app.integrations.storage import build_storage_client
 from app.services.content_planning_service import ContentPlanningService
 from app.services.generation_service import GenerationService
 from app.services.billing_service import BillingService
+from app.services.routing_service import RoutingService
 from app.services.render_service import RenderService
 from app.workers.celery_app import celery_app
 
@@ -28,7 +23,7 @@ def generate_ideas_task(self, job_id: str) -> None:
     session = get_session_factory(settings.database_url)()
     service = GenerationService(session, settings)
     try:
-        service.execute_idea_job(job_id, build_text_provider(settings))
+        service.execute_idea_job(job_id)
     except AdapterError as error:
         if error.category == "transient" and self.request.retries < self.max_retries:
             service.mark_job_retry(job_id, error)
@@ -48,7 +43,7 @@ def generate_script_task(self, job_id: str) -> None:
     session = get_session_factory(settings.database_url)()
     service = GenerationService(session, settings)
     try:
-        service.execute_script_job(job_id, build_text_provider(settings))
+        service.execute_script_job(job_id)
     except AdapterError as error:
         if error.category == "transient" and self.request.retries < self.max_retries:
             service.mark_job_retry(job_id, error)
@@ -68,7 +63,7 @@ def generate_scene_plan_task(self, job_id: str) -> None:
     session = get_session_factory(settings.database_url)()
     service = ContentPlanningService(session, settings)
     try:
-        service.execute_scene_plan_job(job_id, build_text_provider(settings))
+        service.execute_scene_plan_job(job_id)
     except AdapterError as error:
         if error.category == "transient" and self.request.retries < self.max_retries:
             service.mark_job_retry(job_id, error)
@@ -88,7 +83,7 @@ def generate_prompt_pairs_task(self, job_id: str) -> None:
     session = get_session_factory(settings.database_url)()
     service = ContentPlanningService(session, settings)
     try:
-        service.execute_prompt_pair_job(job_id, build_text_provider(settings))
+        service.execute_prompt_pair_job(job_id)
     except AdapterError as error:
         if error.category == "transient" and self.request.retries < self.max_retries:
             service.mark_job_retry(job_id, error)
@@ -108,14 +103,7 @@ def execute_render_job_task(self, job_id: str) -> None:
     session = get_session_factory(settings.database_url)()
     service = RenderService(session, settings, build_storage_client(settings))
     try:
-        service.execute_render_job(
-            job_id,
-            image_provider=build_image_provider(settings),
-            video_provider=build_video_provider(settings),
-            speech_provider=build_speech_provider(settings),
-            music_provider=build_music_provider(settings),
-            moderation_provider=build_moderation_provider(settings),
-        )
+        service.execute_render_job(job_id, music_provider=build_music_provider(settings))
     except AdapterError as error:
         if error.category == "transient" and self.request.retries < self.max_retries:
             service.mark_job_retry(job_id, error)
@@ -155,5 +143,15 @@ def reconcile_usage() -> int:
     session = get_session_factory(settings.database_url)()
     try:
         return BillingService(session, settings).reconcile_usage_entries()
+    finally:
+        session.close()
+
+
+@celery_app.task(name="workspace.refresh_local_workers")
+def refresh_local_workers() -> int:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        return RoutingService(session, settings).refresh_worker_statuses()
     finally:
         session.close()

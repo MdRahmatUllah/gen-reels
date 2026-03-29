@@ -11,6 +11,7 @@ from app.core.errors import ApiError
 from app.models.entities import (
     CreditLedgerEntry,
     CreditLedgerEntryKind,
+    ExecutionMode,
     ExportRecord,
     ProviderRun,
     ProviderRunStatus,
@@ -121,6 +122,22 @@ class BillingService:
         month_provider_run_count = sum(
             1 for entry in period_entries if entry.kind == CreditLedgerEntryKind.provider_run
         )
+        month_execution_mode_summary = {
+            mode.value: {"provider_run_count": 0, "amount_cents": 0, "credits_used": 0}
+            for mode in ExecutionMode
+        }
+        for entry in period_entries:
+            if entry.kind != CreditLedgerEntryKind.provider_run:
+                continue
+            execution_mode = str((entry.metadata_payload or {}).get("execution_mode") or ExecutionMode.hosted.value)
+            mode_summary = month_execution_mode_summary.setdefault(
+                execution_mode,
+                {"provider_run_count": 0, "amount_cents": 0, "credits_used": 0},
+            )
+            mode_summary["provider_run_count"] += 1
+            mode_summary["amount_cents"] += entry.amount_cents
+            if entry.credits_delta < 0:
+                mode_summary["credits_used"] += -entry.credits_delta
         return {
             "workspace_id": workspace.id,
             "plan_name": workspace.plan_name,
@@ -133,6 +150,7 @@ class BillingService:
             "month_credits_used": month_credits_used,
             "month_export_count": month_export_count,
             "month_provider_run_count": month_provider_run_count,
+            "month_execution_mode_summary": month_execution_mode_summary,
             "recent_entries": [self.ledger_entry_to_dict(entry) for entry in recent_entries],
         }
 
@@ -250,27 +268,45 @@ class BillingService:
     def _estimate_provider_usage(self, provider_run: ProviderRun) -> ProviderUsageEstimate:
         request_payload = dict(provider_run.request_payload or {})
         operation = provider_run.operation
+        execution_mode = provider_run.execution_mode or ExecutionMode.hosted
         if operation == "idea_generation":
-            return ProviderUsageEstimate("planning_idea_job", 1, -1, 15)
-        if operation == "script_generation":
-            return ProviderUsageEstimate("planning_script_job", 1, -2, 25)
-        if operation == "scene_plan_generation":
-            return ProviderUsageEstimate("scene_plan_job", 1, -2, 30)
-        if operation == "prompt_pair_generation":
+            estimate = ProviderUsageEstimate("planning_idea_job", 1, -1, 15)
+        elif operation == "script_generation":
+            estimate = ProviderUsageEstimate("planning_script_job", 1, -2, 25)
+        elif operation == "scene_plan_generation":
+            estimate = ProviderUsageEstimate("scene_plan_job", 1, -2, 30)
+        elif operation == "prompt_pair_generation":
             quantity = len((((request_payload.get("scene_plan") or {}) if isinstance(request_payload.get("scene_plan"), dict) else {}).get("segments") or []))
             quantity = max(1, quantity)
-            return ProviderUsageEstimate("prompt_pair_scene", quantity, -quantity, quantity * 4)
-        if operation == "frame_pair_generation":
+            estimate = ProviderUsageEstimate("prompt_pair_scene", quantity, -quantity, quantity * 4)
+        elif operation == "frame_pair_generation":
             quantity = 2
             continuity_mode = "reference_chain" if request_payload.get("previous_end_asset_id") else "seed_frame"
-            return ProviderUsageEstimate("frame_pair_image", quantity, -(quantity), quantity * 6, continuity_mode=continuity_mode)
-        if operation == "video_generation":
-            return ProviderUsageEstimate("video_scene", 1, -5, 60)
-        if operation == "narration_generation":
-            return ProviderUsageEstimate("narration_scene", 1, -1, 5)
-        if operation == "music_preparation":
-            return ProviderUsageEstimate("music_track", 1, -2, 8)
-        return ProviderUsageEstimate(operation or "provider_run", 1, 0, 0)
+            estimate = ProviderUsageEstimate(
+                "frame_pair_image",
+                quantity,
+                -(quantity),
+                quantity * 6,
+                continuity_mode=continuity_mode,
+            )
+        elif operation == "video_generation":
+            estimate = ProviderUsageEstimate("video_scene", 1, -5, 60)
+        elif operation == "narration_generation":
+            estimate = ProviderUsageEstimate("narration_scene", 1, -1, 5)
+        elif operation == "music_preparation":
+            estimate = ProviderUsageEstimate("music_track", 1, -2, 8)
+        else:
+            estimate = ProviderUsageEstimate(operation or "provider_run", 1, 0, 0)
+        if execution_mode in {ExecutionMode.byo, ExecutionMode.local}:
+            return ProviderUsageEstimate(
+                estimate.billable_unit,
+                estimate.quantity,
+                0,
+                0,
+                estimate.currency,
+                continuity_mode=estimate.continuity_mode,
+            )
+        return estimate
 
     def capture_provider_run_usage(self, provider_run: ProviderRun) -> CreditLedgerEntry | None:
         if provider_run.status != ProviderRunStatus.completed:
@@ -322,6 +358,7 @@ class BillingService:
                 "provider_model": provider_run.provider_model,
                 "operation": provider_run.operation,
                 "continuity_mode": estimate.continuity_mode,
+                "execution_mode": (provider_run.execution_mode or ExecutionMode.hosted).value,
             },
         )
         self.db.add(entry)
