@@ -26,6 +26,7 @@ from app.integrations.media import (
     VeoVideoProvider,
     VideoProvider,
 )
+from app.integrations.third_party import ElevenLabsSpeechProvider, RunwayVideoProvider, StabilityImageProvider
 from app.models.entities import ExecutionMode, LocalWorker, LocalWorkerStatus, WorkspaceProviderCredential
 from app.services.execution_policy_service import DEFAULT_POLICY, ExecutionPolicyService
 from app.services.provider_credential_service import ProviderCredentialService
@@ -300,6 +301,20 @@ class RoutingService:
                 decision,
             )
         if decision.execution_mode == ExecutionMode.byo:
+            if decision.provider_key == "stability_image":
+                return (
+                    StabilityImageProvider(
+                        self.settings,
+                        api_key=str(decision.secret_config.get("api_key") or ""),
+                        model=str(
+                            decision.public_config.get("model_name")
+                            or decision.public_config.get("model")
+                            or decision.provider_model
+                        ),
+                        endpoint=str(decision.public_config.get("endpoint") or "https://api.stability.ai"),
+                    ),
+                    decision,
+                )
             return (
                 AzureOpenAIImageProvider(
                     self.settings,
@@ -342,6 +357,20 @@ class RoutingService:
                 ),
                 decision,
             )
+        if decision.execution_mode == ExecutionMode.byo and decision.provider_key == "runway_video":
+            return (
+                RunwayVideoProvider(
+                    self.settings,
+                    api_key=str(decision.secret_config.get("api_key") or ""),
+                    model=str(
+                        decision.public_config.get("model_name")
+                        or decision.public_config.get("model")
+                        or decision.provider_model
+                    ),
+                    endpoint=str(decision.public_config.get("endpoint") or "https://api.dev.runwayml.com"),
+                ),
+                decision,
+            )
         return VeoVideoProvider(self.settings), decision
 
     def build_speech_provider_for_workspace(
@@ -357,6 +386,21 @@ class RoutingService:
                 decision,
             )
         if decision.execution_mode == ExecutionMode.byo:
+            if decision.provider_key == "elevenlabs_speech":
+                return (
+                    ElevenLabsSpeechProvider(
+                        self.settings,
+                        api_key=str(decision.secret_config.get("api_key") or ""),
+                        model=str(
+                            decision.public_config.get("model_name")
+                            or decision.public_config.get("model")
+                            or decision.provider_model
+                        ),
+                        voice=str(decision.public_config.get("voice") or ""),
+                        endpoint=str(decision.public_config.get("endpoint") or "https://api.elevenlabs.io"),
+                    ),
+                    decision,
+                )
             return (
                 AzureOpenAISpeechProvider(
                     self.settings,

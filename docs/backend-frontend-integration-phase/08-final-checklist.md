@@ -59,4 +59,4 @@
 - The frontend can operate in live mode through the real backend for the target creator workflow and current settings/collaboration screens.
 - Static dev login is preserved as a simple seeded backend login flow.
 - Platform-managed provider credentials are implemented as the backend-owned source of runtime secrets.
-- The remaining work is now narrow and explicit: admin alignment, further mock-wrapper cleanup, broader provider runtime support, and fuller automated verification.
+- The remaining work is now narrow and explicit: admin alignment, further mock-wrapper cleanup, Kling or other future provider adapters, and fuller automated verification.

@@ -11,9 +11,9 @@ HOSTED_DEFAULT_PROVIDER_KEYS_BY_MODALITY: dict[str, str] = {
 BYO_RUNTIME_PROVIDER_KEYS_BY_MODALITY: dict[str, set[str]] = {
     "text": {"azure_openai_text"},
     "moderation": {"azure_content_safety"},
-    "image": {"azure_openai_image"},
-    "video": set(),
-    "speech": {"azure_openai_speech"},
+    "image": {"azure_openai_image", "stability_image"},
+    "video": {"runway_video"},
+    "speech": {"azure_openai_speech", "elevenlabs_speech"},
 }
 
 

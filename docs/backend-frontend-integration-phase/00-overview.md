@@ -58,7 +58,7 @@
 - The live path is not yet fully isolated from `mock-service.ts`, which makes future maintenance noisier than it needs to be.
 - Provider credential validation is implemented with persisted status metadata, including remote Azure validation for supported runtime providers and explicit unsupported/unreachable states for the rest.
 - Admin/workspace screens still do not align 1:1 with backend admin contracts.
-- Not all stored provider options are routable at runtime yet; some are storage-only until provider adapters are added.
+- Some provider options remain storage-only, but Stability image, ElevenLabs speech, and Runway video are now routable alongside the Azure-backed paths.
 
 ## Phase Execution Order
 1. `01-current-state-analysis.md`
@@ -75,5 +75,5 @@
 2. Isolate remaining live-path dependencies away from `mock-service.ts`
 3. Expand provider validation coverage and keep surfaced validation status aligned with backend support
 4. Align or trim admin/workspace screens to current backend capabilities
-5. Expand backend/provider runtime adapters beyond the currently supported BYO paths
+5. Expand backend/provider runtime adapters beyond the currently supported BYO paths, with Kling and other future video providers still pending adapters
 6. Run fuller backend/frontend test coverage and Docker smoke verification

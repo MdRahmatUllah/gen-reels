@@ -14,7 +14,7 @@
 | Auth session shape | Frontend expected a narrower `AuthSession` | Live auth/session mapping is implemented | Continue cleanup of any legacy assumptions |
 | Generation flow | Frontend expected sync payloads | Accepted-job and refetch flow is wired for core workflow pages | Add more formal smoke coverage |
 | Render listing | Project render list endpoint missing | Implemented through backend render layer | Verify Docker smoke coverage |
-| Provider settings | Generic provider-key CRUD did not match backend model | Provider credential plus execution policy flow is implemented, including persisted validation metadata and remote Azure validation probes | Expand runtime adapters for storage-only providers as needed |
+| Provider settings | Generic provider-key CRUD did not match backend model | Provider credential plus execution policy flow is implemented, including persisted validation metadata, remote Azure validation probes, and routable Stability image, ElevenLabs speech, plus Runway video paths | Expand runtime adapters for the remaining storage-only providers as needed |
 | Brand kits | Mock-only settings integration | Live-backed through frontend adapters | Add tests |
 | Scene comments | Mock-only and invalid collaboration target | Live-backed; `scene_segment` target implemented | Add tests |
 | Template cloning | Mock-only | Live-backed through backend template project creation | Add tests |
@@ -33,7 +33,7 @@
 - `LocalWorker`: adapted from backend worker capability metadata into the current settings page shape.
 
 ## Remaining Backend Additions
-- Provider credential validation route exists and persists status metadata; remaining work is limited to expanding remote validation/runtime support for storage-only providers.
+- Provider credential validation route exists and persists status metadata; remaining work is limited to the remaining storage-only providers, primarily Kling video.
 - Add backend tests for CORS, provider credential update and revoke rules, render list behavior, and comment target coverage.
 - Add either an admin workspace summary endpoint or reduce the frontend admin scope to match existing backend views.
 

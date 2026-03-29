@@ -49,11 +49,14 @@
 - `azure_openai_text` uses a low-cost live chat-completions probe.
 - `azure_openai_image` and `azure_openai_speech` use deployment endpoint probes that validate endpoint, API version, deployment path, and API key without activating those routes from the browser.
 - `azure_content_safety` performs a live moderation probe against the configured endpoint.
+- `stability_image` validates against the Stability account endpoint and is routable for image generation.
+- `elevenlabs_speech` validates against the ElevenLabs models endpoint and is routable for narration generation.
+- `runway_video` validates against the Runway task API and is routable for image-to-video generation with backend task polling.
 - Providers that are currently storage-only in the UI return an explicit `unsupported` validation status rather than a misleading success state.
 - Network or provider outages return an explicit `unreachable` validation status so users can distinguish connectivity issues from bad credentials.
 
 ## Remaining Gaps
-- Expand runtime provider adapters for providers that are currently stored in the UI but not yet fully routable.
+- Expand runtime provider adapters for providers that are currently stored in the UI but not yet fully routable, primarily Kling and any future video providers beyond Runway.
 
 ## Development Architecture Rules
 - Env provider variables may remain as bootstrap or fallback during transition.

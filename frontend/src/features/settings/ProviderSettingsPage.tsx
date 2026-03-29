@@ -203,7 +203,7 @@ export function ProviderSettingsPage() {
           </SectionCard>
           <SectionCard title="Runtime Notes">
             <p className="text-sm leading-relaxed text-slate-300">
-              Azure OpenAI is the routable recommendation for text in this build. Providers marked as storage only can be saved with their model metadata now, but they cannot be activated for runtime routing yet.
+              Azure OpenAI remains the recommended text route in this build. Stability AI image, ElevenLabs audio, and Runway video can now be activated from this screen, while Kling remains storage-only until its adapter is added.
             </p>
           </SectionCard>
         </div>

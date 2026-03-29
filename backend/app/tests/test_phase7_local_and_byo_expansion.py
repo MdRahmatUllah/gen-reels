@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.db.session import get_session_factory
+from app.integrations.third_party import ElevenLabsSpeechProvider, RunwayVideoProvider, StabilityImageProvider
 from app.models.entities import LocalWorker, ProviderRun
 from app.tests.test_phase3_render_mvp import _prepare_approved_scene_plan
 
@@ -237,3 +238,122 @@ def test_phase7_local_worker_render_resume_flow(authenticated_client, seeded_aut
     usage = authenticated_client.get("/api/v1/usage")
     assert usage.status_code == 200
     assert usage.json()["month_execution_mode_summary"]["local"]["provider_run_count"] >= 1
+
+
+def test_phase7_byo_routing_supports_stability_and_elevenlabs(authenticated_client, seeded_auth):
+    workspace_id = seeded_auth["workspace_id"]
+
+    stability_credential = authenticated_client.post(
+        "/api/v1/workspace/provider-credentials",
+        json={
+            "name": "Stability Image",
+            "modality": "image",
+            "provider_key": "stability_image",
+            "public_config": {"model_name": "stable-image-core"},
+            "secret_config": {"api_key": "stability-secret"},
+        },
+    )
+    assert stability_credential.status_code == 200
+
+    elevenlabs_credential = authenticated_client.post(
+        "/api/v1/workspace/provider-credentials",
+        json={
+            "name": "ElevenLabs Narration",
+            "modality": "speech",
+            "provider_key": "elevenlabs_speech",
+            "public_config": {
+                "model_name": "eleven_multilingual_v2",
+                "voice": "voice_123",
+            },
+            "secret_config": {"api_key": "elevenlabs-secret"},
+        },
+    )
+    assert elevenlabs_credential.status_code == 200
+
+    policy_response = authenticated_client.put(
+        "/api/v1/workspace/execution-policy",
+        json={
+            "image": {
+                "mode": "byo",
+                "provider_key": "stability_image",
+                "credential_id": stability_credential.json()["id"],
+            },
+            "speech": {
+                "mode": "byo",
+                "provider_key": "elevenlabs_speech",
+                "credential_id": elevenlabs_credential.json()["id"],
+            },
+        },
+    )
+    assert policy_response.status_code == 200
+
+    settings = get_settings()
+    original_environment = settings.environment
+    original_stub_setting = settings.use_stub_providers
+    settings.environment = "development"
+    settings.use_stub_providers = False
+
+    from app.services.routing_service import RoutingService
+
+    session = get_session_factory(settings.database_url)()
+    try:
+        routing = RoutingService(session, settings)
+        image_provider, image_decision = routing.build_image_provider_for_workspace(workspace_id)
+        speech_provider, speech_decision = routing.build_speech_provider_for_workspace(workspace_id)
+
+        assert isinstance(image_provider, StabilityImageProvider)
+        assert image_decision.provider_key == "stability_image"
+        assert isinstance(speech_provider, ElevenLabsSpeechProvider)
+        assert speech_decision.provider_key == "elevenlabs_speech"
+    finally:
+        settings.environment = original_environment
+        settings.use_stub_providers = original_stub_setting
+        session.close()
+
+
+def test_phase7_byo_routing_supports_runway_video(authenticated_client, seeded_auth):
+    workspace_id = seeded_auth["workspace_id"]
+
+    runway_credential = authenticated_client.post(
+        "/api/v1/workspace/provider-credentials",
+        json={
+            "name": "Runway Video",
+            "modality": "video",
+            "provider_key": "runway_video",
+            "public_config": {"model_name": "gen4_turbo"},
+            "secret_config": {"api_key": "runway-secret"},
+        },
+    )
+    assert runway_credential.status_code == 200
+
+    policy_response = authenticated_client.put(
+        "/api/v1/workspace/execution-policy",
+        json={
+            "video": {
+                "mode": "byo",
+                "provider_key": "runway_video",
+                "credential_id": runway_credential.json()["id"],
+            },
+        },
+    )
+    assert policy_response.status_code == 200
+
+    settings = get_settings()
+    original_environment = settings.environment
+    original_stub_setting = settings.use_stub_providers
+    settings.environment = "development"
+    settings.use_stub_providers = False
+
+    from app.services.routing_service import RoutingService
+
+    session = get_session_factory(settings.database_url)()
+    try:
+        routing = RoutingService(session, settings)
+        video_provider, video_decision = routing.build_video_provider_for_workspace(workspace_id)
+
+        assert isinstance(video_provider, RunwayVideoProvider)
+        assert video_decision.provider_key == "runway_video"
+    finally:
+        settings.environment = original_environment
+        settings.use_stub_providers = original_stub_setting
+        session.close()
