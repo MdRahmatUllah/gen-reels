@@ -2239,8 +2239,8 @@ class RenderService(GenerationService):
         render_job: RenderJob,
         project: Project,
         segment: SceneSegment,
-        video_provider: VideoProvider | None,
-        moderation_provider: ModerationProvider,
+        video_provider: VideoProvider | None = None,
+        moderation_provider: ModerationProvider | None = None,
     ) -> Asset | None:
         step = self._get_or_create_step(
             render_job,
@@ -2257,26 +2257,7 @@ class RenderService(GenerationService):
             )
             if existing_asset:
                 return existing_asset
-        if step.status == JobStatus.blocked:
-            render_job.status = JobStatus.blocked
-            render_job.error_code = step.error_code
-            render_job.error_message = step.error_message
-            self.db.commit()
-            return None
-        pending_local = self._latest_provider_run_for_step(step.id, execution_mode=ExecutionMode.local)
-        if step.status == JobStatus.running and pending_local and pending_local.status in {
-            ProviderRunStatus.queued,
-            ProviderRunStatus.running,
-        }:
-            render_job.status = JobStatus.running
-            self.db.commit()
-            return None
 
-        self._set_step_running(step)
-        resolved_video_provider, routing_decision = self._video_provider_and_decision(
-            step,
-            render_job.workspace_id,
-        )
         start_asset = self.db.get(Asset, segment.start_image_asset_id) if segment.start_image_asset_id else None
         end_asset = self.db.get(Asset, segment.end_image_asset_id) if segment.end_image_asset_id else None
         if not start_asset or not end_asset:
@@ -2287,181 +2268,60 @@ class RenderService(GenerationService):
             )
             self._fail_step(step, error)
             raise error
-        provider_request = {
-            "scene_index": segment.scene_index,
-            "visual_prompt": segment.visual_prompt,
-            "start_image_asset_id": str(segment.start_image_asset_id),
-            "end_image_asset_id": str(segment.end_image_asset_id),
-            "duration_seconds": segment.target_duration_seconds,
-            "request_silent_output": True,
-            "continuity_mode": "first_last_frame",
-            "routing": routing_decision.to_payload(),
-        }
-        if routing_decision.execution_mode == ExecutionMode.local:
-            raw_object_name = f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/raw.mp4"
-            local_payload = {
-                "step_kind": StepKind.video_generation.value,
-                "modality": "video",
-                "scene_index": segment.scene_index,
-                "prompt": segment.visual_prompt,
-                "duration_seconds": segment.target_duration_seconds,
-                "start_frame_url": self._asset_download_url(start_asset),
-                "end_frame_url": self._asset_download_url(end_asset),
-                "outputs": [
-                    self._output_spec(
-                        role="video_clip",
-                        bucket_name=self.settings.minio_bucket_assets,
-                        object_name=raw_object_name,
-                        upload_url=self.storage.presigned_put_url(
-                            self.settings.minio_bucket_assets,
-                            raw_object_name,
-                        ),
-                        content_type="video/mp4",
-                        file_name=f"scene-{segment.scene_index:02d}-raw.mp4",
-                    )
-                ],
-                "provider_metadata": {
-                    "start_image_asset_id": str(segment.start_image_asset_id)
-                    if segment.start_image_asset_id
-                    else None,
-                    "end_image_asset_id": str(segment.end_image_asset_id)
-                    if segment.end_image_asset_id
-                    else None,
-                },
-            }
-            self._dispatch_local_provider_run(
-                render_job=render_job,
-                render_step=step,
-                routing_decision=routing_decision,
-                operation="video_generation",
-                request_payload=local_payload,
-            )
-            render_job.status = JobStatus.running
-            render_job.error_code = None
-            render_job.error_message = None
-            self.db.commit()
-            return None
-        provider_run = self._create_provider_run(
-            render_job=render_job,
-            render_step=step,
-            operation="video_generation",
-            request_payload=provider_request,
-            provider_name=routing_decision.provider_name,
-            provider_model=routing_decision.provider_model,
-            execution_mode=routing_decision.execution_mode,
-            worker_id=routing_decision.worker_id,
-            provider_credential_id=routing_decision.provider_credential_id,
-            routing_decision_payload=routing_decision.to_payload(),
-        )
-        started = time.perf_counter()
-        try:
-            assert resolved_video_provider is not None
-            generated = resolved_video_provider.generate_clip(
-                prompt=segment.visual_prompt,
-                scene_index=segment.scene_index,
-                duration_seconds=segment.target_duration_seconds,
-                start_frame_bytes=self.storage.read_bytes(start_asset.bucket_name, start_asset.object_name),
-                start_frame_content_type=start_asset.content_type,
-                end_frame_bytes=self.storage.read_bytes(end_asset.bucket_name, end_asset.object_name),
-                end_frame_content_type=end_asset.content_type,
-            )
-            provider_run.continuity_mode = str(
-                generated.metadata.get("continuity_mode") or "first_last_frame"
-            )
-            raw_asset = self._store_generated_asset(
-                render_job=render_job,
-                render_step=step,
-                scene_segment=segment,
-                generated_media=generated,
-                bucket_name=self.settings.minio_bucket_assets,
-                object_name=(
-                    f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/raw."
-                    f"{generated.file_extension}"
-                ),
-                file_name=f"scene-{segment.scene_index:02d}-raw.{generated.file_extension}",
-                asset_type=AssetType.video_clip,
-                asset_role=AssetRole.raw_video_clip,
-                parent_asset_id=segment.end_image_asset_id,
-                provider_run_id=provider_run.id,
-                has_audio_stream=bool(generated.metadata.get("has_audio_stream", False)),
-                source_audio_policy="request_silent",
-            )
-        except AdapterError as error:
-            self._finish_provider_run(provider_run, started_at=started, error=error)
-            self._fail_step(step, error)
-            raise
 
-        self._finish_provider_run(
-            provider_run,
-            started_at=started,
-            response_payload={"asset_id": str(raw_asset.id)},
+        self._set_step_running(step)
+        target_duration_ms = int(
+            (segment.actual_voice_duration_seconds or segment.target_duration_seconds) * 1000
         )
-        self._record_prompt_history(
-            render_job=render_job,
-            render_step=step,
-            scene_segment=segment,
-            provider_run=provider_run,
-            asset=raw_asset,
-            prompt_role="scene_video",
-            prompt_text=segment.visual_prompt,
-            source_asset_id=segment.end_image_asset_id,
-            metadata_payload={
-                "scene_index": segment.scene_index,
-                "start_image_asset_id": str(segment.start_image_asset_id) if segment.start_image_asset_id else None,
-                "end_image_asset_id": str(segment.end_image_asset_id) if segment.end_image_asset_id else None,
+
+        from app.integrations.media_ops import build_slideshow_clip
+        start_ext = Path(start_asset.file_name).suffix or ".jpg"
+        end_ext = Path(end_asset.file_name).suffix or ".jpg"
+        clip_bytes, clip_metadata = build_slideshow_clip(
+            self.settings,
+            start_image_bytes=self.storage.read_bytes(start_asset.bucket_name, start_asset.object_name),
+            start_image_ext=start_ext,
+            end_image_bytes=self.storage.read_bytes(end_asset.bucket_name, end_asset.object_name),
+            end_image_ext=end_ext,
+            duration_ms=target_duration_ms,
+            scene_index=segment.scene_index,
+        )
+
+        generated = GeneratedMedia(
+            provider_name="internal_slideshow_builder",
+            provider_model="ffmpeg-slideshow-v1",
+            content_type="video/mp4",
+            file_extension="mp4",
+            bytes_payload=clip_bytes,
+            metadata={
+                **clip_metadata,
+                "start_image_asset_id": str(start_asset.id),
+                "end_image_asset_id": str(end_asset.id),
+                "continuity_mode": "first_last_frame",
             },
         )
-        if self._moderate_generated_asset(
-            moderation_provider=moderation_provider,
-            project=project,
+        raw_asset = self._store_generated_asset(
+            render_job=render_job,
+            render_step=step,
             scene_segment=segment,
-            target_type="generated_video_output_proxy",
-            asset=raw_asset,
-            input_text=segment.visual_prompt,
-        ):
-            self._set_render_blocked(
-                render_job,
-                step,
-                error_code="moderation_review_required",
-                error_message="Generated video output requires operator moderation review.",
-                checkpoint_payload={"asset_id": str(raw_asset.id)},
-            )
-            record_audit_event(
-                self.db,
-                workspace_id=render_job.workspace_id,
-                user_id=render_job.created_by_user_id,
-                event_type="render.video_quarantined",
-                target_type="render_step",
-                target_id=str(step.id),
-                payload={"render_job_id": str(render_job.id), "scene_index": segment.scene_index},
-            )
-            self._append_render_event(
-                render_job=render_job,
-                event_type="render.video_quarantined",
-                target_type="render_step",
-                target_id=str(step.id),
-                render_step_id=step.id,
-                payload={"scene_index": segment.scene_index},
-            )
-            self.db.commit()
-            return None
-        self._complete_step(step, output_payload={"asset_id": str(raw_asset.id)})
-        record_audit_event(
-            self.db,
-            workspace_id=render_job.workspace_id,
-            user_id=render_job.created_by_user_id,
-            event_type="render.scene_video_completed",
-            target_type="render_step",
-            target_id=str(step.id),
-            payload={"render_job_id": str(render_job.id), "scene_index": segment.scene_index},
+            generated_media=generated,
+            bucket_name=self.settings.minio_bucket_assets,
+            object_name=f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/raw.mp4",
+            file_name=f"scene-{segment.scene_index:02d}-raw.mp4",
+            asset_type=AssetType.video_clip,
+            asset_role=AssetRole.raw_video_clip,
+            parent_asset_id=segment.end_image_asset_id,
+            has_audio_stream=False,
+            source_audio_policy="request_silent",
         )
+        self._complete_step(step, output_payload={"asset_id": str(raw_asset.id)})
         self._append_render_event(
             render_job=render_job,
             event_type="render.scene_video_completed",
             target_type="render_step",
             target_id=str(step.id),
             render_step_id=step.id,
-            payload={"scene_index": segment.scene_index},
+            payload={"scene_index": segment.scene_index, "method": "slideshow"},
         )
         return raw_asset
 
@@ -3186,8 +3046,6 @@ class RenderService(GenerationService):
                 render_job=render_job,
                 project=project,
                 segment=segment,
-                video_provider=video_provider,
-                moderation_provider=resolved_moderation_provider,
             )
             if raw_asset is None:
                 return

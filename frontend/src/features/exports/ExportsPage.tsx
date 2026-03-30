@@ -22,18 +22,35 @@ function formatDuration(sec: number) {
 function ExportCard({ artifact }: { artifact: ExportArtifact }) {
   return (
     <div className="artifact-card">
-      <MediaFrame
-        label={artifact.name}
-        meta={`${artifact.ratio} · ${artifact.format}`}
-        gradient={artifact.gradient}
-      />
+      {artifact.downloadUrl ? (
+        <video
+          src={artifact.downloadUrl}
+          controls
+          playsInline
+          style={{ width: "100%", borderRadius: "8px", background: "#000", maxHeight: "320px" }}
+        />
+      ) : (
+        <MediaFrame
+          label={artifact.name}
+          meta={`${artifact.ratio} · ${artifact.format}`}
+          gradient={artifact.gradient}
+        />
+      )}
       <div className="artifact-card__meta">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={artifact.status} />
           <span>{formatDuration(artifact.durationSec)}</span>
-          <span>{artifact.sizeMb} MB</span>
+          {artifact.sizeMb > 0 && <span>{artifact.sizeMb} MB</span>}
         </div>
-        <strong>{artifact.destination}</strong>
+        {artifact.downloadUrl && (
+          <a
+            href={artifact.downloadUrl}
+            download={artifact.name}
+            className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+          >
+            Download MP4
+          </a>
+        )}
         <p>
           {artifact.subtitles ? "Subtitles on" : "Subtitles off"} ·{" "}
           {artifact.musicBed ? "Music bed on" : "Music bed off"}
@@ -123,17 +140,39 @@ export function ExportsPage() {
         <>
           <SectionCard className="surface-card--hero" title={latestExport.name} subtitle="Latest master output">
             <div className="hero-grid">
-              <MediaFrame
-                label={latestExport.name}
-                meta={`${latestExport.ratio} · ${latestExport.format}`}
-                gradient={latestExport.gradient}
-                aspect="wide"
-              />
+              {latestExport.downloadUrl ? (
+                <div style={{ position: "relative" }}>
+                  <video
+                    src={latestExport.downloadUrl}
+                    controls
+                    playsInline
+                    style={{ width: "100%", borderRadius: "10px", background: "#000", maxHeight: "480px", display: "block" }}
+                  />
+                </div>
+              ) : (
+                <MediaFrame
+                  label={latestExport.name}
+                  meta={`${latestExport.ratio} · ${latestExport.format}`}
+                  gradient={latestExport.gradient}
+                  aspect="wide"
+                />
+              )}
               <div className="metric-column">
                 <MetricCard label="Duration" value={formatDuration(latestExport.durationSec)} detail="Final export length" tone="primary" />
-                <MetricCard label="File size" value={`${latestExport.sizeMb} MB`} detail="Fast-start optimized" tone="neutral" />
+                {latestExport.sizeMb > 0 && (
+                  <MetricCard label="File size" value={`${latestExport.sizeMb} MB`} detail="Fast-start optimized" tone="neutral" />
+                )}
                 {latestExport.createdAt && (
                   <MetricCard label="Created" value={latestExport.createdAt} detail="Latest delivered artifact" tone="success" />
+                )}
+                {latestExport.downloadUrl && (
+                  <a
+                    href={latestExport.downloadUrl}
+                    download={latestExport.name}
+                    className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+                  >
+                    Download final video
+                  </a>
                 )}
               </div>
             </div>

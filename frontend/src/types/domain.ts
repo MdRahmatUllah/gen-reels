@@ -344,6 +344,7 @@ export interface ExportArtifact {
   status: "ready" | "processing";
   format: string;
   destination: string;
+  downloadUrl: string | null;
   durationSec: number;
   sizeMb: number;
   integratedLufs: number;
