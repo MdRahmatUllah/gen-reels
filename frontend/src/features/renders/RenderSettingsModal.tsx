@@ -26,9 +26,10 @@ export function RenderSettingsModal({
     <div className="modal-backdrop">
       <div className="w-full max-w-md rounded-2xl border border-border-card bg-surface p-6 shadow-lg">
         <div>
-          <h2 className="font-heading text-lg font-bold text-primary">Mix Settings</h2>
+          <h2 className="font-heading text-lg font-bold text-primary">Generate Video</h2>
           <p className="mt-1 text-sm text-secondary">
-            Configure subtitles and audio before initiating the render pipeline.
+            Animates your scene keyframes with Ken Burns motion, adds voiceover and captions,
+            then exports the final MP4.
           </p>
         </div>
 
