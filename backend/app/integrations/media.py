@@ -706,6 +706,14 @@ class StubSpeechProvider(SpeechProvider):
 
 
 class AzureOpenAISpeechProvider(SpeechProvider):
+    """Azure OpenAI speech via chat completions with audio modality.
+
+    Uses ``/chat/completions`` with ``modalities: ["text", "audio"]`` which is
+    supported by ``gpt-audio-*`` deployments.  Falls back to the legacy
+    ``/audio/speech`` TTS endpoint when the chat completions response does not
+    contain audio data (e.g. classic TTS-only deployments).
+    """
+
     def __init__(
         self,
         settings: Settings,
@@ -743,6 +751,79 @@ class AzureOpenAISpeechProvider(SpeechProvider):
             return generated
 
         voice = str((voice_preset or {}).get("provider_voice") or self.default_voice)
+
+        result = self._try_chat_completions_audio(text, voice)
+        if result is None:
+            result = self._try_legacy_tts(text, voice)
+
+        return GeneratedMedia(
+            provider_name="azure_openai_speech",
+            provider_model=self.deployment,
+            content_type=result[1],
+            file_extension=result[2],
+            bytes_payload=result[0],
+            metadata={
+                "scene_index": scene_index,
+                "text": text,
+                "voice_preset": voice_preset or {},
+                "language_code": (voice_preset or {}).get("language_code", "en-US"),
+            },
+        )
+
+    def _try_chat_completions_audio(self, text: str, voice: str) -> tuple[bytes, str, str] | None:
+        """Use /chat/completions with modalities=["text","audio"] (gpt-audio-* models)."""
+        url = (
+            f"{self.endpoint.rstrip('/')}/openai/deployments/{self.deployment}/chat/completions"
+            f"?api-version={self.api_version}"
+        )
+        try:
+            response = httpx.post(
+                url,
+                headers={
+                    "api-key": self.api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "messages": [{"role": "user", "content": text}],
+                    "modalities": ["text", "audio"],
+                    "audio": {"voice": voice, "format": "wav"},
+                },
+                timeout=120.0,
+            )
+            if response.status_code >= 500:
+                raise AdapterError(
+                    "transient",
+                    "azure_speech_unavailable",
+                    "Azure speech generation is temporarily unavailable.",
+                )
+            if response.status_code >= 400:
+                logger.warning(
+                    "chat/completions audio returned %s – will try legacy TTS: %s",
+                    response.status_code,
+                    response.text[:300],
+                )
+                return None
+
+            data = response.json()
+            audio_b64 = (
+                data.get("choices", [{}])[0]
+                .get("message", {})
+                .get("audio", {})
+                .get("data")
+            )
+            if not audio_b64:
+                logger.warning("chat/completions response had no audio data – will try legacy TTS")
+                return None
+
+            return base64.b64decode(audio_b64), "audio/wav", "wav"
+
+        except httpx.TimeoutException as exc:
+            raise AdapterError("transient", "azure_speech_timeout", str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise AdapterError("transient", "azure_speech_http_error", str(exc)) from exc
+
+    def _try_legacy_tts(self, text: str, voice: str) -> tuple[bytes, str, str]:
+        """Fallback: classic /audio/speech TTS endpoint."""
         url = (
             f"{self.endpoint.rstrip('/')}/openai/deployments/{self.deployment}/audio/speech"
             f"?api-version={self.api_version}"
@@ -769,19 +850,7 @@ class AzureOpenAISpeechProvider(SpeechProvider):
                 )
             if response.status_code >= 400:
                 raise AdapterError("deterministic_input", "azure_speech_rejected", response.text)
-            return GeneratedMedia(
-                provider_name="azure_openai_speech",
-                provider_model=self.deployment,
-                content_type="audio/mpeg",
-                file_extension="mp3",
-                bytes_payload=response.content,
-                metadata={
-                    "scene_index": scene_index,
-                    "text": text,
-                    "voice_preset": voice_preset or {},
-                    "language_code": (voice_preset or {}).get("language_code", "en-US"),
-                },
-            )
+            return response.content, "audio/mpeg", "mp3"
         except httpx.TimeoutException as exc:
             raise AdapterError("transient", "azure_speech_timeout", str(exc)) from exc
         except httpx.HTTPError as exc:

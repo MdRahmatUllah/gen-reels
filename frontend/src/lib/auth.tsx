@@ -1,9 +1,11 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { AuthSession, LoginCredentials, UserProfile } from "../types/domain";
 import { mockLogin, mockLogout, mockGetSession } from "./mock-service";
-import { isMockMode } from "./config";
+import { isMockMode, config } from "./config";
 import { liveSelectWorkspace } from "./live-api";
+
+const REFRESH_INTERVAL_MS = 12 * 60 * 1000; // 12 minutes – well before the 15-min access token expiry
 
 interface AuthContextValue {
   user: UserProfile | null;
@@ -24,6 +26,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const silentRefresh = useCallback(async () => {
+    if (isMockMode()) return;
+    try {
+      await fetch(`${config.apiBaseUrl}/api/v1/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Network error — the 401 interceptor in api-client will handle it on next request.
+    }
+  }, []);
+
+  const startRefreshTimer = useCallback(() => {
+    if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    refreshTimerRef.current = setInterval(silentRefresh, REFRESH_INTERVAL_MS);
+  }, [silentRefresh]);
+
+  const stopRefreshTimer = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearInterval(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+  }, []);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -32,10 +59,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session) {
           setUser(session.user);
           setWorkspaceId(session.workspaceId);
+          startRefreshTimer();
         }
       })
       .finally(() => setIsLoading(false));
+    return () => stopRefreshTimer();
   }, []);
+
+  // Also refresh when the tab regains visibility (user returns after being away)
+  useEffect(() => {
+    if (isMockMode()) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && user) {
+        silentRefresh();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [user, silentRefresh]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsLoading(true);
@@ -44,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const session: AuthSession = await mockLogin(credentials);
       setUser(session.user);
       setWorkspaceId(session.workspaceId);
+      startRefreshTimer();
       await queryClient.invalidateQueries();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
@@ -52,10 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [startRefreshTimer]);
 
   const logout = useCallback(async () => {
     setIsLoading(true);
+    stopRefreshTimer();
     try {
       await mockLogout();
       setUser(null);
@@ -64,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, stopRefreshTimer]);
 
   const selectWorkspace = useCallback(async (nextWorkspaceId: string) => {
     setError(null);

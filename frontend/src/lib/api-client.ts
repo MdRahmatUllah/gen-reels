@@ -13,10 +13,40 @@ export class ApiError extends Error {
   }
 }
 
+/* ─── Silent token refresh ────────────────────────────────────────────────── */
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function tryRefreshToken(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${config.apiBaseUrl}/api/v1/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
 /* ─── Core fetch wrapper ──────────────────────────────────────────────────── */
 interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
+}
+
+async function rawFetch(
+  method: string,
+  url: string,
+  headers: Record<string, string>,
+  body: string | undefined,
+): Promise<Response> {
+  return fetch(url, { method, headers, credentials: "include", body });
 }
 
 async function request<T>(
@@ -25,8 +55,6 @@ async function request<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   if (isMockMode()) {
-    // In mock mode, the mock service intercepts calls via the hooks layer.
-    // This function should never be called directly in mock mode.
     throw new Error(`api-client.request called in mock mode for ${method} ${path}`);
   }
 
@@ -39,12 +67,17 @@ async function request<T>(
     headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
   }
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    credentials: "include", // HttpOnly cookies for auth
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  const serializedBody = options.body !== undefined ? JSON.stringify(options.body) : undefined;
+
+  let response = await rawFetch(method, url, headers, serializedBody);
+
+  // On 401, silently refresh tokens and retry once (skip for auth endpoints).
+  if (response.status === 401 && !path.startsWith("/auth/")) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      response = await rawFetch(method, url, headers, serializedBody);
+    }
+  }
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));

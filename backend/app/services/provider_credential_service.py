@@ -367,6 +367,62 @@ class ProviderCredentialService:
         error_message = self._validation_probe_error(response)
         return ("invalid", error_message) if error_message else ("valid", None)
 
+    def _validate_azure_openai_speech(
+        self,
+        public_config: dict[str, object],
+        secret_config: dict[str, object],
+    ) -> tuple[str, str | None]:
+        """Validate speech credentials by probing chat/completions with audio modality.
+
+        gpt-audio-* deployments expose speech through the chat completions
+        endpoint with ``modalities: ["text", "audio"]``, not ``/audio/speech``.
+        We send a minimal request and accept both a 200 (full success) and a
+        400-level "content required" error as proof the deployment exists and
+        credentials are valid.
+        """
+        endpoint = self._azure_endpoint(public_config)
+        api_version = self._normalize_api_version(str(public_config.get("api_version") or ""))
+        deployment = str(public_config.get("deployment") or "").strip()
+        api_key = str(secret_config.get("api_key") or "").strip()
+        voice = str(public_config.get("voice") or "alloy").strip()
+
+        url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
+        try:
+            response = httpx.post(
+                url,
+                headers={
+                    "api-key": api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "messages": [{"role": "user", "content": "Say hello."}],
+                    "modalities": ["text", "audio"],
+                    "audio": {"voice": voice, "format": "wav"},
+                    "max_completion_tokens": 200,
+                },
+                timeout=30.0,
+            )
+        except httpx.TimeoutException:
+            return "unreachable", "Azure OpenAI speech timed out before validation completed."
+        except httpx.HTTPError as exc:
+            return "unreachable", f"Azure OpenAI speech could not be reached: {exc}"
+
+        if response.status_code in {408, 429} or response.status_code >= 500:
+            return "unreachable", "Azure OpenAI speech is temporarily unavailable."
+        if response.status_code == 200:
+            return "valid", None
+
+        body = response.text[:500]
+        if "OperationNotSupported" in body or "does not work with the specified model" in body:
+            return (
+                "invalid",
+                "This deployment does not support audio generation via chat completions. "
+                "Use a gpt-audio-* deployment or a classic TTS deployment.",
+            )
+
+        error_message = self._validation_probe_error(response)
+        return ("invalid", error_message) if error_message else ("valid", None)
+
     def _validate_azure_content_safety(
         self,
         public_config: dict[str, object],
@@ -484,11 +540,7 @@ class ProviderCredentialService:
                 path="images/generations",
             )
         if credential.provider_key == "azure_openai_speech":
-            return self._validate_azure_openai_probe(
-                public_config,
-                secret_config,
-                path="audio/speech",
-            )
+            return self._validate_azure_openai_speech(public_config, secret_config)
         if credential.provider_key == "azure_content_safety":
             return self._validate_azure_content_safety(public_config, secret_config)
         if credential.provider_key == "stability_image":
