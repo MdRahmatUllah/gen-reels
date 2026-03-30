@@ -171,12 +171,22 @@ export function RendersPage() {
   });
 
   const activeRender = filteredRenders[0] ?? allRenders[0];
+  const isRunningOrQueued = activeRender?.status === "running" || activeRender?.status === "queued";
+
+  function generateButtonLabel() {
+    if (isStarting) return "Starting...";
+    if (!activeRender) return "Generate Video →";
+    if (isRunningOrQueued) return "Rendering...";
+    if (activeRender.status === "completed") return "Generate Again →";
+    if (activeRender.status === "failed") return "Retry Render →";
+    return "Generate Video →";
+  }
 
   return (
     <PageFrame
       eyebrow="Render monitor"
       title={`${project.title} renders`}
-      description="The monitor surfaces job health, composition gates, SSE state, and per-scene timing so users always know the next available action."
+      description="Build your final video — each scene's keyframes are animated with Ken Burns motion, crossfaded together, and mixed with voiceover and captions."
       actions={
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <div className="flex flex-wrap items-center gap-2">
@@ -191,23 +201,23 @@ export function RendersPage() {
               </button>
             ))}
           </div>
-          {!activeRender && (
-             <button
-               className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
-               onClick={() => setShowSettingsModal(true)}
-               disabled={isStarting}
-             >
-               {isStarting ? "Starting..." : "Begin render generation →"}
-             </button>
+          {isRunningOrQueued && (
+            <button
+              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
+              onClick={() => cancelRender()}
+              type="button"
+            >
+              Cancel
+            </button>
           )}
-          {activeRender && activeRender.status === "running" && (
-             <button
-               className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
-               onClick={() => cancelRender()}
-             >
-               Cancel render
-             </button>
-          )}
+          <button
+            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            onClick={() => setShowSettingsModal(true)}
+            disabled={isStarting || isRunningOrQueued}
+            type="button"
+          >
+            {generateButtonLabel()}
+          </button>
         </div>
       }
       inspector={
