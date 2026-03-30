@@ -32,6 +32,7 @@ from app.integrations.media import (
     build_music_provider,
     build_speech_provider,
     build_video_provider,
+    compose_frame_generation_prompt,
 )
 from app.integrations.storage import StorageClient, build_storage_client
 from app.models.entities import (
@@ -1459,8 +1460,14 @@ class RenderService(GenerationService):
         running_step = self.db.scalar(
             select(RenderStep)
             .where(RenderStep.render_job_id == render_job.id, RenderStep.status == JobStatus.running)
-            .order_by(RenderStep.step_index.desc())
+            .order_by(RenderStep.step_index.asc())
         )
+        if not running_step:
+            running_step = self.db.scalar(
+                select(RenderStep)
+                .where(RenderStep.render_job_id == render_job.id, RenderStep.status == JobStatus.queued)
+                .order_by(RenderStep.step_index.asc())
+            )
         render_job.status = JobStatus.queued
         render_job.retry_count += 1
         render_job.error_code = error.code
@@ -1495,11 +1502,19 @@ class RenderService(GenerationService):
         render_job = self.db.get(RenderJob, UUID(job_id))
         if not render_job:
             return
+        # After rollback the step may have reverted from running → queued (uncommitted status),
+        # so fall back to the first queued step when no running step exists.
         running_step = self.db.scalar(
             select(RenderStep)
             .where(RenderStep.render_job_id == render_job.id, RenderStep.status == JobStatus.running)
-            .order_by(RenderStep.step_index.desc())
+            .order_by(RenderStep.step_index.asc())
         )
+        if not running_step:
+            running_step = self.db.scalar(
+                select(RenderStep)
+                .where(RenderStep.render_job_id == render_job.id, RenderStep.status == JobStatus.queued)
+                .order_by(RenderStep.step_index.asc())
+            )
         render_job.status = JobStatus.failed
         render_job.error_code = error.code
         render_job.error_message = error.message
@@ -1604,6 +1619,8 @@ class RenderService(GenerationService):
         )
         if all_approved:
             render_job.status = JobStatus.queued
+            if project:
+                project.stage = ProjectStage.renders
         self.db.commit()
         if all_approved:
             from app.workers.tasks import execute_render_job_task
@@ -1796,6 +1813,7 @@ class RenderService(GenerationService):
                 return True
 
             self._set_step_running(step)
+            self.db.commit()
             start_source_asset_id = UUID(previous_end_asset_id) if previous_end_asset_id else None
             resolved_image_provider, routing_decision = self._image_provider_and_decision(
                 step,
@@ -1815,10 +1833,36 @@ class RenderService(GenerationService):
                         role="chain_anchor",
                     )
                 )
+            scene_context = {
+                "title": segment.title or "",
+                "beat": segment.beat or "",
+                "narration_text": segment.narration_text or "",
+                "visual_direction": segment.visual_direction or "",
+                "shot_type": segment.shot_type or "",
+                "motion": segment.motion or "",
+            }
+            composed_start = compose_frame_generation_prompt(
+                user_prompt=segment.start_image_prompt,
+                frame_kind="start",
+                scene_index=segment.scene_index,
+                consistency_pack_state=consistency_pack_state,
+                scene_context=scene_context,
+                uses_prior_scene_anchor=bool(previous_asset),
+            )
+            composed_end = compose_frame_generation_prompt(
+                user_prompt=segment.end_image_prompt,
+                frame_kind="end",
+                scene_index=segment.scene_index,
+                consistency_pack_state=consistency_pack_state,
+                scene_context=scene_context,
+                uses_prior_scene_anchor=False,
+            )
             provider_request = {
                 "scene_index": segment.scene_index,
-                "start_prompt": segment.start_image_prompt,
-                "end_prompt": segment.end_image_prompt,
+                "start_prompt": composed_start,
+                "end_prompt": composed_end,
+                "start_prompt_user": segment.start_image_prompt,
+                "end_prompt_user": segment.end_image_prompt,
                 "previous_end_asset_id": previous_end_asset_id,
                 "ordered_reference_asset_ids": [
                     reference.asset_id for reference in ordered_reference_images if reference.asset_id
@@ -1833,8 +1877,8 @@ class RenderService(GenerationService):
                     "step_kind": StepKind.frame_pair_generation.value,
                     "modality": "image",
                     "scene_index": segment.scene_index,
-                    "start_prompt": segment.start_image_prompt,
-                    "end_prompt": segment.end_image_prompt,
+                    "start_prompt": composed_start,
+                    "end_prompt": composed_end,
                     "start_frame_url": self._asset_download_url(previous_asset),
                     "reference_image_urls": (
                         [self._asset_download_url(previous_asset)] if previous_asset else []
@@ -1898,7 +1942,7 @@ class RenderService(GenerationService):
             try:
                 assert resolved_image_provider is not None
                 start_frame = resolved_image_provider.generate_frame(
-                    prompt=segment.start_image_prompt,
+                    prompt=composed_start,
                     scene_index=segment.scene_index,
                     frame_kind="start",
                     reference_images=ordered_reference_images,
@@ -1918,7 +1962,7 @@ class RenderService(GenerationService):
                     provider_run_id=provider_run.id,
                 )
                 end_frame = resolved_image_provider.generate_frame(
-                    prompt=segment.end_image_prompt,
+                    prompt=composed_end,
                     scene_index=segment.scene_index,
                     frame_kind="end",
                     reference_images=[
@@ -1992,7 +2036,7 @@ class RenderService(GenerationService):
                 scene_segment=segment,
                 target_type="generated_frame_output_proxy",
                 asset=start_asset,
-                input_text=segment.start_image_prompt,
+                input_text=composed_start,
             )
             end_blocked = self._moderate_generated_asset(
                 moderation_provider=moderation_provider,
@@ -2000,7 +2044,7 @@ class RenderService(GenerationService):
                 scene_segment=segment,
                 target_type="generated_frame_output_proxy",
                 asset=end_asset,
-                input_text=segment.end_image_prompt,
+                input_text=composed_end,
             )
             self._finish_provider_run(
                 provider_run,
@@ -2063,12 +2107,12 @@ class RenderService(GenerationService):
                 render_step_id=step.id,
                 payload={"scene_index": segment.scene_index},
             )
-
-        if awaiting_review:
             render_job.status = JobStatus.review
             render_job.error_code = None
             render_job.error_message = None
             self.db.commit()
+
+        if awaiting_review:
             return True
         return False
 

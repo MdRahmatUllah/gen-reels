@@ -619,7 +619,9 @@ class ProviderCredentialService:
         if payload.provider_key is not None:
             credential.provider_key = payload.provider_key
         if payload.public_config is not None:
-            credential.public_config = payload.public_config
+            merged = dict(credential.public_config or {})
+            merged.update(payload.public_config)
+            credential.public_config = merged
         if payload.secret_config is not None:
             if not payload.secret_config:
                 raise ApiError(400, "provider_secret_required", "A provider secret payload is required.")

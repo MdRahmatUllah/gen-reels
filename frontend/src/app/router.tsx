@@ -5,6 +5,7 @@ import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LoginPage } from "../routes/login-page";
 import { IdeasPage } from "../features/ideas/IdeasPage";
 import { ScenesPage } from "../features/scenes/ScenesPage";
+import { FramesPage } from "../features/frames/FramesPage";
 import { RendersPage } from "../features/renders/RendersPage";
 import { ExportsPage } from "../features/exports/ExportsPage";
 import { BillingPage } from "../features/billing/BillingPage";
@@ -74,6 +75,10 @@ export const router = createBrowserRouter([
       {
         path: "projects/:projectId/scenes",
         element: <ScenesPage />,
+      },
+      {
+        path: "projects/:projectId/frames",
+        element: <FramesPage />,
       },
       {
         path: "projects/:projectId/renders",

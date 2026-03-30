@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ScenePlan } from "../types/domain";
+import { useQuickCreateStatus } from "./use-projects";
 import {
   mockGetScenePlan,
   mockGenerateScenePlan,
@@ -19,11 +20,25 @@ import {
 import { isMockMode } from "../lib/config";
 
 export function useScenePlan(projectId: string) {
+  const { data: quickCreate } = useQuickCreateStatus(projectId);
+
   return useQuery({
     queryKey: ["scenePlan", projectId],
     queryFn: () => (isMockMode() ? mockGetScenePlan(projectId) : liveGetScenePlan(projectId)),
     enabled: !!projectId,
-    refetchInterval: isMockMode() ? false : 2000,
+    refetchInterval: (query) => {
+      if (isMockMode()) {
+        return false;
+      }
+      const plan = query.state.data;
+      if (plan?.status === "running" || plan?.status === "queued") {
+        return 2500;
+      }
+      if (quickCreate?.isActive) {
+        return 4000;
+      }
+      return false;
+    },
   });
 }
 

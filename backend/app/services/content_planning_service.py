@@ -674,7 +674,7 @@ class ContentPlanningService(GenerationService):
         scene_plan.approved_by_user_id = UUID(auth.user_id)
         scene_plan.version += 1
         project.active_scene_plan_id = scene_plan.id
-        project.stage = ProjectStage.scenes
+        project.stage = ProjectStage.frames
         record_audit_event(
             self.db,
             workspace_id=project.workspace_id,

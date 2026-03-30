@@ -324,6 +324,7 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
                     { to: `/app/projects/${currentProject.id}/ideas`, label: "Ideas" },
                     { to: `/app/projects/${currentProject.id}/script`, label: "Script" },
                     { to: `/app/projects/${currentProject.id}/scenes`, label: "Scenes" },
+                    { to: `/app/projects/${currentProject.id}/frames`, label: "Frames" },
                     { to: `/app/projects/${currentProject.id}/renders`, label: "Renders" },
                     { to: `/app/projects/${currentProject.id}/exports`, label: "Exports" },
                   ]}

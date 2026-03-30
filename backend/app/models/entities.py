@@ -27,6 +27,7 @@ class ProjectStage(str, enum.Enum):
     brief = "brief"
     script = "script"
     scenes = "scenes"
+    frames = "frames"
     renders = "renders"
     exports = "exports"
 

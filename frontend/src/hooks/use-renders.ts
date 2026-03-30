@@ -23,14 +23,17 @@ export function useRenders(projectId: string) {
     // Poll every 2 seconds to simulate SSE updates when the UI is mounted
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (
-        data &&
-        data.length > 0 &&
-        (data[0].status === "running" || data[0].status === "queued" || data[0].status === "review")
-      ) {
-        return 1500; // Fast 1.5s refresh for fluid UI
-      }
-      return false; // Stop polling on error, complete, or empty
+      if (!data?.length) return false;
+      const active = data.some((r) =>
+        ["running", "queued", "review"].includes(r.status),
+      );
+      if (active) return 1500;
+      // Newest job first from API; poll lightly so a retry moves failed → queued without manual refresh.
+      const latest = data.reduce((a, b) =>
+        new Date(b.createdAt).getTime() > new Date(a.createdAt).getTime() ? b : a,
+      );
+      if (latest.status === "failed") return 4000;
+      return false;
     },
   });
 }
@@ -78,6 +81,7 @@ export function useApproveFramePair(projectId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });
       qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
     },
   });
 }
@@ -92,6 +96,7 @@ export function useRegenerateFramePair(projectId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });
       qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
     },
   });
 }

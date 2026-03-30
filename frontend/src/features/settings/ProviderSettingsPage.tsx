@@ -19,6 +19,7 @@ import {
   supportedExecutionModes,
 } from "../../lib/provider-catalog";
 import type {
+  ProviderCatalogOption,
   ProviderCredentialInput,
   ProviderCredentialRecord,
   ProviderGenerationType,
@@ -61,6 +62,24 @@ function defaultFormState(): ProviderFormState {
     apiKey: "",
     setAsActiveRoute: true,
   };
+}
+
+function applyProviderFormDefaults(
+  current: ProviderFormState,
+  option: ProviderCatalogOption | undefined,
+): ProviderFormState {
+  if (!option?.formDefaults) return current;
+  const next = { ...current };
+  for (const [key, value] of Object.entries(option.formDefaults)) {
+    if (value === undefined) continue;
+    if (key === "endpoint") next.endpoint = value;
+    else if (key === "apiVersion") next.apiVersion = value;
+    else if (key === "deployment") next.deployment = value;
+    else if (key === "modelName") next.modelName = value;
+    else if (key === "voice") next.voice = value;
+    else if (key === "apiKey") next.apiKey = value;
+  }
+  return next;
 }
 
 function modalityFromGenerationType(generationType: ProviderGenerationType, providerKey: string): ProviderModality {
@@ -271,11 +290,22 @@ export function ProviderSettingsPage() {
                 onChange={(event) => {
                   const generationType = event.target.value as ProviderGenerationType;
                   const nextOptions = getProviderOptionsByGenerationType(generationType);
-                  setForm((current) => ({
-                    ...current,
-                    generationType,
-                    providerKey: nextOptions[0]?.providerKey ?? current.providerKey,
-                  }));
+                  const first = nextOptions[0];
+                  setForm((current) => {
+                    if (editingId) {
+                      return {
+                        ...current,
+                        generationType,
+                        providerKey: first?.providerKey ?? current.providerKey,
+                      };
+                    }
+                    const base = {
+                      ...current,
+                      generationType,
+                      providerKey: first?.providerKey ?? current.providerKey,
+                    };
+                    return applyProviderFormDefaults(base, first);
+                  });
                 }}
               >
                 {Object.entries(providerGenerationLabels).map(([value, label]) => (
@@ -291,9 +321,16 @@ export function ProviderSettingsPage() {
                 id="providerKey"
                 className="w-full rounded-xl border border-border-card bg-glass px-3.5 py-2.5 text-sm text-primary outline-none transition-all hover:border-border-active focus:border-accent"
                 value={selectedProvider?.providerKey ?? form.providerKey}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, providerKey: event.target.value }))
-                }
+                onChange={(event) => {
+                  const providerKey = event.target.value;
+                  const option = providerOptions.find((o) => o.providerKey === providerKey);
+                  setForm((current) => {
+                    if (editingId) {
+                      return { ...current, providerKey };
+                    }
+                    return applyProviderFormDefaults({ ...current, providerKey }, option);
+                  });
+                }}
               >
                 {providerOptions.map((option) => (
                   <option key={option.providerKey} value={option.providerKey}>
@@ -332,9 +369,9 @@ export function ProviderSettingsPage() {
                 }
                 placeholder={field.placeholder}
                 help={
-                  field.key === "apiKey" && editingId
-                    ? "Leave blank to keep the existing API key."
-                    : field.help
+                  [field.key === "apiKey" && editingId ? "Leave blank to keep the existing API key." : "", field.help || ""]
+                    .filter(Boolean)
+                    .join(" ") || undefined
                 }
               />
             ))}

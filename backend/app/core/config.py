@@ -59,9 +59,11 @@ class Settings(BaseSettings):
     azure_openai_api_key: str | None = None
     azure_openai_api_version: str = "2024-10-21"
     azure_openai_chat_deployment: str | None = None
+    # Chat completions (brief, script, scene plan, prompt pairs) — large JSON can exceed 90s.
+    azure_openai_chat_timeout_seconds: float = 300.0
     azure_openai_image_deployment: str | None = None
     azure_openai_image_model: str = "gpt-image-1.5"
-    azure_openai_image_api_version: str = "2025-04-01-preview"
+    azure_openai_image_api_version: str = "2024-02-01"
     azure_openai_speech_deployment: str | None = None
     azure_openai_speech_model: str = "tts-1-hd"
     azure_openai_speech_api_version: str = "2025-04-01-preview"

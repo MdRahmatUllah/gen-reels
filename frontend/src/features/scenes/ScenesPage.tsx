@@ -1,11 +1,10 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useScenePlan, useGenerateScenePlan, useGeneratePromptPairs, useUpdateScene, useApproveScenePlan, useSetScenePlanPreset } from "../../hooks/use-scenes";
-import { useRenders, useApproveFramePair, useRegenerateFramePair } from "../../hooks/use-renders";
 import { useProviderExecutionPolicy } from "../../hooks/use-providers";
 import { useVisualPresets, useVoicePresets } from "../../hooks/use-presets";
 import { useQuickCreateStatus } from "../../hooks/use-projects";
-import type { RenderJob, ScenePlan, ScenePlanSet } from "../../types/domain";
+import type { ScenePlan, ScenePlanSet } from "../../types/domain";
 import { CommentThread } from "../../components/CommentThread";
 import { ConflictResolutionModal } from "../../components/ConflictResolutionModal";
 import { mockUpdateScene } from "../../lib/mock-service";
@@ -326,115 +325,6 @@ function SceneDetailEditor({
   );
 }
 
-function findFramePairReviewRender(renders: RenderJob[] | undefined, planId: string): RenderJob | null {
-  if (!renders?.length) return null;
-  return (
-    renders.find(
-      (r) =>
-        r.status === "review" &&
-        r.steps.some(
-          (s) => s.stepKind === "frame_pair_generation" && s.backendStatus === "review",
-        ) &&
-        (r.scenePlanId === planId || r.scenePlanId == null),
-    ) ?? null
-  );
-}
-
-function FramePairHitlPanel({
-  projectId,
-  planSet,
-  reviewRender,
-}: {
-  projectId: string;
-  planSet: ScenePlanSet;
-  reviewRender: RenderJob;
-}) {
-  const approve = useApproveFramePair(projectId);
-  const regenerate = useRegenerateFramePair(projectId);
-  const busy = approve.isPending || regenerate.isPending;
-
-  const pendingSteps = reviewRender.steps.filter(
-    (s) => s.stepKind === "frame_pair_generation" && s.backendStatus === "review",
-  );
-
-  const assetUrl = (sceneId: string, role: string) =>
-    reviewRender.frameAssets?.find((a) => a.sceneSegmentId === sceneId && a.assetRole === role)?.downloadUrl;
-
-  return (
-    <div className="flex flex-col gap-4 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md backdrop-blur">
-      <div>
-        <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">
-          Human review
-        </p>
-        <h2 className="font-heading text-xl font-bold text-primary">Start and end frames</h2>
-        <p className="text-sm text-secondary max-w-[72ch] mt-1">
-          Approve each scene when the pair looks right, or regenerate to run your workspace image route again.
-          Regenerating an earlier scene may mark later scenes as stale and re-queue them.
-        </p>
-      </div>
-      <div className="flex flex-col gap-4">
-        {pendingSteps.map((step) => {
-          const scene = planSet.scenes.find((sc) => sc.id === step.sceneId);
-          if (!scene) return null;
-          const start = assetUrl(scene.id, "scene_start_frame");
-          const end = assetUrl(scene.id, "scene_end_frame");
-          return (
-            <div
-              key={step.id}
-              className="flex flex-col gap-3 rounded-lg border border-border-subtle bg-glass/50 p-4 lg:flex-row lg:items-center lg:justify-between"
-            >
-              <div>
-                <strong className="text-primary">Scene {scene.index}</strong>
-                <span className="text-muted text-sm block">{scene.title}</span>
-              </div>
-              <div className="flex flex-wrap gap-3 items-center">
-                {start ? (
-                  <figure className="text-center">
-                    <img
-                      src={start}
-                      alt={`Scene ${scene.index} start frame`}
-                      className="h-28 w-[4.5rem] object-cover rounded-md border border-border-subtle bg-black/20"
-                    />
-                    <figcaption className="text-[10px] text-muted mt-0.5">Start</figcaption>
-                  </figure>
-                ) : null}
-                {end ? (
-                  <figure className="text-center">
-                    <img
-                      src={end}
-                      alt={`Scene ${scene.index} end frame`}
-                      className="h-28 w-[4.5rem] object-cover rounded-md border border-border-subtle bg-black/20"
-                    />
-                    <figcaption className="text-[10px] text-muted mt-0.5">End</figcaption>
-                  </figure>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 min-h-[2.4rem] px-3 py-2 rounded-md font-semibold text-sm bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent"
-                    disabled={busy}
-                    onClick={() => approve.mutate(step.id)}
-                  >
-                    Approve pair
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 min-h-[2.4rem] px-3 py-2 rounded-md font-semibold text-sm bg-glass border border-border-subtle text-primary hover:border-border-active"
-                    disabled={busy}
-                    onClick={() => regenerate.mutate(step.id)}
-                  >
-                    Regenerate
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /* ─── Preset Picker ───────────────────────────────────────────────────────── */
 function PresetPicker({
   projectId,
@@ -486,16 +376,10 @@ export function ScenesPage() {
   const { projectId = "" } = useParams();
   const navigate = useNavigate();
   const { data: planSet, isLoading } = useScenePlan(projectId);
-  const { data: renders } = useRenders(projectId);
   const { data: executionPolicy } = useProviderExecutionPolicy();
   const generatePlan = useGenerateScenePlan(projectId);
   const approvePlan = useApproveScenePlan(projectId);
   const { data: quickCreateStatus } = useQuickCreateStatus(projectId);
-
-  const reviewRender = useMemo(() => {
-    if (!planSet || planSet.approvalState !== "approved" || !renders?.length) return null;
-    return findFramePairReviewRender(renders, planSet.id);
-  }, [planSet, renders]);
 
   const showHostedImageHint =
     !isMockMode() && executionPolicy?.image?.mode === "hosted" && planSet?.approvalState === "approved";
@@ -536,7 +420,7 @@ export function ScenesPage() {
 
   const handleApprove = useCallback(() => {
     approvePlan.mutate(undefined, {
-      onSuccess: () => navigate(`/app/projects/${projectId}/renders`),
+      onSuccess: () => navigate(`/app/projects/${projectId}/frames`),
     });
   }, [approvePlan, navigate, projectId]);
 
@@ -621,7 +505,15 @@ export function ScenesPage() {
               </button>
             </>
           ) : (
-            <span className="approval-badge approval-badge--approved">✓ Approved</span>
+            <>
+              <span className="approval-badge approval-badge--approved">✓ Approved</span>
+              <Link
+                className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+                to={`/app/projects/${projectId}/frames`}
+              >
+                Keyframes →
+              </Link>
+            </>
           )}
         </div>
       </div>
@@ -638,10 +530,6 @@ export function ScenesPage() {
             Open provider settings
           </Link>
         </div>
-      ) : null}
-
-      {reviewRender ? (
-        <FramePairHitlPanel projectId={projectId} planSet={planSet} reviewRender={reviewRender} />
       ) : null}
 
       {/* Three-column layout */}

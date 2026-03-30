@@ -5,6 +5,7 @@ export type WorkflowStage =
   | "ideas"
   | "script"
   | "scenes"
+  | "frames"
   | "renders"
   | "exports";
 
@@ -277,6 +278,9 @@ export interface RenderStep {
   stepKind?: string;
   /** Raw API status before workflowStatus mapping */
   backendStatus?: string;
+  /** Present when the step failed */
+  errorCode?: string | null;
+  errorMessage?: string | null;
   durationDeltaSec: number;
   clipStatus: string;
   narrationStatus: string;
@@ -317,6 +321,9 @@ export interface RenderJob {
   allowExportWithoutMusic: boolean;
   /** Scene plan this render was created from, when present */
   scenePlanId?: string | null;
+  /** Set when the render job failed */
+  errorCode?: string | null;
+  errorMessage?: string | null;
   frameAssets?: RenderFrameAssetRef[];
   checks: RenderCheck[];
   steps: RenderStep[];
@@ -554,6 +561,10 @@ export interface ProviderCatalogOption {
   description: string;
   supportsActivation: boolean;
   fields: ProviderCatalogField[];
+  /** Prefill form fields when this provider is selected (add-credential flow). */
+  formDefaults?: Partial<
+    Record<"endpoint" | "apiVersion" | "deployment" | "modelName" | "voice" | "apiKey", string>
+  >;
 }
 
 export interface ProviderCredentialRecord {

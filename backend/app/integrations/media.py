@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import hashlib
 import io
 import json
@@ -19,6 +20,8 @@ from PIL import Image, ImageDraw
 from app.core.config import Settings, get_settings
 from app.core.errors import AdapterError
 from app.integrations.ffmpeg import FFmpegError, FFmpegRunner
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_azure_endpoint(raw_endpoint: str) -> str:
@@ -57,6 +60,99 @@ def _normalize_azure_api_version(raw: str | None) -> str:
     while version.lower().startswith(prefix):
         version = version[len(prefix):].strip()
     return version.strip()
+
+
+def _azure_cognitive_services_image_host(endpoint: str) -> bool:
+    """True for ``*.cognitiveservices.azure.com`` (multi-service) image endpoints."""
+    from urllib.parse import urlparse
+
+    host = (urlparse(endpoint).netloc or "").lower()
+    return "cognitiveservices.azure.com" in host
+
+
+def _azure_openai_host_supports_image_edits(endpoint: str) -> bool:
+    """Cognitive Services often 404 on ``/images/edits`` while generations works."""
+    return not _azure_cognitive_services_image_host(endpoint)
+
+
+def _str_field(payload: dict[str, Any] | None, key: str) -> str:
+    if not payload:
+        return ""
+    raw = payload.get(key)
+    return str(raw).strip() if raw is not None else ""
+
+
+def _truncate(text: str, max_len: int) -> str:
+    text = text.strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def compose_frame_generation_prompt(
+    *,
+    user_prompt: str,
+    frame_kind: str,
+    scene_index: int,
+    consistency_pack_state: dict[str, Any] | None,
+    scene_context: dict[str, Any] | None,
+    uses_prior_scene_anchor: bool,
+) -> str:
+    """Build a single text prompt for image generation with preset + continuity context."""
+    user_prompt = user_prompt.strip()
+    parts: list[str] = []
+
+    parts.append(
+        "Vertical 9:16 cinematic keyframe still, sharp focus, production-quality lighting, "
+        f"no UI overlays, no watermark. Frame role: {frame_kind} of scene {scene_index}."
+    )
+
+    vp = consistency_pack_state.get("visual_preset") if consistency_pack_state else None
+    if isinstance(vp, dict):
+        prefix = _str_field(vp, "prompt_prefix")
+        style = _str_field(vp, "style_descriptor")
+        camera = _str_field(vp, "camera_defaults")
+        negative = _str_field(vp, "negative_prompt")
+        ref_notes = _str_field(vp, "reference_notes")
+        palette = _str_field(vp, "color_palette")
+        block_bits = [prefix, style, camera, palette, ref_notes]
+        block = "\n".join(bit for bit in block_bits if bit)
+        if block:
+            parts.append("VISUAL_PRESET:\n" + block)
+        if negative:
+            parts.append("AVOID (negative guidance):\n" + negative)
+
+    ctx = scene_context or {}
+    title = _str_field(ctx, "title")
+    beat = _str_field(ctx, "beat")
+    narration = _truncate(_str_field(ctx, "narration_text"), 480)
+    vdir = _str_field(ctx, "visual_direction")
+    shot = _str_field(ctx, "shot_type")
+    motion = _str_field(ctx, "motion")
+    scene_lines = [f"Title: {title}" if title else "", f"Beat: {beat}" if beat else ""]
+    scene_lines += [f"Narration: {narration}" if narration else ""]
+    scene_lines += [f"Visual direction: {vdir}" if vdir else ""]
+    scene_lines += [f"Shot: {shot}" if shot else "", f"Motion: {motion}" if motion else ""]
+    scene_block = "\n".join(line for line in scene_lines if line)
+    if scene_block:
+        parts.append("SCENE_CONTEXT:\n" + scene_block)
+
+    if frame_kind == "start" and uses_prior_scene_anchor:
+        parts.append(
+            "CONTINUITY: The reference image is the previous scene's closing frame. "
+            "Match subjects, wardrobe, palette, and environment; continue the story naturally "
+            "into this scene's opening moment."
+        )
+    elif frame_kind == "end":
+        parts.append(
+            "CONTINUITY: The reference is this scene's start frame. Keep the same cast, wardrobe, "
+            "and location; show clear progression toward the scene's closing beat."
+        )
+
+    if user_prompt:
+        parts.append("DIRECTOR_SHOT_INSTRUCTION:\n" + user_prompt)
+
+    return "\n\n".join(parts)
 
 
 @dataclass
@@ -328,10 +424,13 @@ class AzureOpenAIImageProvider(ImageProvider):
         self.settings = settings
         self.endpoint = _normalize_azure_endpoint(endpoint or settings.azure_openai_endpoint or "")
         self.api_key = api_key or settings.azure_openai_api_key
-        self.deployment = deployment or settings.azure_openai_image_deployment
-        self.api_version = _normalize_azure_api_version(
-            api_version or settings.azure_openai_image_api_version or ""
-        ) or (settings.azure_openai_image_api_version or "")
+        self.deployment = (deployment or settings.azure_openai_image_deployment or "").strip()
+        raw_ver = (
+            api_version
+            or settings.azure_openai_image_api_version
+            or "2024-02-01"
+        )
+        self.api_version = _normalize_azure_api_version(str(raw_ver)) or str(raw_ver).strip()
         self.model = model or settings.azure_openai_image_model
 
     def _fallback_generated_media(
@@ -374,10 +473,31 @@ class AzureOpenAIImageProvider(ImageProvider):
                 consistency_pack_state=consistency_pack_state,
             )
 
-        headers = {"api-key": self.api_key, "Authorization": f"Bearer {self.api_key}"}
+        # Deployment-scoped URLs identify the model; do not send a separate "model" in JSON.
+        # Cognitive Services multi-account auth matches portal/scripts: Bearer only plus png options.
+        # *.openai.azure.com often accepts api-key + Bearer; sending both can confuse some CS gateways.
+        cs_host = _azure_cognitive_services_image_host(self.endpoint)
+        if cs_host:
+            headers_base: dict[str, str] = {"Authorization": f"Bearer {self.api_key}"}
+        else:
+            headers_base = {"api-key": self.api_key, "Authorization": f"Bearer {self.api_key}"}
+        generations_json: dict[str, Any] = {
+            "prompt": prompt,
+            "size": "1024x1024",
+            "n": 1,
+            "quality": "medium",
+        }
+        if cs_host:
+            generations_json["output_format"] = "png"
+            generations_json["output_compression"] = 100
+        generations_url = (
+            f"{self.endpoint.rstrip('/')}/openai/deployments/{self.deployment}/images/generations"
+            f"?api-version={self.api_version}"
+        )
+        edit_fallback: str | None = None
         try:
             if reference_images:
-                url = (
+                edits_url = (
                     f"{self.endpoint.rstrip('/')}/openai/deployments/{self.deployment}/images/edits"
                     f"?api-version={self.api_version}"
                 )
@@ -393,33 +513,29 @@ class AzureOpenAIImageProvider(ImageProvider):
                     for index, reference in enumerate(reference_images[:1])
                 ]
                 response = httpx.post(
-                    url,
-                    headers=headers,
-                    data={
-                        "prompt": prompt,
-                        "model": self.model,
-                        "size": "1024x1024",
-                        "n": "1",
-                        "quality": "high",
-                    },
+                    edits_url,
+                    headers=headers_base,
+                    data={"prompt": prompt},
                     files=files,
                     timeout=90.0,
                 )
+                if response.status_code == 404:
+                    logger.warning(
+                        "azure_image_edits_404_falling_back_to_generations deployment=%s",
+                        self.deployment,
+                    )
+                    edit_fallback = "edits_404_generations_fallback"
+                    response = httpx.post(
+                        generations_url,
+                        headers={**headers_base, "Content-Type": "application/json"},
+                        json=generations_json,
+                        timeout=90.0,
+                    )
             else:
-                url = (
-                    f"{self.endpoint.rstrip('/')}/openai/deployments/{self.deployment}/images/generations"
-                    f"?api-version={self.api_version}"
-                )
                 response = httpx.post(
-                    url,
-                    headers={**headers, "Content-Type": "application/json"},
-                    json={
-                        "prompt": prompt,
-                        "model": self.model,
-                        "size": "1024x1024",
-                        "n": 1,
-                        "quality": "high",
-                    },
+                    generations_url,
+                    headers={**headers_base, "Content-Type": "application/json"},
+                    json=generations_json,
                     timeout=90.0,
                 )
             if response.status_code >= 500:
@@ -443,21 +559,24 @@ class AzureOpenAIImageProvider(ImageProvider):
                     "Azure image generation returned no image payload.",
                 )
             image_bytes = base64.b64decode(image_b64)
+            meta = {
+                "scene_index": scene_index,
+                "frame_kind": frame_kind,
+                "prompt": prompt,
+                "reference_asset_ids": [reference.asset_id for reference in reference_images],
+                "consistency_pack_state": consistency_pack_state or {},
+                "width": 1024,
+                "height": 1024,
+            }
+            if edit_fallback:
+                meta["azure_image_edit_fallback"] = edit_fallback
             return GeneratedMedia(
                 provider_name="azure_openai_image",
                 provider_model=self.deployment,
                 content_type="image/png",
                 file_extension="png",
                 bytes_payload=image_bytes,
-                metadata={
-                    "scene_index": scene_index,
-                    "frame_kind": frame_kind,
-                    "prompt": prompt,
-                    "reference_asset_ids": [reference.asset_id for reference in reference_images],
-                    "consistency_pack_state": consistency_pack_state or {},
-                    "width": 1024,
-                    "height": 1024,
-                },
+                metadata=meta,
             )
         except httpx.TimeoutException as exc:
             raise AdapterError("transient", "azure_image_generation_timeout", str(exc)) from exc

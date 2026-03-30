@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -217,10 +218,27 @@ def _stub_project_title(idea_prompt: str) -> str:
     return " ".join(words[:8]).title()[:80]
 
 
+# When Content Safety is not configured, dev uses this stub. Avoid naive substrings like "violence"
+# or "terror" (they match normal news/educational copy). Tests use the sentinel or fixed phrases below.
+STUB_MODERATION_BLOCK_SENTINEL = "[[stub_moderation_block]]"
+
+
+def _stub_moderation_should_block(text: str) -> bool:
+    lowered = text.lower()
+    if STUB_MODERATION_BLOCK_SENTINEL in lowered:
+        return True
+    if "describe violence in graphic detail" in lowered:
+        return True
+    if "violence is the only answer" in lowered:
+        return True
+    if re.search(r"\bself[- ]harm\b", lowered):
+        return True
+    return False
+
+
 class StubModerationProvider(ModerationProvider):
     def moderate_text(self, text: str, *, target_type: str) -> ModerationResult:
-        lowered = text.lower()
-        blocked = any(term in lowered for term in ("violence", "terror", "self-harm"))
+        blocked = _stub_moderation_should_block(text)
         return ModerationResult(
             blocked=blocked,
             provider_name="stub_moderation",
@@ -441,7 +459,17 @@ class AzureOpenAITextProvider(TextProvider):
             "temperature": 0.7,
             "response_format": {"type": "json_object"},
         }
-        response = httpx.post(url, headers=headers, json=body, timeout=90.0)
+        timeout = float(self.settings.azure_openai_chat_timeout_seconds)
+        try:
+            response = httpx.post(url, headers=headers, json=body, timeout=timeout)
+        except httpx.TimeoutException as exc:
+            raise AdapterError(
+                "transient",
+                "azure_openai_timeout",
+                "Azure OpenAI did not finish within the configured time limit. "
+                "Quick-start will retry automatically; if this keeps happening, raise "
+                "AZURE_OPENAI_CHAT_TIMEOUT_SECONDS or try a shorter script input.",
+            ) from exc
         if response.status_code >= 500:
             raise AdapterError("transient", "azure_openai_unavailable", "Azure OpenAI is temporarily unavailable.")
         if response.status_code >= 400:

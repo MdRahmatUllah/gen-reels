@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.core.config import get_settings
 from app.db.session import get_session_factory
+from app.integrations.azure import STUB_MODERATION_BLOCK_SENTINEL
 from app.models.entities import Workspace
 from app.tests.test_phase3_render_mvp import _prepare_approved_scene_plan
 
@@ -125,7 +126,7 @@ def test_phase4_moderation_quarantine_release_and_resume(authenticated_client, s
     assert original_scene_plan.status_code == 200
     scene_plan_payload = original_scene_plan.json()
     segments = scene_plan_payload["segments"]
-    segments[0]["start_image_prompt"] = f"violence {segments[0]['start_image_prompt']}"
+    segments[0]["start_image_prompt"] = f"{STUB_MODERATION_BLOCK_SENTINEL} {segments[0]['start_image_prompt']}"
 
     patch_payload = {
         "visual_preset_id": scene_plan_payload["visual_preset_id"],

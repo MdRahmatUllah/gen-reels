@@ -208,7 +208,8 @@ type BackendRenderStep = {
   step_kind: string;
   status: string;
   output_payload: Record<string, unknown> | null;
-  error_message: string | null;
+  error_code?: string | null;
+  error_message?: string | null;
 };
 
 type BackendRenderAsset = {
@@ -237,6 +238,8 @@ type BackendRender = {
   status: string;
   payload: Record<string, unknown>;
   allow_export_without_music: boolean;
+  error_code?: string | null;
+  error_message?: string | null;
   created_at: string;
   updated_at: string;
   scene_plan_id: string | null;
@@ -587,9 +590,12 @@ function buildProviderCredentialPayload(input: ProviderCredentialInput): {
   public_config: Record<string, string>;
   secret_config?: { api_key: string };
 } {
+  const apiVersion =
+    input.apiVersion?.trim() ||
+    (input.providerKey === "azure_openai_image" ? "2024-02-01" : "");
   const publicConfig = {
     ...(input.endpoint?.trim() ? { endpoint: input.endpoint.trim() } : {}),
-    ...(input.apiVersion?.trim() ? { api_version: input.apiVersion.trim() } : {}),
+    ...(apiVersion ? { api_version: apiVersion } : {}),
     ...(input.deployment?.trim() ? { deployment: input.deployment.trim() } : {}),
     ...(input.modelName?.trim() ? { model_name: input.modelName.trim() } : {}),
     ...(input.voice?.trim() ? { voice: input.voice.trim() } : {}),
@@ -626,7 +632,7 @@ function workflowStatus(value: string | null | undefined): ProjectSummary["rende
 
 function stageFromProject(project: BackendProject): ProjectSummary["stage"] {
   const candidate = project.stage as ProjectSummary["stage"];
-  return ["brief", "ideas", "script", "scenes", "renders", "exports"].includes(candidate)
+  return ["brief", "ideas", "script", "scenes", "frames", "renders", "exports"].includes(candidate)
     ? candidate
     : "brief";
 }
@@ -834,6 +840,8 @@ function mapRenderStep(step: BackendRenderStep): RenderStep {
     status: workflowStatus(rawStatus),
     stepKind: kind,
     backendStatus: rawStatus,
+    errorCode: step.error_code ?? null,
+    errorMessage: step.error_message ?? null,
     durationDeltaSec: 0,
     clipStatus: String(step.output_payload?.status ?? titleize(rawStatus)),
     narrationStatus: kind.includes("audio") ? titleize(rawStatus) : "N/A",
@@ -910,6 +918,8 @@ function mapRender(render: BackendRender, events: BackendRenderEvent[] = []): Re
     updatedAt: render.updated_at,
     durationSec: (render.exports[0]?.duration_ms ?? 0) / 1000,
     scenePlanId: render.scene_plan_id ?? null,
+    errorCode: render.error_code ?? null,
+    errorMessage: render.error_message ?? null,
     frameAssets: assets.map((a) => ({
       id: a.id,
       sceneSegmentId: a.scene_segment_id,

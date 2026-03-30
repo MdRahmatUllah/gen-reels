@@ -331,23 +331,22 @@ class RoutingService:
                     ),
                     decision,
                 )
+            pub = dict(decision.public_config or {})
+            pub.pop("_validation", None)
             return (
                 AzureOpenAIImageProvider(
                     self.settings,
-                    endpoint=str(decision.public_config.get("endpoint") or self.settings.azure_openai_endpoint or ""),
+                    endpoint=str(pub.get("endpoint") or self.settings.azure_openai_endpoint or "").strip(),
                     api_key=str(decision.secret_config.get("api_key") or ""),
                     deployment=str(
-                        decision.public_config.get("deployment")
-                        or decision.public_config.get("model")
-                        or decision.provider_model
-                    ),
+                        pub.get("deployment") or pub.get("model") or decision.provider_model or ""
+                    ).strip(),
                     api_version=str(
-                        decision.public_config.get("api_version")
+                        pub.get("api_version")
                         or self.settings.azure_openai_image_api_version
-                    ),
-                    model=str(
-                        decision.public_config.get("model_name") or self.settings.azure_openai_image_model
-                    ),
+                        or "2024-02-01"
+                    ).strip(),
+                    model=str(pub.get("model_name") or self.settings.azure_openai_image_model),
                 ),
                 decision,
             )
