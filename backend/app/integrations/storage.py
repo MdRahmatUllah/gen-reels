@@ -70,6 +70,16 @@ class MinioStorageClient(StorageClient):
             secure=settings.minio_secure,
             region=settings.minio_region,
         )
+        # Separate client for presigned URLs so the signature is computed
+        # against the browser-reachable host rather than the Docker-internal one.
+        public_ep = settings.minio_public_endpoint or settings.minio_endpoint
+        self._public_client = Minio(
+            endpoint=public_ep,
+            access_key=settings.minio_access_key,
+            secret_key=settings.minio_secret_key,
+            secure=settings.minio_secure,
+            region=settings.minio_region,
+        )
 
     def healthcheck(self) -> None:
         self.client.list_buckets()
@@ -121,7 +131,7 @@ class MinioStorageClient(StorageClient):
         self.client.remove_object(bucket_name, object_name)
 
     def presigned_get_url(self, bucket_name: str, object_name: str, ttl_seconds: int = 300) -> str:
-        return self.client.presigned_get_object(
+        return self._public_client.presigned_get_object(
             bucket_name=bucket_name,
             object_name=object_name,
             expires=timedelta(seconds=ttl_seconds),
@@ -129,7 +139,7 @@ class MinioStorageClient(StorageClient):
 
     def presigned_put_url(self, bucket_name: str, object_name: str, ttl_seconds: int = 300) -> str:
         self.ensure_bucket(bucket_name)
-        return self.client.presigned_put_object(
+        return self._public_client.presigned_put_object(
             bucket_name=bucket_name,
             object_name=object_name,
             expires=timedelta(seconds=ttl_seconds),

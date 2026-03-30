@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
@@ -49,6 +49,95 @@ function firstFailedStep(render: RenderJob): RenderStep | undefined {
   return render.steps.find((s) => s.backendStatus === "failed");
 }
 
+function FrameLightbox({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-h-[90vh] max-w-[90vw] flex flex-col items-center gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={src}
+          alt={alt}
+          className="max-h-[80vh] max-w-[85vw] rounded-xl border border-border-subtle shadow-2xl object-contain"
+        />
+        <div className="flex items-center gap-3">
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-glass border border-border-subtle px-3 py-1.5 text-xs font-semibold text-primary hover:border-border-active"
+          >
+            Open in new tab
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-glass border border-border-subtle px-3 py-1.5 text-xs font-semibold text-primary hover:border-border-active"
+          >
+            Close
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border-subtle text-primary shadow-lg hover:bg-glass text-lg leading-none"
+          aria-label="Close"
+        >
+          &times;
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FrameThumb({
+  src,
+  alt,
+  onOpen,
+}: {
+  src: string | null;
+  alt: string;
+  onOpen: (src: string, alt: string) => void;
+}) {
+  if (!src) {
+    return (
+      <div className="h-48 w-[8.5rem] rounded-lg border border-dashed border-border-subtle bg-glass/50 flex items-center justify-center text-xs text-muted px-2 text-center">
+        {alt}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="group relative cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      onClick={() => onOpen(src, alt)}
+    >
+      <img
+        src={src}
+        alt={alt}
+        className="h-48 w-[8.5rem] object-cover rounded-lg border border-border-subtle bg-black/20 transition-transform group-hover:scale-[1.02] group-hover:shadow-lg"
+      />
+      <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 group-hover:bg-black/40 transition-colors">
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-semibold bg-black/60 rounded-md px-2 py-1">
+          View
+        </span>
+      </span>
+    </button>
+  );
+}
+
 export function FramesPage() {
   const { projectId = "" } = useParams();
   const { data: project, isLoading: projectLoading } = useProject(projectId);
@@ -60,6 +149,9 @@ export function FramesPage() {
   const retryStep = useRetryRenderStep(projectId);
   const { data: executionPolicy } = useProviderExecutionPolicy();
   const { data: quickCreateStatus } = useQuickCreateStatus(projectId);
+
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), []);
 
   const hitlBusy = approvePair.isPending || regeneratePair.isPending || retryStep.isPending;
 
@@ -334,31 +426,11 @@ export function FramesPage() {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="flex flex-wrap gap-4">
                     <figure className="text-center">
-                      {start ? (
-                        <img
-                          src={start}
-                          alt={`Scene ${scene.index} start`}
-                          className="h-48 w-[8.5rem] object-cover rounded-lg border border-border-subtle bg-black/20"
-                        />
-                      ) : (
-                        <div className="h-48 w-[8.5rem] rounded-lg border border-dashed border-border-subtle bg-glass/50 flex items-center justify-center text-xs text-muted px-2 text-center">
-                          Start frame pending
-                        </div>
-                      )}
+                      <FrameThumb src={start} alt="Start frame pending" onOpen={(s) => openLightbox(s, `Scene ${scene.index} – Start`)} />
                       <figcaption className="text-[11px] text-muted mt-1">Start</figcaption>
                     </figure>
                     <figure className="text-center">
-                      {end ? (
-                        <img
-                          src={end}
-                          alt={`Scene ${scene.index} end`}
-                          className="h-48 w-[8.5rem] object-cover rounded-lg border border-border-subtle bg-black/20"
-                        />
-                      ) : (
-                        <div className="h-48 w-[8.5rem] rounded-lg border border-dashed border-border-subtle bg-glass/50 flex items-center justify-center text-xs text-muted px-2 text-center">
-                          End frame pending
-                        </div>
-                      )}
+                      <FrameThumb src={end} alt="End frame pending" onOpen={(s) => openLightbox(s, `Scene ${scene.index} – End`)} />
                       <figcaption className="text-[11px] text-muted mt-1">End</figcaption>
                     </figure>
                   </div>
@@ -421,6 +493,10 @@ export function FramesPage() {
           })}
         </div>
       )}
+
+      {lightbox ? (
+        <FrameLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
+      ) : null}
     </PageFrame>
   );
 }

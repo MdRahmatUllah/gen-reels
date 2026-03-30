@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
     celery_task_always_eager: bool = False
     minio_endpoint: str = "localhost:9000"
+    minio_public_endpoint: str | None = None
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin"
     minio_secure: bool = False
