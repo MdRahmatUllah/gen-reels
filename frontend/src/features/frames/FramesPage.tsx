@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
@@ -13,6 +13,7 @@ import { useProject, useQuickCreateStatus } from "../../hooks/use-projects";
 import { useScenePlan } from "../../hooks/use-scenes";
 import {
   useApproveFramePair,
+  useGenerateNarration,
   useRegenerateFramePair,
   useRenders,
   useRetryRenderStep,
@@ -21,6 +22,10 @@ import {
 import { useProviderExecutionPolicy } from "../../hooks/use-providers";
 import { QuickStartStatusBanner } from "../projects/quick-start";
 import type { RenderJob, RenderStep } from "../../types/domain";
+
+const AZURE_VOICES = [
+  "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar",
+] as const;
 
 function latestRenderForPlan(renders: RenderJob[] | undefined, planId: string): RenderJob | null {
   if (!renders?.length) return null;
@@ -47,6 +52,115 @@ function assetUrl(render: RenderJob, sceneSegmentId: string, role: string): stri
 
 function firstFailedStep(render: RenderJob): RenderStep | undefined {
   return render.steps.find((s) => s.backendStatus === "failed");
+}
+
+function narrationUrl(render: RenderJob, sceneSegmentId: string): string | null {
+  const matches = render.frameAssets?.filter(
+    (a) => a.sceneSegmentId === sceneSegmentId && a.assetRole === "narration_track",
+  );
+  if (!matches?.length) return null;
+  return matches[matches.length - 1].downloadUrl ?? null;
+}
+
+function NarrationCard({
+  audioSrc,
+  sceneId,
+  renderJobId,
+  speechConfigured,
+  generateNarration,
+  isGenerating,
+}: {
+  audioSrc: string | null;
+  sceneId: string;
+  renderJobId: string;
+  speechConfigured: boolean;
+  generateNarration: (args: { renderJobId: string; sceneSegmentId: string; voice?: string }) => void;
+  isGenerating: boolean;
+}) {
+  const [voice, setVoice] = useState("alloy");
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const toggle = useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) {
+      el.pause();
+      setPlaying(false);
+    } else {
+      el.play();
+      setPlaying(true);
+    }
+  }, [playing]);
+
+  if (!speechConfigured) {
+    return (
+      <div className="mt-3 rounded-lg border border-border-subtle bg-glass/50 px-3 py-2">
+        <p className="text-xs text-muted mb-1.5">Voice narration requires an audio provider.</p>
+        <Link
+          to="/app/settings/providers"
+          className="inline-flex items-center gap-1 rounded-md bg-accent-gradient px-2.5 py-1 text-[11px] font-semibold text-on-accent shadow-sm hover:shadow-accent"
+        >
+          Set up audio provider
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-border-subtle bg-glass/50 px-3 py-2.5">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[11px] font-medium text-muted uppercase tracking-wider">Voice</span>
+        <select
+          value={voice}
+          onChange={(e) => setVoice(e.target.value)}
+          className="rounded-md border border-border-subtle bg-surface px-2 py-0.5 text-xs text-primary focus:border-border-active focus:outline-none"
+        >
+          {AZURE_VOICES.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={isGenerating}
+          onClick={() => generateNarration({ renderJobId, sceneSegmentId: sceneId, voice })}
+          className="inline-flex items-center gap-1 rounded-md bg-accent-gradient px-2.5 py-1 text-[11px] font-semibold text-on-accent shadow-sm hover:shadow-accent disabled:opacity-50"
+        >
+          {isGenerating ? "Generating…" : audioSrc ? "Regenerate" : "Generate voice"}
+        </button>
+      </div>
+      {audioSrc ? (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggle}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-border-subtle bg-surface text-primary hover:bg-glass"
+          >
+            {playing ? "⏸" : "▶"}
+          </button>
+          <audio
+            key={audioSrc}
+            ref={audioRef}
+            src={audioSrc}
+            onEnded={() => setPlaying(false)}
+            preload="metadata"
+            className="hidden"
+          />
+          <span className="text-[11px] text-secondary">Narration ready</span>
+          <a
+            href={audioSrc}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto text-[11px] text-accent hover:underline"
+          >
+            Download
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function FrameLightbox({
@@ -147,11 +261,15 @@ export function FramesPage() {
   const approvePair = useApproveFramePair(projectId);
   const regeneratePair = useRegenerateFramePair(projectId);
   const retryStep = useRetryRenderStep(projectId);
+  const generateNarration = useGenerateNarration(projectId);
   const { data: executionPolicy } = useProviderExecutionPolicy();
   const { data: quickCreateStatus } = useQuickCreateStatus(projectId);
 
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), []);
+
+  const speechConfigured =
+    !!executionPolicy?.speech?.credentialId || executionPolicy?.speech?.mode === "hosted";
 
   const hitlBusy = approvePair.isPending || regeneratePair.isPending || retryStep.isPending;
 
@@ -488,6 +606,19 @@ export function FramesPage() {
                     ) : null}
                   </div>
                 </div>
+                {activeRender ? (
+                  <NarrationCard
+                    audioSrc={narrationUrl(activeRender, scene.id)}
+                    sceneId={scene.id}
+                    renderJobId={activeRender.id}
+                    speechConfigured={speechConfigured}
+                    generateNarration={generateNarration.mutate}
+                    isGenerating={
+                      generateNarration.isPending &&
+                      generateNarration.variables?.sceneSegmentId === scene.id
+                    }
+                  />
+                ) : null}
               </SectionCard>
             );
           })}

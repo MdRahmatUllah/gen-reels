@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import time
 
-from fastapi import APIRouter, Depends, Header, Query, Request, status
+from fastapi import APIRouter, Body, Depends, Header, Query, Request, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_db_dep, get_settings_dep, require_auth
@@ -16,6 +17,10 @@ from app.schemas.renders import (
     RenderJobResponse,
 )
 from app.services.render_service import RenderService
+
+
+class GenerateNarrationRequest(BaseModel):
+    voice: str | None = None
 
 router = APIRouter()
 
@@ -120,6 +125,20 @@ def regenerate_frame_pair(
     settings=Depends(get_settings_dep),
 ):
     return RenderService(db, settings).regenerate_frame_pair(auth, render_job_id, step_id)
+
+
+@standalone_router.post("/{render_job_id}/scenes/{scene_segment_id}:generate-narration")
+def generate_scene_narration(
+    render_job_id: str,
+    scene_segment_id: str,
+    payload: GenerateNarrationRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return RenderService(db, settings).generate_scene_narration(
+        auth, render_job_id, scene_segment_id, voice=payload.voice,
+    )
 
 
 @standalone_router.get("/{render_job_id}/events", response_model=list[RenderEventResponse])

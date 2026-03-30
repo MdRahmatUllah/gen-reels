@@ -1422,6 +1422,123 @@ class RenderService(GenerationService):
             raise ApiError(404, "asset_not_found", "Asset not found.")
         return {"asset_id": asset.id, "url": self._asset_download_url(asset)}
 
+    def generate_scene_narration(
+        self,
+        auth: AuthContext,
+        render_job_id: str,
+        scene_segment_id: str,
+        *,
+        voice: str | None = None,
+    ) -> dict[str, object]:
+        render_job = self._get_render_job_for_auth(auth, render_job_id)
+        segment = self.db.get(SceneSegment, UUID(scene_segment_id))
+        if not segment:
+            raise ApiError(404, "scene_segment_not_found", "Scene segment not found.")
+
+        voice_preset: dict[str, object] = {}
+        if voice:
+            voice_preset["provider_voice"] = voice
+
+        speech_provider, routing_decision = (
+            RoutingService(self.db, self.settings)
+            .build_speech_provider_for_workspace(render_job.workspace_id)
+        )
+        if speech_provider is None:
+            raise ApiError(
+                400,
+                "speech_provider_not_available",
+                "No speech provider is configured. Set up an audio generation provider in Settings.",
+            )
+
+        step = self._get_or_create_step(
+            render_job,
+            step_kind=StepKind.narration_generation,
+            step_index=3000 + segment.scene_index,
+            scene_segment_id=segment.id,
+            input_payload={
+                "scene_index": segment.scene_index,
+                "narration_text": segment.narration_text,
+                "voice": voice or "",
+            },
+        )
+        step.status = JobStatus.queued
+        step.error_code = None
+        step.error_message = None
+        self._set_step_running(step)
+        self.db.commit()
+
+        provider_run = self._create_provider_run(
+            render_job=render_job,
+            render_step=step,
+            operation="narration_generation",
+            request_payload={"text": segment.narration_text, "voice_preset": voice_preset},
+            provider_name=routing_decision.provider_name,
+            provider_model=routing_decision.provider_model,
+            execution_mode=routing_decision.execution_mode,
+            worker_id=routing_decision.worker_id,
+            provider_credential_id=routing_decision.provider_credential_id,
+            routing_decision_payload=routing_decision.to_payload(),
+        )
+        started = time.perf_counter()
+        try:
+            generated = speech_provider.synthesize(
+                text=segment.narration_text,
+                scene_index=segment.scene_index,
+                voice_preset=voice_preset or None,
+            )
+            narration_probe = probe_media_bytes(
+                self.settings,
+                file_name=f"scene-{segment.scene_index:02d}-narration.{generated.file_extension}",
+                bytes_payload=generated.bytes_payload,
+            )
+            audio_stream = next(
+                (s for s in narration_probe.get("streams", []) if s.get("codec_type") == "audio"),
+                {},
+            )
+            narration_duration_ms = int(
+                float((narration_probe.get("format") or {}).get("duration") or 0) * 1000
+            ) or int(generated.metadata.get("duration_ms") or 0)
+            generated.metadata = {
+                **generated.metadata,
+                "duration_ms": narration_duration_ms,
+                "sample_rate": audio_stream.get("sample_rate"),
+            }
+            narration_asset = self._store_generated_asset(
+                render_job=render_job,
+                render_step=step,
+                scene_segment=segment,
+                generated_media=generated,
+                bucket_name=self.settings.minio_bucket_assets,
+                object_name=(
+                    f"{self._scene_object_prefix(render_job, segment.scene_index)}/audio/"
+                    f"narration.{generated.file_extension}"
+                ),
+                file_name=f"scene-{segment.scene_index:02d}-narration.{generated.file_extension}",
+                asset_type=AssetType.narration,
+                asset_role=AssetRole.narration_track,
+                provider_run_id=provider_run.id,
+                has_audio_stream=True,
+            )
+        except AdapterError as error:
+            self._finish_provider_run(provider_run, started_at=started, error=error)
+            self._fail_step(step, error)
+            raise
+
+        self._finish_provider_run(
+            provider_run,
+            started_at=started,
+            response_payload={"asset_id": str(narration_asset.id)},
+        )
+        self._complete_step(step, output_payload={"asset_id": str(narration_asset.id)})
+        segment.actual_voice_duration_seconds = max(1, int((narration_asset.duration_ms or 0) / 1000))
+        self.db.commit()
+        return {
+            "asset_id": str(narration_asset.id),
+            "download_url": self._asset_download_url(narration_asset),
+            "duration_ms": narration_asset.duration_ms,
+            "voice": voice or "",
+        }
+
     def list_render_events(
         self,
         auth: AuthContext,

@@ -784,7 +784,19 @@ class AzureOpenAISpeechProvider(SpeechProvider):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "messages": [{"role": "user", "content": text}],
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a professional voice-over narrator. "
+                                "Read the user's text aloud exactly as written, word for word. "
+                                "Do not add, remove, or rephrase anything. "
+                                "Do not add any commentary or introduction. "
+                                "Just read the text naturally and clearly."
+                            ),
+                        },
+                        {"role": "user", "content": text},
+                    ],
                     "modalities": ["text", "audio"],
                     "audio": {"voice": voice, "format": "wav"},
                 },

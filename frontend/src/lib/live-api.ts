@@ -1673,6 +1673,32 @@ export async function liveRegenerateFramePair(projectId: string, stepId: string)
   return mapRender(updated, events);
 }
 
+export interface NarrationResult {
+  assetId: string;
+  downloadUrl: string | null;
+  durationMs: number;
+  voice: string;
+}
+
+export async function liveGenerateNarration(
+  renderJobId: string,
+  sceneSegmentId: string,
+  voice?: string,
+): Promise<NarrationResult> {
+  const raw = await api.post<{
+    asset_id: string;
+    download_url: string | null;
+    duration_ms: number;
+    voice: string;
+  }>(`/renders/${renderJobId}/scenes/${sceneSegmentId}:generate-narration`, { voice: voice || null });
+  return {
+    assetId: raw.asset_id,
+    downloadUrl: raw.download_url,
+    durationMs: raw.duration_ms,
+    voice: raw.voice,
+  };
+}
+
 export async function liveGetExports(projectId: string): Promise<ExportArtifact[]> {
   const exportsData = await api.get<BackendExport[]>(`/projects/${projectId}/exports`);
   return exportsData.map(mapExport);

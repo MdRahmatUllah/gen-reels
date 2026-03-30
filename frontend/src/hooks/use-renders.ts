@@ -12,7 +12,9 @@ import {
   liveRetryRenderStep,
   liveApproveFramePair,
   liveRegenerateFramePair,
+  liveGenerateNarration,
 } from "../lib/live-api";
+import type { NarrationResult } from "../lib/live-api";
 import { isMockMode } from "../lib/config";
 
 export function useRenders(projectId: string) {
@@ -97,6 +99,21 @@ export function useRegenerateFramePair(projectId: string) {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });
       qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
       qc.invalidateQueries({ queryKey: ["project", projectId] });
+    },
+  });
+}
+
+export function useGenerateNarration(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation<
+    NarrationResult,
+    Error,
+    { renderJobId: string; sceneSegmentId: string; voice?: string }
+  >({
+    mutationFn: ({ renderJobId, sceneSegmentId, voice }) =>
+      liveGenerateNarration(renderJobId, sceneSegmentId, voice),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["renders", projectId] });
     },
   });
 }
