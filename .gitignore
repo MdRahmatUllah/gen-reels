@@ -35,3 +35,7 @@ tmp/
 temp/
 *.tmp
 *.pyc
+
+/.claude
+*/alembic
+alembic/
