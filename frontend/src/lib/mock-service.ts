@@ -1776,6 +1776,7 @@ export async function renderSimulatorLoop(projectId: string) {
     format: "MP4 / H.264",
     ratio: "9:16",
     destination: "Local File System",
+    downloadUrl: null,
     integratedLufs: -14.2,
     truePeak: -1.0,
     subtitles: true,

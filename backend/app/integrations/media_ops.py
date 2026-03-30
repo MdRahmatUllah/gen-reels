@@ -192,6 +192,146 @@ def retime_video_to_target(
         }
 
 
+def build_slideshow_clip(
+    settings: Settings,
+    *,
+    start_image_bytes: bytes,
+    start_image_ext: str,
+    end_image_bytes: bytes,
+    end_image_ext: str,
+    duration_ms: int,
+    width: int = 1080,
+    height: int = 1920,
+    fps: int = 24,
+    scene_index: int = 0,
+) -> tuple[bytes, dict[str, object]]:
+    """Build a silent Ken-Burns motion clip from two still images.
+
+    Structure:
+      first ~55 %  — start image with slow zoom/pan
+      last  ~55 %  — end image with slow zoom/pan
+      overlap zone — 0.4-second crossfade rendered via FFmpeg xfade
+    Total output duration equals *duration_ms* ± 1 frame.
+    """
+    runner = FFmpegRunner(settings)
+    if not runner.available():
+        return b"", {"duration_ms": duration_ms, "fallback": True, "has_audio_stream": False}
+
+    total_sec = max(2.0, duration_ms / 1000.0)
+    xfade_dur = min(0.4, total_sec * 0.15)
+    half = total_sec / 2.0 + xfade_dur / 2.0
+    dur_a = half
+    dur_b = half
+    offset = dur_a - xfade_dur
+
+    # Rotate between 4 motion styles so adjacent scenes feel different.
+    style = scene_index % 4
+
+    def _zoompan_expr(style_index: int, d_frames: int) -> str:
+        n_expr = f"n/{d_frames}"
+        if style_index == 0:  # slow zoom-in, centred
+            z = f"min(1.0+0.12*{n_expr},1.13)"
+            x = "iw/2-(iw/zoom/2)"
+            y = "ih/2-(ih/zoom/2)"
+        elif style_index == 1:  # slow zoom-out, centred
+            z = f"max(1.13-0.12*{n_expr},1.0)"
+            x = "iw/2-(iw/zoom/2)"
+            y = "ih/2-(ih/zoom/2)"
+        elif style_index == 2:  # gentle pan right + slight zoom
+            z = "1.05"
+            x = f"iw/zoom/2*{n_expr}"
+            y = "ih/2-(ih/zoom/2)"
+        else:  # gentle pan left + slight zoom
+            z = "1.05"
+            x = f"iw-(iw/zoom/2)-(iw/zoom/2)*{n_expr}"
+            y = "ih/2-(ih/zoom/2)"
+        return f"zoompan=z='{z}':x='{x}':y='{y}':d={d_frames}:s={width}x{height}:fps={fps}"
+
+    def _scale_pad_filter() -> str:
+        return (
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}"
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        start_name = f"start{start_image_ext or '.jpg'}"
+        end_name = f"end{end_image_ext or '.jpg'}"
+        (workdir / start_name).write_bytes(start_image_bytes)
+        (workdir / end_name).write_bytes(end_image_bytes)
+
+        frames_a = max(2, int(dur_a * fps))
+        frames_b = max(2, int(dur_b * fps))
+
+        vf_a = f"{_scale_pad_filter()},{_zoompan_expr(style, frames_a)}"
+        vf_b = f"{_scale_pad_filter()},{_zoompan_expr((style + 2) % 4, frames_b)}"
+
+        try:
+            runner.run(
+                "ffmpeg",
+                [
+                    "-y", "-loop", "1", "-framerate", str(fps),
+                    "-i", start_name,
+                    "-vf", vf_a,
+                    "-t", f"{dur_a:.4f}",
+                    "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-preset", "fast",
+                    "part_a.mp4",
+                ],
+                workdir=workdir,
+            )
+            runner.run(
+                "ffmpeg",
+                [
+                    "-y", "-loop", "1", "-framerate", str(fps),
+                    "-i", end_name,
+                    "-vf", vf_b,
+                    "-t", f"{dur_b:.4f}",
+                    "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-preset", "fast",
+                    "part_b.mp4",
+                ],
+                workdir=workdir,
+            )
+            runner.run(
+                "ffmpeg",
+                [
+                    "-y",
+                    "-i", "part_a.mp4",
+                    "-i", "part_b.mp4",
+                    "-filter_complex",
+                    (
+                        f"[0:v][1:v]xfade=transition=fade"
+                        f":duration={xfade_dur:.4f}"
+                        f":offset={offset:.4f}[vout]"
+                    ),
+                    "-map", "[vout]",
+                    "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-preset", "fast",
+                    "slideshow.mp4",
+                ],
+                workdir=workdir,
+            )
+            probe = _probe_result(settings, "slideshow.mp4", workdir=workdir)
+        except FFmpegError:
+            return b"", {"duration_ms": duration_ms, "fallback": True, "has_audio_stream": False}
+
+        video_stream = next(
+            (s for s in probe.get("streams", []) if s.get("codec_type") == "video"),
+            {},
+        )
+        fmt = probe.get("format", {})
+        actual_duration_ms = int(float(fmt.get("duration") or total_sec) * 1000)
+        return (workdir / "slideshow.mp4").read_bytes(), {
+            "duration_ms": actual_duration_ms,
+            "width": int(video_stream.get("width") or width),
+            "height": int(video_stream.get("height") or height),
+            "frame_rate": _frame_rate_from_probe(video_stream),
+            "has_audio_stream": False,
+            "slideshow_style": style,
+        }
+
+
 def compose_reel_export(
     settings: Settings,
     *,
