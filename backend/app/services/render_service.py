@@ -1695,6 +1695,8 @@ class RenderService(GenerationService):
         )
         if not step:
             raise ApiError(404, "render_step_not_found", "Render step not found.")
+        if step.status == JobStatus.review and step.step_kind == StepKind.frame_pair_generation:
+            return self.regenerate_frame_pair(auth, render_job_id, step_id)
         if step.status not in {JobStatus.failed, JobStatus.cancelled}:
             raise ApiError(400, "render_step_not_retryable", "This render step is not retryable.")
         recovery_source_step_id = self._recovery_source_step_id(render_job, step)

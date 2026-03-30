@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.common import JobAcceptedResponse
 
@@ -54,6 +56,19 @@ class SceneSegmentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @field_validator("validation_warnings", mode="before")
+    @classmethod
+    def parse_validation_warnings(cls, v: Any) -> list[dict[str, object]]:
+        if not v:
+            return []
+        out = []
+        for item in v:
+            if isinstance(item, str):
+                out.append({"code": "llm_warning", "message": item})
+            elif isinstance(item, dict):
+                out.append(item)
+        return out
+
 
 class ScenePlanPatchRequest(BaseModel):
     version: int | None = Field(default=None, ge=1)
@@ -83,6 +98,19 @@ class ScenePlanResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     segments: list[SceneSegmentResponse]
+
+    @field_validator("validation_warnings", mode="before")
+    @classmethod
+    def parse_validation_warnings(cls, v: Any) -> list[dict[str, object]]:
+        if not v:
+            return []
+        out = []
+        for item in v:
+            if isinstance(item, str):
+                out.append({"code": "llm_warning", "message": item})
+            elif isinstance(item, dict):
+                out.append(item)
+        return out
 
 
 class ScenePlanJobResponse(JobAcceptedResponse):

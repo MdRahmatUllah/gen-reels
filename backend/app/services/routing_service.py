@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -30,6 +31,8 @@ from app.integrations.third_party import ElevenLabsSpeechProvider, RunwayVideoPr
 from app.models.entities import ExecutionMode, LocalWorker, LocalWorkerStatus, WorkspaceProviderCredential
 from app.services.execution_policy_service import DEFAULT_POLICY, ExecutionPolicyService
 from app.services.provider_credential_service import ProviderCredentialService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -282,7 +285,20 @@ class RoutingService:
                 ),
                 decision,
             )
-        return AzureContentSafetyProvider(self.settings), decision
+        try:
+            return AzureContentSafetyProvider(self.settings), decision
+        except AdapterError as error:
+            if (
+                self.settings.environment == "development"
+                and error.code == "missing_content_safety_config"
+            ):
+                logger.warning(
+                    "moderation_fallback_stub workspace_id=%s reason=%s",
+                    workspace_id,
+                    error.code,
+                )
+                return StubModerationProvider(), decision
+            raise
 
     def build_image_provider_for_workspace(
         self,

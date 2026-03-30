@@ -25,11 +25,6 @@ def _generate_dev_rsa_pair() -> tuple[str, str]:
     return private_pem, public_pem
 
 
-@lru_cache(maxsize=1)
-def _generate_dev_encryption_key() -> str:
-    return Fernet.generate_key().decode("utf-8")
-
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 
@@ -124,9 +119,9 @@ class Settings(BaseSettings):
     def app_encryption_key_resolved(self) -> str:
         if self.app_encryption_key:
             return self.app_encryption_key
-        if self.environment in {"development", "test"}:
-            return _generate_dev_encryption_key()
-        raise ValueError("APP_ENCRYPTION_KEY is required outside development and test.")
+        if self.environment == "test":
+            return Fernet.generate_key().decode("utf-8")
+        raise ValueError("APP_ENCRYPTION_KEY is required outside test to avoid losing encrypted secrets.")
 
     @computed_field
     @property

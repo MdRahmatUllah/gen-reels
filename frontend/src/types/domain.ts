@@ -273,6 +273,10 @@ export interface RenderStep {
   sceneId: string;
   name: string;
   status: WorkflowStatus;
+  /** Backend step_kind, e.g. frame_pair_generation */
+  stepKind?: string;
+  /** Raw API status before workflowStatus mapping */
+  backendStatus?: string;
   durationDeltaSec: number;
   clipStatus: string;
   narrationStatus: string;
@@ -287,6 +291,13 @@ export interface RenderEvent {
   label: string;
   detail: string;
   tone: HealthTone;
+}
+
+export interface RenderFrameAssetRef {
+  id: string;
+  sceneSegmentId: string | null;
+  assetRole: string;
+  downloadUrl: string | null;
 }
 
 export interface RenderJob {
@@ -304,6 +315,9 @@ export interface RenderJob {
   nextAction: string;
   musicTrack: string;
   allowExportWithoutMusic: boolean;
+  /** Scene plan this render was created from, when present */
+  scenePlanId?: string | null;
+  frameAssets?: RenderFrameAssetRef[];
   checks: RenderCheck[];
   steps: RenderStep[];
   events: RenderEvent[];

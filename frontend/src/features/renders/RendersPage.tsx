@@ -15,6 +15,8 @@ import {
   useStartRender,
   useCancelRender,
   useRetryRenderStep,
+  useApproveFramePair,
+  useRegenerateFramePair,
 } from "../../hooks/use-renders";
 import type { RenderJob, RenderStep } from "../../types/domain";
 import { RenderSettingsModal } from "./RenderSettingsModal";
@@ -57,7 +59,19 @@ function RenderSummaryCard({ render }: { render: RenderJob }) {
   );
 }
 
-function RenderStepTable({ steps, onRetry }: { steps: RenderStep[], onRetry: (id: string) => void }) {
+function RenderStepTable({
+  projectId,
+  steps,
+  onRetry,
+}: {
+  projectId: string;
+  steps: RenderStep[];
+  onRetry: (id: string) => void;
+}) {
+  const approveFramePair = useApproveFramePair(projectId);
+  const regenerateFramePair = useRegenerateFramePair(projectId);
+  const hitlBusy = approveFramePair.isPending || regenerateFramePair.isPending;
+
   return (
     <div className="table-shell">
       <table className="studio-table">
@@ -88,8 +102,30 @@ function RenderStepTable({ steps, onRetry }: { steps: RenderStep[], onRetry: (id
               <td>{step.clipStatus}</td>
               <td>{step.narrationStatus}</td>
               <td>
-                {step.status === "failed" ? (
-                  <button className="inline-flex items-center justify-center rounded-lg border border-border-subtle bg-glass px-3 py-1.5 text-xs font-semibold text-primary transition-all duration-200 hover:border-border-active hover:bg-glass-hover" onClick={() => onRetry(step.id)}>
+                {step.stepKind === "frame_pair_generation" && step.backendStatus === "review" ? (
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-lg border border-border-subtle bg-glass px-2 py-1 text-[11px] font-semibold text-primary transition-all duration-200 hover:border-border-active hover:bg-glass-hover"
+                      disabled={hitlBusy}
+                      onClick={() => approveFramePair.mutate(step.id)}
+                    >
+                      Approve frames
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-lg border border-border-subtle bg-glass px-2 py-1 text-[11px] font-semibold text-primary transition-all duration-200 hover:border-border-active hover:bg-glass-hover"
+                      disabled={hitlBusy}
+                      onClick={() => regenerateFramePair.mutate(step.id)}
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+                ) : step.status === "failed" ? (
+                  <button
+                    className="inline-flex items-center justify-center rounded-lg border border-border-subtle bg-glass px-3 py-1.5 text-xs font-semibold text-primary transition-all duration-200 hover:border-border-active hover:bg-glass-hover"
+                    onClick={() => onRetry(step.id)}
+                  >
                     Retry
                   </button>
                 ) : step.status === "blocked" ? (
@@ -265,7 +301,11 @@ export function RendersPage() {
 
           <SectionCard title="Per-scene execution matrix" subtitle="Retry decisions can stay scoped to the smallest broken unit">
             {activeRender.steps.length > 0 ? (
-              <RenderStepTable steps={activeRender.steps} onRetry={(id) => retryStep(id)} />
+              <RenderStepTable
+                projectId={project.id}
+                steps={activeRender.steps}
+                onRetry={(id) => retryStep(id)}
+              />
             ) : (
               <EmptyState
                 title="No active scene steps"

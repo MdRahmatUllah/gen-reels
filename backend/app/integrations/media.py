@@ -11,12 +11,52 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import re
+
 import httpx
 from PIL import Image, ImageDraw
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AdapterError
 from app.integrations.ffmpeg import FFmpegError, FFmpegRunner
+
+
+def _normalize_azure_endpoint(raw_endpoint: str) -> str:
+    """Normalize an Azure endpoint to just scheme://host.
+
+    Users often paste the full curl URL from Azure docs (including
+    /openai/deployments/…/images/generations?api-version=…) into the
+    endpoint field.  Strip the path *and* query string so the code can
+    append the correct path later without doubling it.
+    """
+    from urllib.parse import urlparse
+
+    endpoint = raw_endpoint.strip().rstrip("/")
+    parsed = urlparse(endpoint)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        path_q = f"{parsed.path or ''}?{parsed.query or ''}".lower()
+        if "/openai/" in path_q:
+            return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+        if parsed.path and parsed.path != "/":
+            match = re.match(
+                r"(https?://[^/]+)(/openai/.*)$",
+                endpoint,
+                re.IGNORECASE,
+            )
+            if match:
+                return match.group(1).rstrip("/")
+    return endpoint.rstrip("/")
+
+
+def _normalize_azure_api_version(raw: str | None) -> str:
+    """Strip accidental repeated ``api-version=`` prefixes from config or env."""
+    if not raw:
+        return ""
+    version = str(raw).strip().lstrip("?")
+    prefix = "api-version="
+    while version.lower().startswith(prefix):
+        version = version[len(prefix):].strip()
+    return version.strip()
 
 
 @dataclass
@@ -286,10 +326,12 @@ class AzureOpenAIImageProvider(ImageProvider):
         model: str | None = None,
     ) -> None:
         self.settings = settings
-        self.endpoint = endpoint or settings.azure_openai_endpoint
+        self.endpoint = _normalize_azure_endpoint(endpoint or settings.azure_openai_endpoint or "")
         self.api_key = api_key or settings.azure_openai_api_key
         self.deployment = deployment or settings.azure_openai_image_deployment
-        self.api_version = api_version or settings.azure_openai_image_api_version
+        self.api_version = _normalize_azure_api_version(
+            api_version or settings.azure_openai_image_api_version or ""
+        ) or (settings.azure_openai_image_api_version or "")
         self.model = model or settings.azure_openai_image_model
 
     def _fallback_generated_media(
@@ -332,7 +374,7 @@ class AzureOpenAIImageProvider(ImageProvider):
                 consistency_pack_state=consistency_pack_state,
             )
 
-        headers = {"api-key": self.api_key}
+        headers = {"api-key": self.api_key, "Authorization": f"Bearer {self.api_key}"}
         try:
             if reference_images:
                 url = (
@@ -341,7 +383,7 @@ class AzureOpenAIImageProvider(ImageProvider):
                 )
                 files = [
                     (
-                        "image[]",
+                        "image",
                         (
                             f"reference-{index + 1}.png",
                             reference.bytes_payload,
@@ -356,7 +398,7 @@ class AzureOpenAIImageProvider(ImageProvider):
                     data={
                         "prompt": prompt,
                         "model": self.model,
-                        "size": "1024x1536",
+                        "size": "1024x1024",
                         "n": "1",
                         "quality": "high",
                     },
@@ -374,7 +416,7 @@ class AzureOpenAIImageProvider(ImageProvider):
                     json={
                         "prompt": prompt,
                         "model": self.model,
-                        "size": "1024x1536",
+                        "size": "1024x1024",
                         "n": 1,
                         "quality": "high",
                     },
@@ -414,7 +456,7 @@ class AzureOpenAIImageProvider(ImageProvider):
                     "reference_asset_ids": [reference.asset_id for reference in reference_images],
                     "consistency_pack_state": consistency_pack_state or {},
                     "width": 1024,
-                    "height": 1536,
+                    "height": 1024,
                 },
             )
         except httpx.TimeoutException as exc:
@@ -557,10 +599,12 @@ class AzureOpenAISpeechProvider(SpeechProvider):
         default_voice: str | None = None,
     ) -> None:
         self.settings = settings
-        self.endpoint = endpoint or settings.azure_openai_endpoint
+        self.endpoint = _normalize_azure_endpoint(endpoint or settings.azure_openai_endpoint or "")
         self.api_key = api_key or settings.azure_openai_api_key
         self.deployment = deployment or settings.azure_openai_speech_deployment
-        self.api_version = api_version or settings.azure_openai_speech_api_version
+        self.api_version = _normalize_azure_api_version(
+            api_version or settings.azure_openai_speech_api_version or ""
+        ) or (settings.azure_openai_speech_api_version or "")
         self.model = model or settings.azure_openai_speech_model
         self.default_voice = default_voice or settings.azure_openai_speech_voice
 

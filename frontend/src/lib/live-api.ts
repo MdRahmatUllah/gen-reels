@@ -211,6 +211,13 @@ type BackendRenderStep = {
   error_message: string | null;
 };
 
+type BackendRenderAsset = {
+  id: string;
+  scene_segment_id: string | null;
+  asset_role: string;
+  download_url: string | null;
+};
+
 type BackendExport = {
   id: string;
   file_name: string;
@@ -232,9 +239,11 @@ type BackendRender = {
   allow_export_without_music: boolean;
   created_at: string;
   updated_at: string;
+  scene_plan_id: string | null;
   consistency_pack_id: string | null;
   voice_preset_id: string | null;
   steps: BackendRenderStep[];
+  assets: BackendRenderAsset[];
   exports: BackendExport[];
 };
 
@@ -808,17 +817,29 @@ function placeholderScenePlan(projectId: string): ScenePlanSet {
 }
 
 function mapRenderStep(step: BackendRenderStep): RenderStep {
+  const rawStatus = step.status;
+  const kind = step.step_kind;
+  let nextAction = step.error_message ?? "Monitor";
+  if (rawStatus === "failed") {
+    nextAction = "Retry step";
+  } else if (kind === "frame_pair_generation" && rawStatus === "review") {
+    nextAction = "Approve or regenerate start/end frames";
+  } else if (kind === "frame_pair_generation" && rawStatus === "approved") {
+    nextAction = "Frame pair approved";
+  }
   return {
     id: step.id,
     sceneId: step.scene_segment_id ?? step.id,
-    name: titleize(step.step_kind),
-    status: workflowStatus(step.status),
+    name: titleize(kind.replace(/_/g, " ")),
+    status: workflowStatus(rawStatus),
+    stepKind: kind,
+    backendStatus: rawStatus,
     durationDeltaSec: 0,
-    clipStatus: String(step.output_payload?.status ?? titleize(step.status)),
-    narrationStatus: step.step_kind.includes("audio") ? titleize(step.status) : "N/A",
+    clipStatus: String(step.output_payload?.status ?? titleize(rawStatus)),
+    narrationStatus: kind.includes("audio") ? titleize(rawStatus) : "N/A",
     consistency: step.error_message ? "needs review" : "stable",
-    nextAction: step.error_message ?? (step.status === "failed" ? "Retry step" : "Monitor"),
-    creditCost: step.status === "completed" ? 5 : undefined,
+    nextAction,
+    creditCost: rawStatus === "completed" ? 5 : undefined,
   };
 }
 
@@ -879,6 +900,7 @@ function renderProgress(render: BackendRender): number {
 }
 
 function mapRender(render: BackendRender, events: BackendRenderEvent[] = []): RenderJob {
+  const assets = render.assets ?? [];
   return {
     id: render.id,
     label: `Render ${new Date(render.created_at).toLocaleString()}`,
@@ -887,6 +909,13 @@ function mapRender(render: BackendRender, events: BackendRenderEvent[] = []): Re
     createdAt: render.created_at,
     updatedAt: render.updated_at,
     durationSec: (render.exports[0]?.duration_ms ?? 0) / 1000,
+    scenePlanId: render.scene_plan_id ?? null,
+    frameAssets: assets.map((a) => ({
+      id: a.id,
+      sceneSegmentId: a.scene_segment_id,
+      assetRole: a.asset_role,
+      downloadUrl: a.download_url,
+    })),
     transitionMode:
       render.payload.transition_mode === "crossfade" ? "crossfade" : "hard_cut",
     voicePreset: render.voice_preset_id ?? "Workspace default",
@@ -1606,6 +1635,32 @@ export async function liveRetryRenderStep(projectId: string, stepId: string): Pr
   const retried = await api.post<BackendRender>(`/renders/${owningRender.id}/steps/${stepId}:retry`);
   const events = await api.get<BackendRenderEvent[]>(`/renders/${retried.id}/events`).catch(() => []);
   return mapRender(retried, events);
+}
+
+export async function liveApproveFramePair(projectId: string, stepId: string): Promise<RenderJob> {
+  const renders = await api.get<BackendRender[]>(`/projects/${projectId}/renders`);
+  const owningRender = renders.find((render) => render.steps.some((step) => step.id === stepId));
+  if (!owningRender) {
+    throw new Error("Render step not found.");
+  }
+  const updated = await api.post<BackendRender>(
+    `/renders/${owningRender.id}/steps/${stepId}:approve-frame-pair`,
+  );
+  const events = await api.get<BackendRenderEvent[]>(`/renders/${updated.id}/events`).catch(() => []);
+  return mapRender(updated, events);
+}
+
+export async function liveRegenerateFramePair(projectId: string, stepId: string): Promise<RenderJob> {
+  const renders = await api.get<BackendRender[]>(`/projects/${projectId}/renders`);
+  const owningRender = renders.find((render) => render.steps.some((step) => step.id === stepId));
+  if (!owningRender) {
+    throw new Error("Render step not found.");
+  }
+  const updated = await api.post<BackendRender>(
+    `/renders/${owningRender.id}/steps/${stepId}:regenerate-frame-pair`,
+  );
+  const events = await api.get<BackendRenderEvent[]>(`/renders/${updated.id}/events`).catch(() => []);
+  return mapRender(updated, events);
 }
 
 export async function liveGetExports(projectId: string): Promise<ExportArtifact[]> {

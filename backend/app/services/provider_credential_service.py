@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 from uuid import UUID
@@ -62,6 +63,15 @@ class ProviderCredentialService:
 
     def _to_dict(self, credential: WorkspaceProviderCredential) -> dict[str, object]:
         validation = self._validation_metadata(credential.public_config)
+        validation_status = validation.get("status") or "not_validated"
+        last_validated_at = validation.get("last_validated_at")
+        last_validation_error = validation.get("last_validation_error")
+        if credential.secret_payload_encrypted:
+            try:
+                self._decrypt_secret_config(credential)
+            except ApiError as exc:
+                validation_status = "invalid"
+                last_validation_error = exc.message
         return {
             "id": credential.id,
             "workspace_id": credential.workspace_id,
@@ -76,9 +86,9 @@ class ProviderCredentialService:
             "created_at": credential.created_at,
             "updated_at": credential.updated_at,
             "secret_configured": bool(credential.secret_payload_encrypted),
-            "validation_status": validation.get("status") or "not_validated",
-            "last_validated_at": validation.get("last_validated_at"),
-            "last_validation_error": validation.get("last_validation_error"),
+            "validation_status": validation_status,
+            "last_validated_at": last_validated_at,
+            "last_validation_error": last_validation_error,
         }
 
     @staticmethod
@@ -201,8 +211,45 @@ class ProviderCredentialService:
         return response_text[:300] if response_text else f"Validation failed with HTTP {status_code}."
 
     @staticmethod
-    def _azure_endpoint(public_config: dict[str, object]) -> str:
-        return str(public_config.get("endpoint") or "").strip().rstrip("/")
+    def _normalize_azure_endpoint(raw_endpoint: str) -> str:
+        """Normalize an Azure endpoint to just scheme://host.
+
+        Users often paste the full curl URL from Azure docs (including
+        /openai/deployments/…/images/generations?api-version=…) into the
+        endpoint field.  Strip the path *and* query string so the code can
+        append the correct path later without doubling it.
+        """
+        endpoint = raw_endpoint.strip().rstrip("/")
+        parsed = urlparse(endpoint)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            # Include query: rare URLs could carry routing hints; any "/openai/"
+            # in path or query means this is a full REST URL, not a resource base.
+            path_q = f"{parsed.path or ''}?{parsed.query or ''}".lower()
+            if "/openai/" in path_q:
+                return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+            if parsed.path and parsed.path != "/":
+                match = re.match(
+                    r"(https?://[^/]+)(/openai/.*)$",
+                    endpoint,
+                    re.IGNORECASE,
+                )
+                if match:
+                    return match.group(1).rstrip("/")
+        return endpoint.rstrip("/")
+
+    @staticmethod
+    def _normalize_api_version(raw_version: str) -> str:
+        """Strip accidental 'api-version=' or '?api-version=' prefix."""
+        version = raw_version.strip().lstrip("?")
+        prefix = "api-version="
+        while version.lower().startswith(prefix):
+            version = version[len(prefix):].strip()
+        return version.strip()
+
+    def _azure_endpoint(self, public_config: dict[str, object]) -> str:
+        return self._normalize_azure_endpoint(
+            str(public_config.get("endpoint") or "")
+        )
 
     @staticmethod
     def _response_mentions_parameter(response: httpx.Response, parameter_name: str) -> bool:
@@ -226,7 +273,11 @@ class ProviderCredentialService:
     ) -> httpx.Response:
         return httpx.post(
             f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}",
-            headers={"api-key": api_key, "Content-Type": "application/json"},
+            headers={
+                "api-key": api_key,
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
             json={
                 "messages": [{"role": "user", "content": "Reply with ok."}],
                 "temperature": 0,
@@ -241,7 +292,7 @@ class ProviderCredentialService:
         secret_config: dict[str, object],
     ) -> tuple[str, str | None]:
         endpoint = self._azure_endpoint(public_config)
-        api_version = str(public_config.get("api_version") or "").strip()
+        api_version = self._normalize_api_version(str(public_config.get("api_version") or ""))
         deployment = str(public_config.get("deployment") or "").strip()
         api_key = str(secret_config.get("api_key") or "").strip()
         try:
@@ -292,13 +343,17 @@ class ProviderCredentialService:
         path: str,
     ) -> tuple[str, str | None]:
         endpoint = self._azure_endpoint(public_config)
-        api_version = str(public_config.get("api_version") or "").strip()
+        api_version = self._normalize_api_version(str(public_config.get("api_version") or ""))
         deployment = str(public_config.get("deployment") or "").strip()
         api_key = str(secret_config.get("api_key") or "").strip()
         try:
             response = httpx.post(
                 f"{endpoint}/openai/deployments/{deployment}/{path}?api-version={api_version}",
-                headers={"api-key": api_key, "Content-Type": "application/json"},
+                headers={
+                    "api-key": api_key,
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
                 json={},
                 timeout=20.0,
             )

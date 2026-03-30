@@ -10,6 +10,8 @@ import {
   liveStartRender,
   liveCancelRender,
   liveRetryRenderStep,
+  liveApproveFramePair,
+  liveRegenerateFramePair,
 } from "../lib/live-api";
 import { isMockMode } from "../lib/config";
 
@@ -21,7 +23,11 @@ export function useRenders(projectId: string) {
     // Poll every 2 seconds to simulate SSE updates when the UI is mounted
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (data && data.length > 0 && (data[0].status === "running" || data[0].status === "queued")) {
+      if (
+        data &&
+        data.length > 0 &&
+        (data[0].status === "running" || data[0].status === "queued" || data[0].status === "review")
+      ) {
         return 1500; // Fast 1.5s refresh for fluid UI
       }
       return false; // Stop polling on error, complete, or empty
@@ -58,6 +64,34 @@ export function useRetryRenderStep(projectId: string) {
       isMockMode() ? mockRetryRenderStep(projectId, stepId) : liveRetryRenderStep(projectId, stepId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });
+    },
+  });
+}
+
+export function useApproveFramePair(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (stepId: string) => {
+      if (isMockMode()) return;
+      await liveApproveFramePair(projectId, stepId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["renders", projectId] });
+      qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
+    },
+  });
+}
+
+export function useRegenerateFramePair(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (stepId: string) => {
+      if (isMockMode()) return;
+      await liveRegenerateFramePair(projectId, stepId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["renders", projectId] });
+      qc.invalidateQueries({ queryKey: ["scenePlan", projectId] });
     },
   });
 }

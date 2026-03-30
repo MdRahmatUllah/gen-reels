@@ -20,6 +20,7 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     task_routes={
+        "planning.bootstrap_project": {"queue": "planning"},
         "planning.generate_ideas": {"queue": "planning"},
         "planning.generate_script": {"queue": "planning"},
         "planning.generate_scene_plan": {"queue": "planning"},

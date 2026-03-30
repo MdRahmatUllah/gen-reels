@@ -38,6 +38,7 @@ def _error_payload(message: str, code: str, correlation_id: str | None) -> dict[
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    settings.app_encryption_key_resolved
     configure_logging()
     app.state.settings = settings
     app.state.redis = redis.Redis.from_url(settings.redis_url, decode_responses=True)

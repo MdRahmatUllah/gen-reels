@@ -190,7 +190,13 @@ class ContentPlanningService(GenerationService):
         estimated_voice_duration_seconds = int(
             raw_segment.get("estimated_voice_duration_seconds") or target_duration_seconds
         )
-        warnings = list(raw_segment.get("validation_warnings") or [])
+        raw_warnings = list(raw_segment.get("validation_warnings") or [])
+        warnings = []
+        for w in raw_warnings:
+            if isinstance(w, str):
+                warnings.append({"code": "llm_warning", "message": w})
+            elif isinstance(w, dict):
+                warnings.append(w)
         warnings.extend(self._segment_warnings(target_duration_seconds=target_duration_seconds))
         return {
             "scene_index": int(raw_segment.get("scene_index") or scene_index),
@@ -887,7 +893,14 @@ class ContentPlanningService(GenerationService):
             segment.visual_prompt = str(prompt_pair.get("visual_prompt") or segment.visual_prompt)
             segment.start_image_prompt = str(prompt_pair.get("start_image_prompt") or "")
             segment.end_image_prompt = str(prompt_pair.get("end_image_prompt") or "")
-            segment.validation_warnings = list(prompt_pair.get("validation_warnings") or segment.validation_warnings)
+            raw_warnings = list(prompt_pair.get("validation_warnings") or segment.validation_warnings)
+            parsed_warnings = []
+            for w in raw_warnings:
+                if isinstance(w, str):
+                    parsed_warnings.append({"code": "llm_warning", "message": w})
+                elif isinstance(w, dict):
+                    parsed_warnings.append(w)
+            segment.validation_warnings = parsed_warnings
 
         scene_plan.validation_warnings = self._scene_plan_warnings(
             total_duration_seconds=scene_plan.total_estimated_duration_seconds
