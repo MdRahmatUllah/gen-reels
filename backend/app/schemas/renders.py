@@ -11,6 +11,8 @@ from app.schemas.common import JobAcceptedResponse
 class RenderCreateRequest(BaseModel):
     scene_plan_id: str | None = None
     allow_export_without_music: bool = True
+    render_mode: str = "slide"
+    animation_profile: dict[str, object] = Field(default_factory=dict)
 
 
 class RenderStepResponse(BaseModel):

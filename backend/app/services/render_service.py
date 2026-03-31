@@ -118,16 +118,26 @@ class RenderService(GenerationService):
 
     def _get_scene_plan_for_render(self, project: Project, scene_plan_id: str | None) -> ScenePlan:
         resolved_scene_plan_id = scene_plan_id or (str(project.active_scene_plan_id) if project.active_scene_plan_id else None)
-        if not resolved_scene_plan_id:
-            raise ApiError(400, "scene_plan_required", "An approved scene plan is required before rendering.")
-        scene_plan = self.db.scalar(
-            select(ScenePlan).where(
-                ScenePlan.id == UUID(resolved_scene_plan_id),
-                ScenePlan.project_id == project.id,
+        if resolved_scene_plan_id:
+            scene_plan = self.db.scalar(
+                select(ScenePlan).where(
+                    ScenePlan.id == UUID(resolved_scene_plan_id),
+                    ScenePlan.project_id == project.id,
+                )
             )
-        )
+        else:
+            # Fall back to the most recently approved scene plan for this project
+            scene_plan = self.db.scalar(
+                select(ScenePlan)
+                .where(
+                    ScenePlan.project_id == project.id,
+                    ScenePlan.approval_state == "approved",
+                    ScenePlan.consistency_pack_id.isnot(None),
+                )
+                .order_by(ScenePlan.created_at.desc())
+            )
         if not scene_plan:
-            raise ApiError(404, "scene_plan_not_found", "Scene plan not found.")
+            raise ApiError(400, "scene_plan_required", "An approved scene plan with a consistency pack is required before rendering.")
         if scene_plan.approval_state != "approved":
             raise ApiError(
                 400,
@@ -286,7 +296,9 @@ class RenderService(GenerationService):
         return self.storage.presigned_get_url(asset.bucket_name, asset.object_name)
 
     def _export_download_url(self, export: ExportRecord) -> str | None:
-        if export.availability_status not in {"available", "released"}:
+        # Allow the workspace owner to download their export regardless of moderation hold.
+        # The hold only affects public distribution, not creator access.
+        if export.status != "completed":
             return None
         return self.storage.presigned_get_url(export.bucket_name, export.object_name)
 
@@ -1298,6 +1310,8 @@ class RenderService(GenerationService):
             "script_version_id": str(script.id),
             "consistency_pack_id": str(scene_plan.consistency_pack_id),
             "allow_export_without_music": payload.allow_export_without_music,
+            "render_mode": payload.render_mode,
+            "animation_profile": payload.animation_profile,
             "subtitle_style_profile": normalize_subtitle_style_profile(project.subtitle_style_profile),
             "export_profile": normalize_export_profile(project.export_profile),
             "audio_mix_profile": normalize_audio_mix_profile(project.audio_mix_profile),
@@ -3269,7 +3283,12 @@ class RenderService(GenerationService):
         )
         self.db.commit()
 
-        if self._run_frame_pair_stage(
+        render_mode = str((render_job.payload or {}).get("render_mode") or "slide")
+
+        # For slide mode, skip frame pair generation when all segments already have approved images.
+        # This allows a "Generate Video" render job to reuse previously approved frames.
+        segments_need_frames = render_mode != "slide" or not all(s.start_image_asset_id for s in segments)
+        if segments_need_frames and self._run_frame_pair_stage(
             render_job=render_job,
             project=project,
             scene_plan=scene_plan,
@@ -3279,8 +3298,6 @@ class RenderService(GenerationService):
             moderation_provider=resolved_moderation_provider,
         ):
             return
-
-        render_mode = str((render_job.payload or {}).get("render_mode") or "slide")
         animation_profile = dict((render_job.payload or {}).get("animation_profile") or {})
         animation_effect = str(animation_profile.get("effect") or "ken_burns")
 

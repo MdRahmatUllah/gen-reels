@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(find f:/my-projects/reels-generation/frontend/src -name Export* -o -name *export*)"
+    ]
+  }
+}

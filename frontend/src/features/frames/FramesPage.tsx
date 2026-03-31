@@ -21,6 +21,7 @@ import {
 } from "../../hooks/use-renders";
 import { useProviderExecutionPolicy } from "../../hooks/use-providers";
 import { QuickStartStatusBanner } from "../projects/quick-start";
+import { RenderSettingsModal } from "../renders/RenderSettingsModal";
 import type { RenderJob, RenderStep } from "../../types/domain";
 
 const AZURE_VOICES = [
@@ -267,6 +268,7 @@ export function FramesPage() {
 
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), []);
+  const [showVideoModal, setShowVideoModal] = useState(false);
 
   const speechConfigured =
     !!executionPolicy?.speech?.credentialId || executionPolicy?.speech?.mode === "hosted";
@@ -401,12 +403,22 @@ export function FramesPage() {
               {startRender.isPending ? "Starting…" : "New render"}
             </button>
           ) : allFramePairsApproved && activeRender.status !== "review" ? (
-            <Link
-              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent"
-              to={`/app/projects/${projectId}/renders`}
-            >
-              Open renders →
-            </Link>
+            <>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={startRender.isPending}
+                onClick={() => setShowVideoModal(true)}
+              >
+                {activeRender.status === "completed" ? "Regenerate Video →" : "Generate Video →"}
+              </button>
+              <Link
+                className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm bg-glass border border-border-subtle text-primary hover:border-border-active"
+                to={`/app/projects/${projectId}/renders`}
+              >
+                Open renders
+              </Link>
+            </>
           ) : null}
         </div>
       }
@@ -628,6 +640,17 @@ export function FramesPage() {
       {lightbox ? (
         <FrameLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
       ) : null}
+
+      {showVideoModal && (
+        <RenderSettingsModal
+          onClose={() => setShowVideoModal(false)}
+          onConfirm={(settings) => {
+            startRender.mutate(settings);
+            setShowVideoModal(false);
+          }}
+          isStarting={startRender.isPending}
+        />
+      )}
     </PageFrame>
   );
 }

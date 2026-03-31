@@ -7,7 +7,7 @@ import {
   EmptyState,
   LoadingPage,
 } from "../../components/ui";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useProject } from "../../hooks/use-projects";
 import { useStudioUiStore } from "../../state/ui-store";
 import {
@@ -284,13 +284,21 @@ export function RendersPage() {
                 src={activeRender.exportUrl}
                 style={{ width: "100%", maxWidth: "360px", borderRadius: "12px", display: "block" }}
               />
-              <a
-                href={activeRender.exportUrl}
-                download="export.mp4"
-                className="inline-flex items-center gap-2 mt-3 rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-on-accent shadow-sm hover:shadow-accent"
-              >
-                Download MP4
-              </a>
+              <div className="flex flex-wrap items-center gap-3 mt-3">
+                <a
+                  href={activeRender.exportUrl}
+                  download="export.mp4"
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-on-accent shadow-sm hover:shadow-accent"
+                >
+                  Download MP4
+                </a>
+                <Link
+                  to={`/app/projects/${project.id}/exports`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border-subtle bg-glass px-4 py-2 text-sm font-semibold text-primary hover:border-border-active hover:bg-glass-hover"
+                >
+                  Open exports →
+                </Link>
+              </div>
             </SectionCard>
           )}
 

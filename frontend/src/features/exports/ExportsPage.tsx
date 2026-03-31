@@ -4,7 +4,6 @@ import {
   SectionCard,
   StatusBadge,
   MetricCard,
-  MediaFrame,
   EmptyState,
   LoadingPage,
 } from "../../components/ui";
@@ -19,25 +18,43 @@ function formatDuration(sec: number) {
   return `${m}m ${s < 10 ? "0" : ""}${s}s`;
 }
 
+function isVideoUrl(url: string) {
+  return url.startsWith("http") || url.startsWith("/");
+}
+
 function ExportCard({ artifact }: { artifact: ExportArtifact }) {
   return (
     <div className="artifact-card">
-      <MediaFrame
-        label={artifact.name}
-        meta={`${artifact.ratio} · ${artifact.format}`}
-        gradient={artifact.gradient}
-      />
+      {isVideoUrl(artifact.destination) ? (
+        <video
+          controls
+          playsInline
+          src={artifact.destination}
+          style={{ width: "100%", borderRadius: "10px", display: "block", background: "#000" }}
+        />
+      ) : (
+        <div className="h-32 rounded-lg border border-border-subtle bg-glass/50 flex items-center justify-center text-xs text-muted">
+          {artifact.format}
+        </div>
+      )}
       <div className="artifact-card__meta">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={artifact.status} />
           <span>{formatDuration(artifact.durationSec)}</span>
-          <span>{artifact.sizeMb} MB</span>
         </div>
-        <strong>{artifact.destination}</strong>
         <p>
           {artifact.subtitles ? "Subtitles on" : "Subtitles off"} ·{" "}
           {artifact.musicBed ? "Music bed on" : "Music bed off"}
         </p>
+        {isVideoUrl(artifact.destination) && (
+          <a
+            href={artifact.destination}
+            download="export.mp4"
+            className="inline-flex items-center gap-1.5 mt-1 rounded-lg bg-accent-gradient px-3 py-1.5 text-xs font-semibold text-on-accent shadow-sm hover:shadow-accent"
+          >
+            Download MP4
+          </a>
+        )}
       </div>
     </div>
   );
@@ -123,12 +140,27 @@ export function ExportsPage() {
         <>
           <SectionCard className="surface-card--hero" title={latestExport.name} subtitle="Latest master output">
             <div className="hero-grid">
-              <MediaFrame
-                label={latestExport.name}
-                meta={`${latestExport.ratio} · ${latestExport.format}`}
-                gradient={latestExport.gradient}
-                aspect="wide"
-              />
+              {isVideoUrl(latestExport.destination) ? (
+                <div className="flex flex-col gap-3">
+                  <video
+                    controls
+                    playsInline
+                    src={latestExport.destination}
+                    style={{ width: "100%", maxWidth: "360px", borderRadius: "12px", display: "block", background: "#000" }}
+                  />
+                  <a
+                    href={latestExport.destination}
+                    download="export.mp4"
+                    className="inline-flex items-center gap-2 rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-on-accent shadow-sm hover:shadow-accent self-start"
+                  >
+                    Download MP4
+                  </a>
+                </div>
+              ) : (
+                <div className="h-48 rounded-xl border border-border-subtle bg-glass/50 flex items-center justify-center text-sm text-muted">
+                  Processing…
+                </div>
+              )}
               <div className="metric-column">
                 <MetricCard label="Duration" value={formatDuration(latestExport.durationSec)} detail="Final export length" tone="primary" />
                 <MetricCard label="File size" value={`${latestExport.sizeMb} MB`} detail="Fast-start optimized" tone="neutral" />
