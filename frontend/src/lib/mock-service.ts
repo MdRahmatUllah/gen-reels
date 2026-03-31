@@ -1841,7 +1841,7 @@ export async function mockStartRender(
     }
     return {
       id: nextId("step"),
-      sceneId: `Scene ${i + 1}`,
+      sceneId: scene.id,
       name: scene.shotType || "Shot",
       status: "draft" as const,
       durationDeltaSec: 0,
@@ -1919,6 +1919,22 @@ export async function renderSimulatorLoop(projectId: string, jobId?: string) {
     const step = job.steps[i];
     
     if (shouldStop()) return;
+
+    if (
+      job.isVideoGeneration &&
+      step.status === "completed" &&
+      step.clipStatus === "Rendered" &&
+      step.narrationStatus === "Aligned"
+    ) {
+      pushEvent(
+        "Scene reused",
+        `Scene ${i + 1}: using existing frames and voiceover — skipping regeneration`,
+        "success",
+      );
+      job.progress = Math.max(job.progress, Math.floor(((i + 1) / totalSteps) * 100) - 2);
+      state.renderJobs.set(projectId, { ...job });
+      continue;
+    }
     
     // 1. Image Generation
     await new Promise(r => setTimeout(r, TICK_MS));

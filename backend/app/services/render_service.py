@@ -352,6 +352,81 @@ class RenderService(GenerationService):
             query = query.where(Asset.scene_segment_id == scene_segment_id)
         return self.db.scalar(query.order_by(Asset.created_at.desc()))
 
+    def _find_reusable_narration_asset(
+        self,
+        *,
+        render_job: RenderJob,
+        segment: SceneSegment,
+    ) -> Asset | None:
+        """Reuse narration audio from a prior render when narration text is unchanged."""
+        text = (segment.narration_text or "").strip()
+        if not text:
+            return None
+        entry = self.db.scalar(
+            select(PromptHistoryEntry)
+            .where(
+                PromptHistoryEntry.scene_segment_id == segment.id,
+                PromptHistoryEntry.prompt_role == "narration_generation",
+                PromptHistoryEntry.prompt_text == text,
+                PromptHistoryEntry.render_job_id != render_job.id,
+                PromptHistoryEntry.asset_id.isnot(None),
+            )
+            .order_by(PromptHistoryEntry.created_at.desc())
+            .limit(1)
+        )
+        if not entry or not entry.asset_id:
+            return None
+        asset = self.db.get(Asset, entry.asset_id)
+        if (
+            not asset
+            or asset.asset_role != AssetRole.narration_track
+            or asset.status != "completed"
+            or asset.deleted_at is not None
+        ):
+            return None
+        return asset
+
+    def _find_reusable_slide_asset(
+        self,
+        *,
+        render_job: RenderJob,
+        segment: SceneSegment,
+        narration_asset: Asset,
+        animation_effect: str,
+    ) -> Asset | None:
+        """Reuse slide clip from a prior render when frames, effect, and narration duration match."""
+        if not segment.start_image_asset_id or not segment.end_image_asset_id:
+            return None
+        target_ms = int(narration_asset.duration_ms or 0) or int(segment.target_duration_seconds * 1000)
+        start_id = str(segment.start_image_asset_id)
+        end_id = str(segment.end_image_asset_id)
+        candidates = self.db.scalars(
+            select(Asset)
+            .where(
+                Asset.project_id == render_job.project_id,
+                Asset.scene_segment_id == segment.id,
+                Asset.asset_role == AssetRole.retimed_video_clip,
+                Asset.render_job_id != render_job.id,
+                Asset.status == "completed",
+                Asset.deleted_at.is_(None),
+            )
+            .order_by(Asset.created_at.desc())
+            .limit(20)
+        ).all()
+        for asset in candidates:
+            meta = dict(asset.metadata_payload or {})
+            if str(meta.get("animation_effect") or "") != animation_effect:
+                continue
+            if str(meta.get("start_image_asset_id") or "") != start_id:
+                continue
+            if str(meta.get("end_image_asset_id") or "") != end_id:
+                continue
+            old_target = int(meta.get("target_duration_ms") or 0)
+            if old_target and target_ms and abs(old_target - target_ms) > 400:
+                continue
+            return asset
+        return None
+
     def _set_step_running(self, step: RenderStep) -> None:
         step.status = JobStatus.running
         step.error_code = None
@@ -1553,6 +1628,16 @@ class RenderService(GenerationService):
             started_at=started,
             response_payload={"asset_id": str(narration_asset.id)},
         )
+        self._record_prompt_history(
+            render_job=render_job,
+            render_step=step,
+            scene_segment=segment,
+            provider_run=provider_run,
+            asset=narration_asset,
+            prompt_role="narration_generation",
+            prompt_text=segment.narration_text,
+            metadata_payload={"scene_index": segment.scene_index},
+        )
         self._complete_step(step, output_payload={"asset_id": str(narration_asset.id)})
         segment.actual_voice_duration_seconds = max(1, int((narration_asset.duration_ms or 0) / 1000))
         self.db.commit()
@@ -2583,6 +2668,17 @@ class RenderService(GenerationService):
             self.db.commit()
             return None
 
+        if step.status == JobStatus.queued:
+            reusable = self._find_reusable_narration_asset(render_job=render_job, segment=segment)
+            if reusable is not None:
+                self._complete_step(
+                    step,
+                    output_payload={"asset_id": str(reusable.id), "reused_from_prior_render": True},
+                )
+                segment.actual_voice_duration_seconds = max(1, int((reusable.duration_ms or 0) / 1000))
+                self.db.flush()
+                return reusable
+
         self._set_step_running(step)
         resolved_speech_provider, routing_decision = self._speech_provider_and_decision(
             step,
@@ -2817,6 +2913,28 @@ class RenderService(GenerationService):
             )
             if existing_asset:
                 return existing_asset
+
+        if step.status == JobStatus.queued:
+            reusable_slide = self._find_reusable_slide_asset(
+                render_job=render_job,
+                segment=segment,
+                narration_asset=narration_asset,
+                animation_effect=animation_effect,
+            )
+            if reusable_slide is not None:
+                self._complete_step(
+                    step,
+                    output_payload={"asset_id": str(reusable_slide.id), "reused_from_prior_render": True},
+                )
+                self._append_render_event(
+                    render_job=render_job,
+                    event_type="render.scene_slide_reused",
+                    target_type="render_step",
+                    target_id=str(step.id),
+                    render_step_id=step.id,
+                    payload={"scene_index": segment.scene_index, "animation_effect": animation_effect},
+                )
+                return reusable_slide
 
         self._set_step_running(step)
 
@@ -3300,9 +3418,10 @@ class RenderService(GenerationService):
 
         render_mode = str((render_job.payload or {}).get("render_mode") or "slide")
 
-        # For slide mode, skip frame pair generation when all segments already have approved images.
-        # This allows a "Generate Video" render job to reuse previously approved frames.
-        segments_need_frames = render_mode != "slide" or not all(s.start_image_asset_id for s in segments)
+        # For slide mode, skip frame pair generation when every segment already has approved start+end frames.
+        segments_need_frames = render_mode != "slide" or not all(
+            s.start_image_asset_id and s.end_image_asset_id for s in segments
+        )
         if segments_need_frames and self._run_frame_pair_stage(
             render_job=render_job,
             project=project,
