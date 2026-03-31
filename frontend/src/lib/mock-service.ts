@@ -4,6 +4,7 @@
  * This is the remaining explicit mock-mode adapter after retiring the old mock-api layer.
  */
 import type {
+  AlertItem,
   AuthSession,
   ProviderCredentialInput,
   ProviderCredentialRecord,
@@ -12,6 +13,7 @@ import type {
   BriefData,
   CreateProjectPayload,
   DashboardData,
+  HealthTone,
   IdeaCandidate,
   IdeaSet,
   LoginCredentials,
@@ -1114,14 +1116,50 @@ export async function mockGetShellData(): Promise<ShellData> {
     return liveGetShellData();
   }
   await randomDelay(100, 300);
+  const ws = state.workspaces[0];
+  const creditPct = Math.round((ws.creditsRemaining / ws.creditsTotal) * 100);
+  const creditTone = creditPct > 50 ? "success" : creditPct > 20 ? "warning" : "error";
+  const activeRenders = Array.from(state.renderJobs.values()).filter((j) => j.status === "running");
+
+  const alerts: AlertItem[] = [
+    { id: "a1", label: "Queue healthy", detail: "All workers responsive, no stuck jobs", tone: "success" as const },
+    { id: "a2", label: `Credits at ${creditPct}%`, detail: `${ws.creditsRemaining} of ${ws.creditsTotal} credits remaining this cycle`, tone: creditTone as HealthTone },
+  ];
+
+  if (activeRenders.length > 0) {
+    alerts.push({
+      id: "a3",
+      label: `${activeRenders.length} render${activeRenders.length > 1 ? "s" : ""} in progress`,
+      detail: `Active pipeline${activeRenders.length > 1 ? "s" : ""} processing scenes`,
+      tone: "primary",
+    });
+  }
+
+  const failedRenders = Array.from(state.renderJobs.values()).filter((j) => j.status === "failed");
+  if (failedRenders.length > 0) {
+    alerts.push({
+      id: "a4",
+      label: `${failedRenders.length} render${failedRenders.length > 1 ? "s" : ""} need attention`,
+      detail: "Review failed steps and retry or create a new render",
+      tone: "error",
+    });
+  }
+
+  const totalExports = Array.from(state.exports.values()).reduce((sum, e) => sum + e.length, 0);
+  if (totalExports > 0) {
+    alerts.push({
+      id: "a5",
+      label: `${totalExports} video${totalExports > 1 ? "s" : ""} ready`,
+      detail: "Exported videos available for download",
+      tone: "success",
+    });
+  }
+
   return {
     user: state.user,
     workspaces: state.workspaces,
     projects: Array.from(state.projects.values()),
-    alerts: [
-      { id: "a1", label: "Queue healthy", detail: "All workers responsive, no stuck jobs", tone: "success" },
-      { id: "a2", label: "Credits at 70%", detail: `${state.workspaces[0].creditsRemaining} credits remaining this cycle`, tone: "warning" },
-    ],
+    alerts,
   };
 }
 

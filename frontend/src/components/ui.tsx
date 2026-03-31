@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -13,6 +13,7 @@ import { useTheme } from "../lib/theme";
 import { formatDuration, formatPercent, titleFromStatus } from "../lib/format";
 import { useStudioUiStore } from "../state/ui-store";
 import type {
+  AlertItem,
   HealthTone,
   ProjectSummary,
   ScenePlan,
@@ -185,6 +186,83 @@ function findActiveWorkspace(workspaces: WorkspaceSummary[], workspaceId: string
 function getCurrentWorkflowStep(pathname: string): string | undefined {
   const match = pathname.match(/^\/app\/projects\/[^/]+\/([^/]+)/);
   return match?.[1];
+}
+
+/* ─── Notification Dropdown ────────────────────────────────────────────────── */
+function NotificationDropdown({ alerts }: { alerts: AlertItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const dismiss = useCallback((id: string) => {
+    void id;
+  }, []);
+
+  const unreadCount = alerts.length;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        className="relative flex items-center gap-2 rounded-full border border-border-card bg-glass px-3 py-1 text-xs text-secondary hover:border-border-active transition-colors cursor-pointer"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-label={`Notifications – ${unreadCount} alerts`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-error text-[0.6rem] font-bold text-white">
+            {unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-border-card bg-surface shadow-lg z-50 overflow-hidden animate-fade-in-up">
+          <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted">Notifications</h3>
+            <span className="text-[0.7rem] text-secondary">{unreadCount} alert{unreadCount !== 1 ? "s" : ""}</span>
+          </div>
+          {alerts.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-muted">No notifications</div>
+          ) : (
+            <div className="max-h-72 overflow-y-auto">
+              {alerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className="flex items-start gap-3 px-4 py-3 border-b border-border-subtle last:border-b-0 hover:bg-glass/60 transition-colors"
+                >
+                  <span className={toneClassName(alert.tone)} />
+                  <div className="flex-1 min-w-0">
+                    <strong className="block text-[0.8rem] font-semibold text-primary leading-tight">{alert.label}</strong>
+                    <p className="text-[0.75rem] text-secondary leading-snug mt-0.5">{alert.detail}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 text-muted hover:text-primary transition-colors text-xs mt-0.5"
+                    aria-label={`Dismiss ${alert.label}`}
+                    onClick={() => dismiss(alert.id)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ─── Shell Layout ────────────────────────────────────────────────────────── */
@@ -369,21 +447,6 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
           </>
         )}
 
-        {/* Recent signals */}
-        <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-glass p-3">
-          <p className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">Recent signals</p>
-          <div className="flex flex-col gap-3 mt-2">
-            {data.alerts.map((alert) => (
-              <div className="flex gap-3 items-start" key={alert.id}>
-                <span className={toneClassName(alert.tone)} />
-                <div>
-                  <strong className="text-[0.85rem] font-semibold text-primary">{alert.label}</strong>
-                  <p className="text-[0.8rem] text-secondary leading-snug">{alert.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative no-scrollbar">
@@ -405,10 +468,7 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
               <span>Queue</span>
               <strong className="text-primary font-semibold">{activeWorkspace.queueCount} active</strong>
             </div>
-            <div className="flex items-center gap-2 rounded-full border border-border-card bg-glass px-3 py-1 text-xs text-secondary hover:border-border-active transition-colors cursor-default">
-              <span>Alerts</span>
-              <strong className="text-primary font-semibold">{activeWorkspace.notifications}</strong>
-            </div>
+            <NotificationDropdown alerts={data.alerts} />
             <div className="flex items-center gap-2 pl-3 border-l border-border-subtle py-1">
               <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent-gradient text-xs font-bold text-on-accent shadow-accent" aria-hidden="true">{data.user.avatarInitials}</span>
               <div className="flex flex-col">

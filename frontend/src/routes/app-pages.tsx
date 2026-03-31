@@ -258,20 +258,6 @@ export function DashboardPage() {
       }
       inspector={
         <div className="inspector-stack">
-          <SectionCard title="Studio alerts">
-            <div className="flex flex-col gap-3">
-              {data.notifications.map((alert) => (
-                <div className="flex gap-3 items-start" key={alert.id}>
-                  <span className={`tone-pill tone-pill--${alert.tone}`} />
-                  <div>
-                    <strong>{alert.label}</strong>
-                    <p>{alert.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-
           <SectionCard title="Queue pulse">
             <div className="metric-column">
               {data.queueOverview.map((metric) => (
