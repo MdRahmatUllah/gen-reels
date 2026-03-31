@@ -1576,11 +1576,11 @@ export async function mockRetryRenderStep(projectId: string, stepId: string): Pr
 
 // Spawns the SSE Simulator
 export async function mockStartRender(
-  projectId: string, 
-  settings?: { subtitleStyle?: string; musicDucking?: string; musicTrack?: string }
+  projectId: string,
+  settings?: { subtitleStyle?: string; musicDucking?: string; musicTrack?: string; animationEffect?: string }
 ): Promise<RenderJob> {
   if (!isMockMode()) {
-    return liveStartRender(projectId, settings as { subtitleStyle: string; musicDucking: string; musicTrack: string } | undefined);
+    return liveStartRender(projectId, settings as { subtitleStyle: string; musicDucking: string; musicTrack: string; animationEffect: string } | undefined);
   }
   await randomDelay(300, 600);
   const planSet = state.scenePlanSets.get(projectId);
@@ -1617,6 +1617,7 @@ export async function mockStartRender(
     nextAction: "Initializing pipelines...",
     musicTrack: settings?.musicTrack || "Ambient Corporate 1",
     allowExportWithoutMusic: false,
+    exportUrl: null,
     checks: [
       { id: "c1", label: "Consistency pack provenance", status: "pass", detail: "All clips reference locked snapshot." },
     ],

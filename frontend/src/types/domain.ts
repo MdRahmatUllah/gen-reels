@@ -324,6 +324,8 @@ export interface RenderJob {
   /** Set when the render job failed */
   errorCode?: string | null;
   errorMessage?: string | null;
+  /** Presigned download URL for the final export MP4, when render is completed */
+  exportUrl: string | null;
   frameAssets?: RenderFrameAssetRef[];
   checks: RenderCheck[];
   steps: RenderStep[];

@@ -276,6 +276,24 @@ export function RendersPage() {
         <>
           <RenderSummaryCard render={activeRender} />
 
+          {activeRender.status === "completed" && activeRender.exportUrl && (
+            <SectionCard title="Export preview">
+              <video
+                controls
+                playsInline
+                src={activeRender.exportUrl}
+                style={{ width: "100%", maxWidth: "360px", borderRadius: "12px", display: "block" }}
+              />
+              <a
+                href={activeRender.exportUrl}
+                download="export.mp4"
+                className="inline-flex items-center gap-2 mt-3 rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-on-accent shadow-sm hover:shadow-accent"
+              >
+                Download MP4
+              </a>
+            </SectionCard>
+          )}
+
           <div className="content-grid content-grid--equal">
             <SectionCard title="Composition gate" subtitle="Mirrors the checks defined in the composition and A/V consistency architecture">
               <div className="check-list">

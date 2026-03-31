@@ -44,6 +44,7 @@ app/integrations/ffmpeg.py
 app/integrations/media.py
 app/integrations/media_ops.py
 app/integrations/storage.py
+app/integrations/third_party.py
 app/models/__init__.py
 app/models/entities.py
 app/schemas/__init__.py
@@ -85,7 +86,9 @@ app/services/presenters.py
 app/services/preset_service.py
 app/services/project_profiles.py
 app/services/project_service.py
+app/services/provider_capabilities.py
 app/services/provider_credential_service.py
+app/services/quick_start_service.py
 app/services/render_service.py
 app/services/review_service.py
 app/services/routing_service.py
@@ -102,6 +105,7 @@ app/tests/test_phase4_reliability_and_billing.py
 app/tests/test_phase5_polish_and_creator_productivity.py
 app/tests/test_phase6_collaboration_and_studio.py
 app/tests/test_phase7_local_and_byo_expansion.py
+app/tests/test_phase8_quick_start.py
 app/tests/test_projects.py
 app/workers/__init__.py
 app/workers/celery_app.py

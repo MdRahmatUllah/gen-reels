@@ -14,6 +14,7 @@ from app.core.errors import AdapterError, ApiError
 from app.integrations.azure import ModerationProvider
 from app.integrations.media_ops import (
     compose_reel_export,
+    create_slide_clip_from_images,
     probe_media_bytes,
     retime_video_to_target,
     strip_audio_from_video,
@@ -2766,6 +2767,106 @@ class RenderService(GenerationService):
         )
         return retimed_asset
 
+    def _run_slide_generation_stage(
+        self,
+        *,
+        render_job: RenderJob,
+        segment: SceneSegment,
+        narration_asset: Asset,
+        animation_effect: str,
+    ) -> Asset:
+        step = self._get_or_create_step(
+            render_job,
+            step_kind=StepKind.video_generation,
+            step_index=1000 + segment.scene_index,
+            scene_segment_id=segment.id,
+            input_payload={
+                "scene_index": segment.scene_index,
+                "mode": "slide",
+                "animation_effect": animation_effect,
+            },
+        )
+        if step.status == JobStatus.completed:
+            existing_asset = self._latest_asset(
+                render_job.id,
+                asset_role=AssetRole.retimed_video_clip,
+                scene_segment_id=segment.id,
+            )
+            if existing_asset:
+                return existing_asset
+
+        self._set_step_running(step)
+
+        start_asset = self.db.get(Asset, segment.start_image_asset_id) if segment.start_image_asset_id else None
+        end_asset = self.db.get(Asset, segment.end_image_asset_id) if segment.end_image_asset_id else None
+        if not start_asset or not end_asset:
+            error = AdapterError(
+                "deterministic_input",
+                "frame_pair_assets_missing",
+                "Scene start and end frames are required for slide generation.",
+            )
+            self._fail_step(step, error)
+            raise error
+
+        target_duration_ms = int(narration_asset.duration_ms or 0) or int(segment.target_duration_seconds * 1000)
+
+        start_bytes = self.storage.read_bytes(start_asset.bucket_name, start_asset.object_name)
+        end_bytes = self.storage.read_bytes(end_asset.bucket_name, end_asset.object_name)
+
+        slide_bytes, slide_metadata = create_slide_clip_from_images(
+            self.settings,
+            start_frame_bytes=start_bytes,
+            end_frame_bytes=end_bytes,
+            target_duration_ms=target_duration_ms,
+            animation_effect=animation_effect,
+        )
+
+        is_fallback = slide_metadata.get("fallback_format") == "json"
+        content_type = "application/json" if is_fallback else "video/mp4"
+        file_ext = "json" if is_fallback else "mp4"
+
+        generated = GeneratedMedia(
+            provider_name="internal_slide_generator",
+            provider_model="ffmpeg-slide-v1",
+            content_type=content_type,
+            file_extension=file_ext,
+            bytes_payload=slide_bytes,
+            metadata={
+                **slide_metadata,
+                "scene_index": segment.scene_index,
+                "start_image_asset_id": str(start_asset.id),
+                "end_image_asset_id": str(end_asset.id),
+                "target_duration_ms": target_duration_ms,
+            },
+        )
+
+        slide_asset = self._store_generated_asset(
+            render_job=render_job,
+            render_step=step,
+            scene_segment=segment,
+            generated_media=generated,
+            bucket_name=self.settings.minio_bucket_assets,
+            object_name=(
+                f"{self._scene_object_prefix(render_job, segment.scene_index)}/videos/slide.{file_ext}"
+            ),
+            file_name=f"scene-{segment.scene_index:02d}-slide.{file_ext}",
+            asset_type=AssetType.video_clip,
+            asset_role=AssetRole.retimed_video_clip,
+            has_audio_stream=False,
+            source_audio_policy="request_silent",
+        )
+
+        self._complete_step(step, output_payload={"asset_id": str(slide_asset.id), "mode": "slide"})
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.scene_slide_completed",
+            target_type="render_step",
+            target_id=str(step.id),
+            render_step_id=step.id,
+            payload={"scene_index": segment.scene_index, "animation_effect": animation_effect},
+        )
+        return slide_asset
+
     def _run_music_stage(
         self,
         *,
@@ -3179,39 +3280,63 @@ class RenderService(GenerationService):
         ):
             return
 
+        render_mode = str((render_job.payload or {}).get("render_mode") or "slide")
+        animation_profile = dict((render_job.payload or {}).get("animation_profile") or {})
+        animation_effect = str(animation_profile.get("effect") or "ken_burns")
+
         retimed_assets: list[Asset] = []
         narration_assets: list[Asset] = []
-        for segment in segments:
-            raw_asset = self._run_video_stage(
-                render_job=render_job,
-                project=project,
-                segment=segment,
-                video_provider=video_provider,
-                moderation_provider=resolved_moderation_provider,
-            )
-            if raw_asset is None:
-                return
-            silent_asset = self._run_audio_normalization_stage(
-                render_job=render_job,
-                segment=segment,
-                raw_asset=raw_asset,
-            )
-            narration_asset = self._run_narration_stage(
-                render_job=render_job,
-                segment=segment,
-                speech_provider=speech_provider,
-                voice_preset_snapshot=voice_preset_snapshot,
-            )
-            if narration_asset is None:
-                return
-            retimed_asset = self._run_retime_stage(
-                render_job=render_job,
-                segment=segment,
-                silent_asset=silent_asset,
-                narration_asset=narration_asset,
-            )
-            retimed_assets.append(retimed_asset)
-            narration_assets.append(narration_asset)
+
+        if render_mode == "slide":
+            for segment in segments:
+                narration_asset = self._run_narration_stage(
+                    render_job=render_job,
+                    segment=segment,
+                    speech_provider=speech_provider,
+                    voice_preset_snapshot=voice_preset_snapshot,
+                )
+                if narration_asset is None:
+                    return
+                slide_asset = self._run_slide_generation_stage(
+                    render_job=render_job,
+                    segment=segment,
+                    narration_asset=narration_asset,
+                    animation_effect=animation_effect,
+                )
+                retimed_assets.append(slide_asset)
+                narration_assets.append(narration_asset)
+        else:
+            for segment in segments:
+                raw_asset = self._run_video_stage(
+                    render_job=render_job,
+                    project=project,
+                    segment=segment,
+                    video_provider=video_provider,
+                    moderation_provider=resolved_moderation_provider,
+                )
+                if raw_asset is None:
+                    return
+                silent_asset = self._run_audio_normalization_stage(
+                    render_job=render_job,
+                    segment=segment,
+                    raw_asset=raw_asset,
+                )
+                narration_asset = self._run_narration_stage(
+                    render_job=render_job,
+                    segment=segment,
+                    speech_provider=speech_provider,
+                    voice_preset_snapshot=voice_preset_snapshot,
+                )
+                if narration_asset is None:
+                    return
+                retimed_asset = self._run_retime_stage(
+                    render_job=render_job,
+                    segment=segment,
+                    silent_asset=silent_asset,
+                    narration_asset=narration_asset,
+                )
+                retimed_assets.append(retimed_asset)
+                narration_assets.append(narration_asset)
 
         total_duration_seconds = max(1, sum((asset.duration_ms or 0) for asset in narration_assets) // 1000)
         music_asset = self._run_music_stage(

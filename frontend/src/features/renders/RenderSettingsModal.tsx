@@ -6,6 +6,7 @@ interface RenderSettingsModalProps {
     subtitleStyle: string;
     musicDucking: string;
     musicTrack: string;
+    animationEffect: string;
   }) => void;
   isStarting: boolean;
 }
@@ -21,6 +22,7 @@ export function RenderSettingsModal({
   const [subtitleStyle, setSubtitleStyle] = useState("Karaoke Bold");
   const [musicDucking, setMusicDucking] = useState("-12 dB");
   const [musicTrack, setMusicTrack] = useState("Ambient Corporate 1");
+  const [animationEffect, setAnimationEffect] = useState("ken_burns");
 
   return (
     <div className="modal-backdrop">
@@ -34,6 +36,23 @@ export function RenderSettingsModal({
         </div>
 
         <div className="mt-5 flex flex-col gap-4">
+          <div className="form-field">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Animation Effect
+            </label>
+            <select
+              className={selectClassName}
+              value={animationEffect}
+              onChange={(event) => setAnimationEffect(event.target.value)}
+            >
+              <option value="ken_burns">Ken Burns (Zoom In + Out)</option>
+              <option value="zoom_in">Zoom In</option>
+              <option value="zoom_out">Zoom Out</option>
+              <option value="pan_left">Pan Left</option>
+              <option value="pan_right">Pan Right</option>
+            </select>
+          </div>
+
           <div className="form-field">
             <label className="text-xs font-semibold uppercase tracking-wider text-muted">
               Subtitle Style
@@ -91,7 +110,7 @@ export function RenderSettingsModal({
           </button>
           <button
             className="inline-flex items-center justify-center rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-on-accent shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-accent disabled:opacity-60"
-            onClick={() => onConfirm({ subtitleStyle, musicDucking, musicTrack })}
+            onClick={() => onConfirm({ subtitleStyle, musicDucking, musicTrack, animationEffect })}
             disabled={isStarting}
             type="button"
           >

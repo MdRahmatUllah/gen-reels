@@ -192,6 +192,151 @@ def retime_video_to_target(
         }
 
 
+_SLIDE_EFFECTS: dict[str, dict[str, str]] = {
+    "ken_burns": {
+        "start": "z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+        "end": "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+    },
+    "zoom_in": {
+        "start": "z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+        "end": "z='1.0':x='0':y='0'",
+    },
+    "zoom_out": {
+        "start": "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+        "end": "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+    },
+    "pan_left": {
+        "start": "z='1.15':x='iw*0.12*(on/max({p},1))':y='ih/2-(ih/zoom/2)'",
+        "end": "z='1.15':x='iw*0.12*(on/max({p},1))':y='ih/2-(ih/zoom/2)'",
+    },
+    "pan_right": {
+        "start": "z='1.15':x='iw*0.12*(1-(on/max({p},1)))':y='ih/2-(ih/zoom/2)'",
+        "end": "z='1.15':x='iw*0.12*(1-(on/max({p},1)))':y='ih/2-(ih/zoom/2)'",
+    },
+}
+
+
+def create_slide_clip_from_images(
+    settings: Settings,
+    *,
+    start_frame_bytes: bytes,
+    end_frame_bytes: bytes,
+    target_duration_ms: int,
+    animation_effect: str = "ken_burns",
+    width: int = 1080,
+    height: int = 1920,
+) -> tuple[bytes, dict[str, object]]:
+    """Create an animated slide video clip from two still images.
+
+    Phase 1: start image with Ken Burns / zoom / pan effect (~85% of duration)
+    Phase 2: crossfade from start to end (~15% of duration, capped at 0.8 s)
+    Phase 3: end image continues its effect (overlaps with phase 2 xfade)
+
+    The output is a silent MP4 at 24 fps with exact duration = target_duration_ms.
+    """
+    runner = FFmpegRunner(settings)
+    duration_s = max(0.5, target_duration_ms / 1000.0)
+    xfade_s = min(duration_s * 0.15, 0.8)
+    xfade_s = min(xfade_s, duration_s * 0.4)  # clamp for very short clips
+    phase1_s = duration_s - xfade_s
+    xfade_offset = max(0.0, phase1_s - xfade_s)
+    phase1_frames = max(1, int((phase1_s + xfade_s) * 24))
+    phase2_frames = max(1, int((duration_s + xfade_s) * 24))
+
+    if not runner.available():
+        payload: dict[str, object] = {
+            "duration_ms": target_duration_ms,
+            "animation_effect": animation_effect,
+            "generation_mode": "slide_fallback_manifest",
+            "fallback_format": "json",
+        }
+        import json as _json
+        return _json.dumps(payload, indent=2).encode("utf-8"), {
+            **payload,
+            "has_audio_stream": False,
+            "width": width,
+            "height": height,
+            "frame_rate": 24.0,
+        }
+
+    effect_key = animation_effect if animation_effect in _SLIDE_EFFECTS else "ken_burns"
+    raw_effect = _SLIDE_EFFECTS[effect_key]
+    start_expr = raw_effect["start"].replace("{p}", str(phase1_frames))
+    end_expr = raw_effect["end"].replace("{p}", str(phase2_frames))
+
+    scale_pad = (
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+    )
+    filter_complex = (
+        f"[0:v]{scale_pad},"
+        f"zoompan={start_expr}:d={phase1_frames}:s={width}x{height}:fps=24[v0];"
+        f"[1:v]{scale_pad},"
+        f"zoompan={end_expr}:d={phase2_frames}:s={width}x{height}:fps=24[v1];"
+        f"[v0][v1]xfade=transition=fade:duration={xfade_s:.3f}:offset={xfade_offset:.3f},"
+        f"format=yuv420p[v]"
+    )
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workdir = Path(temp_dir)
+        (workdir / "start.png").write_bytes(start_frame_bytes)
+        (workdir / "end.png").write_bytes(end_frame_bytes)
+        try:
+            runner.run(
+                "ffmpeg",
+                [
+                    "-y",
+                    "-loop", "1",
+                    "-t", f"{phase1_s + xfade_s:.3f}",
+                    "-i", "start.png",
+                    "-loop", "1",
+                    "-t", f"{duration_s + xfade_s:.3f}",
+                    "-i", "end.png",
+                    "-filter_complex", filter_complex,
+                    "-map", "[v]",
+                    "-t", f"{duration_s:.3f}",
+                    "-r", "24",
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-pix_fmt", "yuv420p",
+                    "-an",
+                    "slide.mp4",
+                ],
+                workdir=workdir,
+            )
+            probe = _probe_result(settings, "slide.mp4", workdir=workdir)
+        except FFmpegError:
+            payload = {
+                "duration_ms": target_duration_ms,
+                "animation_effect": animation_effect,
+                "generation_mode": "slide_ffmpeg_error_fallback",
+                "fallback_format": "json",
+            }
+            import json as _json
+            return _json.dumps(payload, indent=2).encode("utf-8"), {
+                **payload,
+                "has_audio_stream": False,
+                "width": width,
+                "height": height,
+                "frame_rate": 24.0,
+            }
+        video_stream = next(
+            (s for s in probe.get("streams", []) if s.get("codec_type") == "video"),
+            {},
+        )
+        format_payload = probe.get("format", {})
+        actual_duration_ms = int(float(format_payload.get("duration") or duration_s) * 1000)
+        return (workdir / "slide.mp4").read_bytes(), {
+            "duration_ms": actual_duration_ms,
+            "has_audio_stream": False,
+            "width": int(video_stream.get("width") or width),
+            "height": int(video_stream.get("height") or height),
+            "frame_rate": _frame_rate_from_probe(video_stream) or 24.0,
+            "animation_effect": animation_effect,
+            "generation_mode": "slide_ken_burns",
+        }
+
+
 def compose_reel_export(
     settings: Settings,
     *,

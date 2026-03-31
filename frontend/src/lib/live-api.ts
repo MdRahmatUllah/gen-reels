@@ -920,6 +920,7 @@ function mapRender(render: BackendRender, events: BackendRenderEvent[] = []): Re
     scenePlanId: render.scene_plan_id ?? null,
     errorCode: render.error_code ?? null,
     errorMessage: render.error_message ?? null,
+    exportUrl: render.exports[0]?.download_url ?? null,
     frameAssets: assets.map((a) => ({
       id: a.id,
       sceneSegmentId: a.scene_segment_id,
@@ -1587,12 +1588,14 @@ export async function liveGetRenders(projectId: string): Promise<RenderJob[]> {
 
 export async function liveStartRender(
   projectId: string,
-  settings?: { subtitleStyle: string; musicDucking: string; musicTrack: string },
+  settings?: { subtitleStyle: string; musicDucking: string; musicTrack: string; animationEffect: string },
 ): Promise<RenderJob> {
   await api.post(
     `/projects/${projectId}/renders`,
     {
       allow_export_without_music: true,
+      render_mode: "slide",
+      animation_profile: { effect: settings?.animationEffect ?? "ken_burns" },
       subtitle_style_profile: { style: settings?.subtitleStyle ?? "default" },
       audio_mix_profile: {
         music_ducking: settings?.musicDucking ?? "auto",
@@ -1616,6 +1619,7 @@ export async function liveStartRender(
     nextAction: "Waiting for worker pickup.",
     musicTrack: settings?.musicTrack ?? "Auto soundtrack",
     allowExportWithoutMusic: true,
+    exportUrl: null,
     checks: [],
     steps: [],
     events: [],
