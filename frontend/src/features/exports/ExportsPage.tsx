@@ -4,6 +4,7 @@ import {
   SectionCard,
   StatusBadge,
   MetricCard,
+  MediaFrame,
   EmptyState,
   LoadingPage,
 } from "../../components/ui";
@@ -18,43 +19,42 @@ function formatDuration(sec: number) {
   return `${m}m ${s < 10 ? "0" : ""}${s}s`;
 }
 
-function isVideoUrl(url: string) {
-  return url.startsWith("http") || url.startsWith("/");
-}
-
 function ExportCard({ artifact }: { artifact: ExportArtifact }) {
   return (
     <div className="artifact-card">
-      {isVideoUrl(artifact.destination) ? (
+      {artifact.downloadUrl ? (
         <video
+          src={artifact.downloadUrl}
           controls
           playsInline
-          src={artifact.destination}
-          style={{ width: "100%", borderRadius: "10px", display: "block", background: "#000" }}
+          style={{ width: "100%", borderRadius: "8px", background: "#000", maxHeight: "320px" }}
         />
       ) : (
-        <div className="h-32 rounded-lg border border-border-subtle bg-glass/50 flex items-center justify-center text-xs text-muted">
-          {artifact.format}
-        </div>
+        <MediaFrame
+          label={artifact.name}
+          meta={`${artifact.ratio} · ${artifact.format}`}
+          gradient={artifact.gradient}
+        />
       )}
       <div className="artifact-card__meta">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={artifact.status} />
           <span>{formatDuration(artifact.durationSec)}</span>
+          {artifact.sizeMb > 0 && <span>{artifact.sizeMb} MB</span>}
         </div>
-        <p>
-          {artifact.subtitles ? "Subtitles on" : "Subtitles off"} ·{" "}
-          {artifact.musicBed ? "Music bed on" : "Music bed off"}
-        </p>
-        {isVideoUrl(artifact.destination) && (
+        {artifact.downloadUrl && (
           <a
-            href={artifact.destination}
-            download="export.mp4"
-            className="inline-flex items-center gap-1.5 mt-1 rounded-lg bg-accent-gradient px-3 py-1.5 text-xs font-semibold text-on-accent shadow-sm hover:shadow-accent"
+            href={artifact.downloadUrl}
+            download={artifact.name}
+            className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
           >
             Download MP4
           </a>
         )}
+        <p>
+          {artifact.subtitles ? "Subtitles on" : "Subtitles off"} ·{" "}
+          {artifact.musicBed ? "Music bed on" : "Music bed off"}
+        </p>
       </div>
     </div>
   );
@@ -122,10 +122,6 @@ export function ExportsPage() {
                   <span>Format</span>
                   <strong>{latestExport.format}</strong>
                 </div>
-                <div>
-                  <span>Destination</span>
-                  <strong>{latestExport.destination}</strong>
-                </div>
               </div>
             </SectionCard>
           </div>
@@ -140,32 +136,39 @@ export function ExportsPage() {
         <>
           <SectionCard className="surface-card--hero" title={latestExport.name} subtitle="Latest master output">
             <div className="hero-grid">
-              {isVideoUrl(latestExport.destination) ? (
-                <div className="flex flex-col gap-3">
+              {latestExport.downloadUrl ? (
+                <div style={{ position: "relative" }}>
                   <video
+                    src={latestExport.downloadUrl}
                     controls
                     playsInline
-                    src={latestExport.destination}
-                    style={{ width: "100%", maxWidth: "360px", borderRadius: "12px", display: "block", background: "#000" }}
+                    style={{ width: "100%", borderRadius: "10px", background: "#000", maxHeight: "480px", display: "block" }}
                   />
-                  <a
-                    href={latestExport.destination}
-                    download="export.mp4"
-                    className="inline-flex items-center gap-2 rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-on-accent shadow-sm hover:shadow-accent self-start"
-                  >
-                    Download MP4
-                  </a>
                 </div>
               ) : (
-                <div className="h-48 rounded-xl border border-border-subtle bg-glass/50 flex items-center justify-center text-sm text-muted">
-                  Processing…
-                </div>
+                <MediaFrame
+                  label={latestExport.name}
+                  meta={`${latestExport.ratio} · ${latestExport.format}`}
+                  gradient={latestExport.gradient}
+                  aspect="wide"
+                />
               )}
               <div className="metric-column">
                 <MetricCard label="Duration" value={formatDuration(latestExport.durationSec)} detail="Final export length" tone="primary" />
-                <MetricCard label="File size" value={`${latestExport.sizeMb} MB`} detail="Fast-start optimized" tone="neutral" />
+                {latestExport.sizeMb > 0 && (
+                  <MetricCard label="File size" value={`${latestExport.sizeMb} MB`} detail="Fast-start optimized" tone="neutral" />
+                )}
                 {latestExport.createdAt && (
                   <MetricCard label="Created" value={latestExport.createdAt} detail="Latest delivered artifact" tone="success" />
+                )}
+                {latestExport.downloadUrl && (
+                  <a
+                    href={latestExport.downloadUrl}
+                    download={latestExport.name}
+                    className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+                  >
+                    Download final video
+                  </a>
                 )}
               </div>
             </div>
@@ -180,7 +183,7 @@ export function ExportsPage() {
           </SectionCard>
         </>
       ) : (
-        <EmptyState 
+        <EmptyState
            title="No Exports Yet"
            description="Your project has no successful exports. Go to the Renders tab to start a new composition pipeline."
         />

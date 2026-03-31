@@ -977,6 +977,7 @@ function mapExport(exportItem: BackendExport): ExportArtifact {
         : "processing",
     format: exportItem.format.toUpperCase(),
     destination: exportItem.download_url ?? exportItem.object_name,
+    downloadUrl: exportItem.download_url ?? null,
     durationSec: (exportItem.duration_ms ?? 0) / 1000,
     sizeMb: 0,
     integratedLufs: Number((exportItem.audio_mix_profile.integrated_lufs as number | undefined) ?? -14),
