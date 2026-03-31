@@ -12,6 +12,7 @@ from app.integrations.azure import (
     AzureContentSafetyProvider,
     AzureOpenAITextProvider,
     ModerationProvider,
+    OllamaTextProvider,
     StubModerationProvider,
     StubTextProvider,
     TextProvider,
@@ -251,6 +252,14 @@ class RoutingService:
         if self.settings.use_stub_providers or self.settings.environment == "test":
             return StubTextProvider(), decision
         if decision.execution_mode == ExecutionMode.byo:
+            if decision.provider_key == "ollama_text":
+                return (
+                    OllamaTextProvider(
+                        endpoint=str(decision.public_config.get("endpoint") or "http://localhost:11434"),
+                        model_name=str(decision.public_config.get("model_name") or "llama3"),
+                    ),
+                    decision,
+                )
             return (
                 AzureOpenAITextProvider(
                     self.settings,

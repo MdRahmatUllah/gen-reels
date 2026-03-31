@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(docker compose:*)",
-      "Bash(find f:/my-projects/reels-generation/frontend/src -name Export* -o -name *export*)"
+      "Bash(find f:/my-projects/reels-generation/frontend/src -name Export* -o -name *export*)",
+      "Bash(find f:/my-projects/reels-generation/frontend/src -name *Provider* -o -name *provider* -o -name *ApiKey* -o -name *api-key* -o -name *credential*)",
+      "Bash(grep -rn \"Configured Credentials\\\\|configured.*credential\\\\|credential.*configured\\\\|provider.*active\\\\|active.*provider\" f:/my-projects/reels-generation/frontend/src --include=*.tsx --include=*.ts -l)"
     ]
   }
 }

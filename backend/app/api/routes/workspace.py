@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_db_dep, get_settings_dep, get_storage_dep, require_auth
@@ -186,6 +187,22 @@ def put_execution_policy(
     db: Session = Depends(get_db_dep),
 ):
     return ExecutionPolicyService(db).update_policy(auth, payload)
+
+
+@router.get("/ollama-models", response_model=list[str])
+def get_ollama_models(
+    endpoint: str = Query(default="http://localhost:11434"),
+    auth: AuthContext = Depends(require_auth),
+):
+    url = f"{endpoint.rstrip('/')}/api/tags"
+    try:
+        response = httpx.get(url, timeout=10.0)
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Ollama at {endpoint}: {exc}") from exc
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Ollama returned status {response.status_code}")
+    data = response.json()
+    return [m["name"] for m in data.get("models", [])]
 
 
 @router.get("/local-workers", response_model=list[LocalWorkerResponse])

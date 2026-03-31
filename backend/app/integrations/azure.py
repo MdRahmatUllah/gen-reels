@@ -600,6 +600,127 @@ class AzureOpenAITextProvider(TextProvider):
         )["output"]
 
 
+class OllamaTextProvider(TextProvider):
+    def __init__(self, *, endpoint: str, model_name: str) -> None:
+        self.endpoint = endpoint.rstrip("/")
+        self.model_name = model_name or "llama3"
+        if not self.endpoint:
+            raise AdapterError("internal", "missing_ollama_config", "Ollama endpoint is not configured.")
+
+    def _request_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+        url = f"{self.endpoint}/v1/chat/completions"
+        body = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": 0.7,
+            "stream": False,
+            "format": "json",
+        }
+        try:
+            response = httpx.post(url, json=body, timeout=120.0)
+        except httpx.TimeoutException as exc:
+            raise AdapterError(
+                "transient",
+                "ollama_timeout",
+                "Ollama did not respond within the time limit. Ensure the model is loaded and the endpoint is reachable.",
+            ) from exc
+        except httpx.ConnectError as exc:
+            raise AdapterError(
+                "transient",
+                "ollama_unreachable",
+                f"Cannot connect to Ollama at {self.endpoint}. Ensure Ollama is running.",
+            ) from exc
+        if response.status_code >= 500:
+            raise AdapterError("transient", "ollama_unavailable", "Ollama returned a server error.")
+        if response.status_code >= 400:
+            raise AdapterError("deterministic_input", "ollama_invalid_request", response.text)
+
+        payload = response.json()
+        try:
+            content = payload["choices"][0]["message"]["content"]
+            parsed = json.loads(content)
+        except Exception as exc:
+            logger.exception("ollama_parse_failure")
+            raise AdapterError("internal", "ollama_parse_failure", "Failed to parse Ollama response.") from exc
+        return {"output": parsed, "raw": payload}
+
+    def synthesize_brief(self, *, idea_prompt: str, starter_context: dict[str, Any] | None) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys title and brief. title must be a concise project title under 80 characters. "
+            "brief must be an object with objective, hook, target_audience, call_to_action, brand_north_star, "
+            "guardrails, must_include, and approval_steps. guardrails, must_include, and approval_steps must be arrays "
+            "of short strings. Use the idea prompt as the primary source of truth and use starter metadata only as style "
+            "guidance. Do not mention internal system names."
+        )
+        user_prompt = json.dumps({"idea_prompt": idea_prompt, "starter_context": starter_context or {}})
+        return self._request_json([
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": user_prompt},
+        ])["output"]
+
+    def generate_ideas(self, brief_payload: dict[str, Any]) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with exactly one key named ideas. ideas must be a list of exactly 5 items. "
+            "Each item must contain title, hook, summary, and tags. The concepts must target a 60-120 second video."
+        )
+        return self._request_json([
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": json.dumps(brief_payload)},
+        ])["output"]
+
+    def generate_script(self, *, brief_payload: dict[str, Any], selected_idea: dict[str, Any]) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys estimated_duration_seconds, reading_time_label, and lines. "
+            "lines must be an ordered list of beat objects for a 60-120 second video. "
+            "Each line requires id, scene_id, beat, narration, caption, duration_sec, status, visual_direction, voice_pacing."
+        )
+        return self._request_json([
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": json.dumps({"brief": brief_payload, "selected_idea": selected_idea})},
+        ])["output"]
+
+    def generate_scene_plan(
+        self,
+        *,
+        brief_payload: dict[str, Any],
+        selected_idea: dict[str, Any],
+        script_payload: dict[str, Any],
+        visual_preset: dict[str, Any] | None,
+        voice_preset: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys scene_count, estimated_duration_seconds, validation_warnings, and scenes. "
+            "scenes must be an ordered list of 5-8 second scene objects based on the approved script. "
+            "Each scene object must include scene_index, source_line_ids, title, beat, narration_text, "
+            "caption_text, visual_direction, shot_type, motion, target_duration_seconds, "
+            "estimated_voice_duration_seconds, visual_prompt, start_image_prompt, end_image_prompt, "
+            "transition_mode, notes, and validation_warnings."
+        )
+        return self._request_json([
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": json.dumps({
+                "brief": brief_payload, "selected_idea": selected_idea,
+                "script": script_payload, "visual_preset": visual_preset, "voice_preset": voice_preset,
+            })},
+        ])["output"]
+
+    def generate_prompt_pairs(
+        self,
+        *,
+        scene_plan_payload: dict[str, Any],
+        visual_preset: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with one key named segments. segments must be an ordered list matching the input scene order. "
+            "Each item must include scene_index, visual_prompt, start_image_prompt, end_image_prompt, and "
+            "validation_warnings. Preserve 5-8 second pacing and make prompt pairs visually consistent."
+        )
+        return self._request_json([
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": json.dumps({"scene_plan": scene_plan_payload, "visual_preset": visual_preset})},
+        ])["output"]
+
+
 def build_moderation_provider(settings: Settings) -> ModerationProvider:
     if settings.use_stub_providers or settings.environment == "test":
         return StubModerationProvider()

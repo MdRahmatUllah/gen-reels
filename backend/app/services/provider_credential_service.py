@@ -99,6 +99,8 @@ class ProviderCredentialService:
         )
 
     def _decrypt_secret_config(self, credential: WorkspaceProviderCredential) -> dict[str, object]:
+        if not credential.secret_payload_encrypted:
+            return {}
         try:
             return decrypt_json(self.settings, credential.secret_payload_encrypted)
         except InvalidToken as exc:
@@ -126,10 +128,16 @@ class ProviderCredentialService:
         deployment = str(public_config.get("deployment") or "").strip()
         model_name = str(public_config.get("model_name") or public_config.get("model") or "").strip()
 
-        if not api_key:
+        _no_secret_providers = {"ollama_text"}
+        if not api_key and credential.provider_key not in _no_secret_providers:
             errors.append("API key is missing.")
 
-        if credential.provider_key.startswith("azure_openai"):
+        if credential.provider_key == "ollama_text":
+            if not endpoint:
+                errors.append("Endpoint is required for Ollama credentials.")
+            elif not self._looks_like_url(endpoint):
+                errors.append("Endpoint must be a valid http or https URL.")
+        elif credential.provider_key.startswith("azure_openai"):
             if not endpoint:
                 errors.append("Endpoint is required for Azure OpenAI credentials.")
             elif not self._looks_like_url(endpoint):
@@ -525,6 +533,36 @@ class ProviderCredentialService:
         error_message = self._validation_probe_error(response)
         return ("invalid", error_message) if error_message else ("valid", None)
 
+    def _validate_ollama(
+        self,
+        public_config: dict[str, object],
+    ) -> tuple[str, str | None]:
+        endpoint = str(public_config.get("endpoint") or "http://host.docker.internal:11434").strip().rstrip("/")
+        model_name = str(public_config.get("model_name") or "").strip()
+        try:
+            # Probe /api/tags to confirm Ollama is reachable
+            response = httpx.get(f"{endpoint}/api/tags", timeout=10.0)
+        except httpx.TimeoutException:
+            return "unreachable", "Ollama did not respond within the time limit. Ensure it is running and the endpoint is correct."
+        except httpx.ConnectError:
+            return "unreachable", f"Cannot connect to Ollama at {endpoint}. Ensure Ollama is running."
+        except httpx.HTTPError as exc:
+            return "unreachable", f"Ollama could not be reached: {exc}"
+
+        if response.status_code != 200:
+            return "invalid", f"Ollama returned HTTP {response.status_code} on /api/tags."
+
+        # If a model is configured, verify it is in the pulled models list
+        if model_name:
+            try:
+                models = [m["name"] for m in response.json().get("models", [])]
+            except Exception:
+                models = []
+            if models and model_name not in models:
+                return "invalid", f"Model '{model_name}' is not in the pulled models list. Run: ollama pull {model_name}"
+
+        return "valid", None
+
     def _validate_remote_provider(
         self,
         credential: WorkspaceProviderCredential,
@@ -549,6 +587,8 @@ class ProviderCredentialService:
             return self._validate_elevenlabs_speech(public_config, secret_config)
         if credential.provider_key == "runway_video":
             return self._validate_runway_video(public_config, secret_config)
+        if credential.provider_key == "ollama_text":
+            return self._validate_ollama(public_config)
         return (
             "unsupported",
             "Remote validation is not implemented for this provider in the current build.",
@@ -625,8 +665,12 @@ class ProviderCredentialService:
         payload: ProviderCredentialCreateRequest,
     ) -> dict[str, object]:
         require_workspace_admin(auth, message="Only workspace admins can manage provider credentials.")
-        if not payload.secret_config:
+        _no_secret_providers = {"ollama_text"}
+        if not payload.secret_config and payload.provider_key not in _no_secret_providers:
             raise ApiError(400, "provider_secret_required", "A provider secret payload is required.")
+        secret_payload_encrypted = (
+            encrypt_json(self.settings, payload.secret_config) if payload.secret_config else None
+        )
         credential = WorkspaceProviderCredential(
             workspace_id=UUID(auth.workspace_id),
             created_by_user_id=UUID(auth.user_id),
@@ -634,7 +678,7 @@ class ProviderCredentialService:
             modality=payload.modality,
             provider_key=payload.provider_key,
             public_config=payload.public_config,
-            secret_payload_encrypted=encrypt_json(self.settings, payload.secret_config),
+            secret_payload_encrypted=secret_payload_encrypted,
             expires_at=payload.expires_at,
         )
         self._reset_validation_metadata(credential)

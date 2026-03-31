@@ -335,8 +335,10 @@ export interface RenderJob {
     truePeak: string;
     musicDucking: string;
     subtitleState: string;
-    subtitleStyle?: string; // Phase 5 Custom style
+    subtitleStyle?: string;
   };
+  /** True when this render was initiated as a final video generation (with render settings), not just keyframe generation */
+  isVideoGeneration?: boolean;
 }
 
 /* ─── Exports ─────────────────────────────────────────────────────────────── */

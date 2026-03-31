@@ -334,6 +334,8 @@ const seedProviderCredentials: ProviderCredentialRecord[] = [
   },
 ];
 
+const activeSimulatorJobIds = new Map<string, string>();
+
 const state: MockState = {
   isAuthenticated: false,
   user: seedUser,
@@ -1767,13 +1769,12 @@ export async function mockRetryRenderStep(projectId: string, stepId: string): Pr
   job.events.push({ id: nextId("evt"), time: new Date().toLocaleTimeString(), label: "Step Retried", detail: `User requested retry for step ${step.name}`, tone: "warning" });
   state.renderJobs.set(projectId, job);
 
-  // Resume simulator loop if it was blocked
-  void renderSimulatorLoop(projectId);
+  activeSimulatorJobIds.set(projectId, job.id);
+  void renderSimulatorLoop(projectId, job.id);
 
   return job;
 }
 
-// Spawns the SSE Simulator
 export async function mockStartRender(
   projectId: string,
   settings?: { subtitleStyle?: string; musicDucking?: string; musicTrack?: string; animationEffect?: string }
@@ -1844,22 +1845,24 @@ export async function mockStartRender(
       musicDucking: settings?.musicTrack === "none" ? "Off" : (settings?.musicDucking || "-12 dB"), 
       subtitleState: settings?.subtitleStyle === "none" ? "Off" : "Burned",
       subtitleStyle: settings?.subtitleStyle || "Default"
-    }
+    },
+    isVideoGeneration: !!settings,
   };
 
   state.renderJobs.set(projectId, job);
 
-  // Fire and forget simulator loop
-  void renderSimulatorLoop(projectId);
+  activeSimulatorJobIds.set(projectId, job.id);
+  void renderSimulatorLoop(projectId, job.id);
   
   return job;
 }
 
-// Background simulator loop mutating the state dynamically.
-// This mocks SSE stream architecture.
-export async function renderSimulatorLoop(projectId: string) {
+export async function renderSimulatorLoop(projectId: string, jobId?: string) {
   const job = state.renderJobs.get(projectId);
   if (!job) return;
+
+  const myJobId = jobId ?? job.id;
+  const isStale = () => activeSimulatorJobIds.get(projectId) !== myJobId;
 
   const pushEvent = (label: string, detail: string, tone: "neutral"| "success"| "warning"| "error") => {
     job.events.unshift({ id: nextId("evt"), time: new Date().toLocaleTimeString(), label, detail, tone });
@@ -1871,17 +1874,17 @@ export async function renderSimulatorLoop(projectId: string) {
   state.renderJobs.set(projectId, { ...job });
 
   const totalSteps = job.steps.length;
-  // 3 phases per step: Prompts -> Audio -> Clip -> Done
   const TICK_MS = 1500;
+  const shouldStop = () => job.status !== "running" || isStale();
   
   for (let i = 0; i < totalSteps; i++) {
     const step = job.steps[i];
     
-    if (job.status !== "running") return; // Cancelled
+    if (shouldStop()) return;
     
     // 1. Image Generation
     await new Promise(r => setTimeout(r, TICK_MS));
-    if (job.status !== "running") return;
+    if (shouldStop()) return;
     step.status = "running";
     step.clipStatus = "Generating frames...";
     step.nextAction = "Awaiting image pair";
@@ -1890,7 +1893,7 @@ export async function renderSimulatorLoop(projectId: string) {
 
     // 2. Audio Generation
     await new Promise(r => setTimeout(r, TICK_MS));
-    if (job.status !== "running") return;
+    if (shouldStop()) return;
     step.narrationStatus = "Synthesizing";
     step.nextAction = "Generating video clip";
     job.progress = Math.floor((i / totalSteps) * 100) + 10;
@@ -1898,7 +1901,7 @@ export async function renderSimulatorLoop(projectId: string) {
 
     // 3. Render Clip
     await new Promise(r => setTimeout(r, TICK_MS));
-    if (job.status !== "running") return;
+    if (shouldStop()) return;
     
     // Simulate Moderation Block (random high chance on first step for testing)
     if (i === 0 && !step.name.includes("Fixed") && Math.random() > 0.5) {
@@ -1964,7 +1967,7 @@ export async function renderSimulatorLoop(projectId: string) {
 
   // 4. Composition (FFmpeg)
   await new Promise(r => setTimeout(r, TICK_MS * 2));
-  if (job.status !== "running") return;
+  if (shouldStop()) return;
   
   job.nextAction = "Composing master audio bed...";
   job.progress = 95;
@@ -1972,34 +1975,38 @@ export async function renderSimulatorLoop(projectId: string) {
   state.renderJobs.set(projectId, { ...job });
 
   await new Promise(r => setTimeout(r, TICK_MS * 2));
-  if (job.status !== "running") return;
+  if (shouldStop()) return;
   job.progress = 100;
   job.status = "completed";
   job.sseState = "Disconnected (Clean close)";
   job.nextAction = "Export complete.";
   pushEvent("Job Complete", "Master vertical export wrapped successfully", "success");
   
-  // Push an export artifact
-  const newExport: ExportArtifact = {
-    id: nextId("exp"),
-    name: "Master HD Export",
-    createdAt: new Date().toLocaleDateString(),
-    status: "ready",
-    durationSec: job.durationSec,
-    sizeMb: 14.5,
-    format: "MP4 / H.264",
-    ratio: "9:16",
-    destination: "Local File System",
-    downloadUrl: null,
-    integratedLufs: -14.2,
-    truePeak: -1.0,
-    subtitles: true,
-    musicBed: true,
-    gradient: "linear-gradient(135deg, #101014 0%, #151520 100%)"
-  };
-  const exps = state.exports.get(projectId) || [];
-  exps.unshift(newExport);
-  state.exports.set(projectId, exps);
+  if (job.isVideoGeneration) {
+    const hasSubtitles = job.metrics.subtitleState !== "Off";
+    const hasMusic = job.musicTrack !== "none" && !job.allowExportWithoutMusic;
+
+    const newExport: ExportArtifact = {
+      id: nextId("exp"),
+      name: "Master HD Export",
+      createdAt: new Date().toLocaleDateString(),
+      status: "ready",
+      durationSec: job.durationSec,
+      sizeMb: 14.5,
+      format: "MP4 / H.264",
+      ratio: "9:16",
+      destination: "Local File System",
+      downloadUrl: null,
+      integratedLufs: -14.2,
+      truePeak: -1.0,
+      subtitles: hasSubtitles,
+      musicBed: hasMusic,
+      gradient: "linear-gradient(135deg, #101014 0%, #151520 100%)"
+    };
+    const exps = state.exports.get(projectId) || [];
+    exps.unshift(newExport);
+    state.exports.set(projectId, exps);
+  }
   
   state.renderJobs.set(projectId, { ...job });
 }
@@ -2073,7 +2080,8 @@ export async function mockApproveQueueItem(jobId: string): Promise<void> {
       job.nextAction = "Resuming from checkpoint.";
       state.renderJobs.set(projectId, { ...job });
       
-      void renderSimulatorLoop(projectId);
+      activeSimulatorJobIds.set(projectId, job.id);
+      void renderSimulatorLoop(projectId, job.id);
       break;
     }
   }

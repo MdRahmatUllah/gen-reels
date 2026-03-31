@@ -29,6 +29,32 @@ const catalog: ProviderCatalogOption[] = [
     ],
   },
   {
+    providerKey: "ollama_text",
+    providerLabel: "Ollama",
+    modality: "text",
+    generationType: "text",
+    description: "Run open-source models locally via Ollama. Set the endpoint, click Get Models to list pulled models, then select one and save.",
+    supportsActivation: true,
+    formDefaults: {
+      endpoint: "http://host.docker.internal:11434",
+    },
+    fields: [
+      {
+        key: "endpoint",
+        label: "Endpoint",
+        placeholder: "http://host.docker.internal:11434",
+        required: true,
+        help: "Use host.docker.internal:11434 when running via Docker (maps to your host machine).",
+      },
+      {
+        key: "modelName",
+        label: "Model",
+        placeholder: "Select a model after clicking Get Models",
+        help: "Click Get Models to fetch the list of pulled models from Ollama.",
+      },
+    ],
+  },
+  {
     providerKey: "openai_text",
     providerLabel: "OpenAI",
     modality: "text",

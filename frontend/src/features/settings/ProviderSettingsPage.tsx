@@ -18,6 +18,7 @@ import {
   providerGenerationLabels,
   supportedExecutionModes,
 } from "../../lib/provider-catalog";
+import { liveGetOllamaModels } from "../../lib/live-api";
 import type {
   ProviderCatalogOption,
   ProviderCredentialInput,
@@ -143,6 +144,9 @@ export function ProviderSettingsPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProviderFormState>(defaultFormState);
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [ollamaModelsLoading, setOllamaModelsLoading] = useState(false);
+  const [ollamaModelsError, setOllamaModelsError] = useState<string | null>(null);
 
   const providerOptions = useMemo(
     () => getProviderOptionsByGenerationType(form.generationType),
@@ -173,8 +177,12 @@ export function ProviderSettingsPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const resolvedName =
+      form.providerKey === "ollama_text"
+        ? `Ollama${form.modelName ? ` (${form.modelName})` : ""}`
+        : form.name;
     const payload = {
-      ...toCredentialInput(form),
+      ...toCredentialInput({ ...form, name: resolvedName }),
       setAsActiveRoute: Boolean(selectedProvider?.supportsActivation && form.setAsActiveRoute),
     };
     if (editingId) {
@@ -204,6 +212,22 @@ export function ProviderSettingsPage() {
     });
   }
 
+  async function handleFetchOllamaModels() {
+    setOllamaModelsError(null);
+    setOllamaModelsLoading(true);
+    try {
+      const models = await liveGetOllamaModels(form.endpoint || "http://localhost:11434");
+      setOllamaModels(models);
+      if (models.length > 0 && !form.modelName) {
+        setForm((current) => ({ ...current, modelName: models[0] }));
+      }
+    } catch (err: any) {
+      setOllamaModelsError(err?.message ?? "Failed to fetch models from Ollama.");
+    } finally {
+      setOllamaModelsLoading(false);
+    }
+  }
+
   if (isLoading || !credentials || !policy) {
     return <LoadingPage />;
   }
@@ -222,7 +246,7 @@ export function ProviderSettingsPage() {
           </SectionCard>
           <SectionCard title="Runtime Notes">
             <p className="text-sm leading-relaxed text-slate-300">
-              Azure OpenAI remains the recommended text route in this build. Stability AI image, ElevenLabs audio, and Runway video can now be activated from this screen, while Kling remains storage-only until its adapter is added.
+              Azure OpenAI and Ollama are both supported text routes. For Ollama, set the endpoint, click Get Models to fetch pulled models, select one, then save. Stability AI image, ElevenLabs audio, and Runway video can be activated from this screen. Kling remains storage-only.
             </p>
           </SectionCard>
         </div>
@@ -324,6 +348,8 @@ export function ProviderSettingsPage() {
                 onChange={(event) => {
                   const providerKey = event.target.value;
                   const option = providerOptions.find((o) => o.providerKey === providerKey);
+                  setOllamaModels([]);
+                  setOllamaModelsError(null);
                   setForm((current) => {
                     if (editingId) {
                       return { ...current, providerKey };
@@ -342,13 +368,15 @@ export function ProviderSettingsPage() {
             </FormField>
           </div>
 
-          <FormInput
-            id="credentialName"
-            label="Credential Name"
-            value={form.name}
-            onChange={(value) => setForm((current) => ({ ...current, name: value }))}
-            placeholder="Azure OpenAI Primary"
-          />
+          {form.providerKey !== "ollama_text" && (
+            <FormInput
+              id="credentialName"
+              label="Credential Name"
+              value={form.name}
+              onChange={(value) => setForm((current) => ({ ...current, name: value }))}
+              placeholder="Azure OpenAI Primary"
+            />
+          )}
 
           {selectedProvider ? (
             <p className="rounded-xl border border-slate-800/70 bg-slate-950/40 px-4 py-3 text-sm text-slate-300">
@@ -357,24 +385,69 @@ export function ProviderSettingsPage() {
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2">
-            {selectedProvider?.fields.map((field) => (
-              <FormInput
-                key={field.key}
-                id={field.key}
-                label={field.label}
-                type={field.secret ? "password" : "text"}
-                value={form[field.key]}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, [field.key]: value }))
-                }
-                placeholder={field.placeholder}
-                help={
-                  [field.key === "apiKey" && editingId ? "Leave blank to keep the existing API key." : "", field.help || ""]
-                    .filter(Boolean)
-                    .join(" ") || undefined
-                }
-              />
-            ))}
+            {selectedProvider?.fields.map((field) => {
+              if (form.providerKey === "ollama_text" && field.key === "modelName") {
+                return (
+                  <FormField
+                    key={field.key}
+                    htmlFor="modelName"
+                    label={field.label}
+                    error={ollamaModelsError ?? undefined}
+                    help={field.help}
+                  >
+                    <div className="flex gap-2">
+                      {ollamaModels.length > 0 ? (
+                        <select
+                          id="modelName"
+                          className="flex-1 rounded-xl border border-border-card bg-glass px-3.5 py-2.5 text-sm text-primary outline-none transition-all hover:border-border-active focus:border-accent"
+                          value={form.modelName}
+                          onChange={(e) => setForm((current) => ({ ...current, modelName: e.target.value }))}
+                        >
+                          {ollamaModels.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          id="modelName"
+                          className="flex-1 rounded-xl border border-border-card bg-glass px-3.5 py-2.5 text-sm text-primary outline-none transition-all hover:border-border-active focus:border-accent"
+                          type="text"
+                          value={form.modelName}
+                          onChange={(e) => setForm((current) => ({ ...current, modelName: e.target.value }))}
+                          placeholder={field.placeholder}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className="rounded-xl border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
+                        disabled={ollamaModelsLoading}
+                        onClick={handleFetchOllamaModels}
+                      >
+                        {ollamaModelsLoading ? "Loading..." : "Get Models"}
+                      </button>
+                    </div>
+                  </FormField>
+                );
+              }
+              return (
+                <FormInput
+                  key={field.key}
+                  id={field.key}
+                  label={field.label}
+                  type={field.secret ? "password" : "text"}
+                  value={form[field.key as keyof ProviderFormState] as string}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, [field.key]: value }))
+                  }
+                  placeholder={field.placeholder}
+                  help={
+                    [field.key === "apiKey" && editingId ? "Leave blank to keep the existing API key." : "", field.help || ""]
+                      .filter(Boolean)
+                      .join(" ") || undefined
+                  }
+                />
+              );
+            })}
           </div>
 
           <label className="flex items-start gap-3 rounded-xl border border-slate-800/70 bg-slate-950/30 px-4 py-3 text-sm text-slate-300">
@@ -399,7 +472,7 @@ export function ProviderSettingsPage() {
           <div className="flex flex-wrap gap-3">
             <button
               className="rounded-md bg-accent-cyan px-4 py-2 text-sm font-semibold text-slate-950 shadow-md transition-all hover:bg-accent-cyan/90 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={isSaving || !form.name.trim()}
+              disabled={isSaving || (form.providerKey !== "ollama_text" && !form.name.trim())}
               type="submit"
             >
               {editingId
@@ -545,14 +618,25 @@ export function ProviderSettingsPage() {
                         >
                           Edit
                         </button>
-                        <button
-                          type="button"
-                          className="rounded-md border border-slate-700/60 bg-slate-900/80 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={!credential.supportsActivation || credential.isActive || isSaving}
-                          onClick={() => handleMakeActive(credential)}
-                        >
-                          Make active
-                        </button>
+                        {credential.isActive ? (
+                          <button
+                            type="button"
+                            className="rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={isSaving}
+                            onClick={() => handleUseHostedDefault(credential.modality)}
+                          >
+                            Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="rounded-md border border-slate-700/60 bg-slate-900/80 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!credential.supportsActivation || isSaving}
+                            onClick={() => handleMakeActive(credential)}
+                          >
+                            Activate
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="rounded-md border border-emerald-700/60 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-50"

@@ -1941,10 +1941,15 @@ export async function liveGetProviderCredentials(): Promise<ProviderCredentialRe
     .map((credential) => mapProviderCredential(credential, policy));
 }
 
+export async function liveGetOllamaModels(endpoint: string): Promise<string[]> {
+  const params = new URLSearchParams({ endpoint });
+  return api.get<string[]>(`/workspace/ollama-models?${params}`);
+}
+
 export async function liveCreateProviderCredential(
   input: ProviderCredentialInput,
 ): Promise<ProviderCredentialRecord> {
-  if (!input.apiKey?.trim()) {
+  if (input.providerKey !== "ollama_text" && !input.apiKey?.trim()) {
     throw new ApiError(400, "provider_secret_required", "An API key is required.");
   }
   const created = await api.post<BackendProviderCredential>(

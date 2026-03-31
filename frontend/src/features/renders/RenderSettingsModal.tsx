@@ -19,9 +19,9 @@ export function RenderSettingsModal({
   onConfirm,
   isStarting,
 }: RenderSettingsModalProps) {
-  const [subtitleStyle, setSubtitleStyle] = useState("Karaoke Bold");
+  const [subtitleStyle, setSubtitleStyle] = useState("none");
   const [musicDucking, setMusicDucking] = useState("-12 dB");
-  const [musicTrack, setMusicTrack] = useState("Ambient Corporate 1");
+  const [musicTrack, setMusicTrack] = useState("none");
   const [animationEffect, setAnimationEffect] = useState("ken_burns");
 
   return (
