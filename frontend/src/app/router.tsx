@@ -15,6 +15,7 @@ import {
   ProjectBriefPage,
   ProjectsPage,
   ScriptPage,
+  VideosPage,
 } from "../routes/app-pages";
 import { TemplatesPage } from "../features/templates/TemplatesPage";
 import { AssetsPage } from "../features/assets/AssetsPage";
@@ -47,6 +48,10 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: <DashboardPage />,
+      },
+      {
+        path: "videos",
+        element: <VideosPage />,
       },
       {
         path: "projects",

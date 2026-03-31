@@ -10,6 +10,7 @@ import {
   mockGetProjects,
   mockGetSettings,
   mockGetTemplates,
+  mockGetAllVideos,
 } from "../lib/mock-service";
 import { useBrief, useUpdateBrief } from "../hooks/use-briefs";
 import { useQuickCreateStatus } from "../hooks/use-projects";
@@ -30,6 +31,7 @@ import {
 } from "../components/ui";
 import { useStudioUiStore } from "../state/ui-store";
 import type {
+  DashboardVideo,
   ProjectBundle,
   ProjectSummary,
   QuickCreateStatus,
@@ -165,6 +167,60 @@ function SettingsCard({ section }: { section: SettingsSection }) {
   );
 }
 
+function formatVideoDuration(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}m ${s < 10 ? "0" : ""}${s}s`;
+}
+
+function DashboardVideoCard({ video }: { video: DashboardVideo }) {
+  return (
+    <div className="flex flex-col gap-3 p-4 rounded-xl bg-card border border-border-card shadow-sm animate-rise-in">
+      {video.downloadUrl ? (
+        <video
+          src={video.downloadUrl}
+          controls
+          playsInline
+          className="w-full rounded-lg bg-black"
+          style={{ maxHeight: "200px" }}
+        />
+      ) : (
+        <MediaFrame
+          label={video.name}
+          meta={`${video.format}`}
+          gradient={video.gradient}
+        />
+      )}
+      <div className="flex flex-col gap-1">
+        <strong className="text-sm text-primary leading-snug">{video.name}</strong>
+        <p className="text-xs text-secondary">{video.projectTitle}</p>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <StatusBadge status={video.status} />
+          <span className="text-xs text-muted">{formatVideoDuration(video.durationSec)}</span>
+          <span className="text-xs text-muted">{video.format}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mt-auto">
+        <Link
+          className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
+          to={`/app/projects/${video.projectId}/exports`}
+        >
+          View exports
+        </Link>
+        {video.downloadUrl && (
+          <a
+            href={video.downloadUrl}
+            download={video.name}
+            className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+          >
+            Download
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
@@ -297,10 +353,143 @@ export function DashboardPage() {
           </div>
         </SectionCard>
       </div>
+      <SectionCard
+        title="Recent videos"
+        subtitle={data.recentVideos.length > 0 ? "Latest generated exports across your workspace" : undefined}
+      >
+        {data.recentVideos.length > 0 ? (
+          <div className="artifact-grid">
+            {data.recentVideos.map((video) => (
+              <DashboardVideoCard key={video.id} video={video} />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <p className="text-sm text-secondary">No videos generated yet. Complete a render pipeline to see your exports here.</p>
+            <Link
+              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+              to={`/app/projects/${focusProject.id}/renders`}
+            >
+              Go to renders
+            </Link>
+          </div>
+        )}
+        {data.recentVideos.length > 0 && (
+          <div className="flex justify-end mt-3">
+            <Link
+              className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
+              to="/app/videos"
+            >
+              View all videos →
+            </Link>
+          </div>
+        )}
+      </SectionCard>
+
       <QuickCreateProjectModal
         open={isQuickCreateOpen}
         onClose={() => setQuickCreateOpen(false)}
       />
+    </PageFrame>
+  );
+}
+
+export function VideosPage() {
+  const { data: videos, isLoading } = useQuery({
+    queryKey: ["all-videos"],
+    queryFn: mockGetAllVideos,
+  });
+
+  if (isLoading || !videos) {
+    return <LoadingPage />;
+  }
+
+  return (
+    <PageFrame
+      eyebrow="Video library"
+      title="Generated videos"
+      description="All exported videos across your workspace projects, sorted by most recent."
+      inspector={
+        <div className="inspector-stack">
+          <SectionCard title="Library overview">
+            <div className="inspector-list">
+              <div>
+                <span>Total videos</span>
+                <strong>{videos.length}</strong>
+              </div>
+              <div>
+                <span>Ready</span>
+                <strong>{videos.filter((v) => v.status === "ready").length}</strong>
+              </div>
+              <div>
+                <span>Processing</span>
+                <strong>{videos.filter((v) => v.status === "processing").length}</strong>
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+      }
+    >
+      {videos.length > 0 ? (
+        <div className="artifact-grid">
+          {videos.map((video) => (
+            <SectionCard key={video.id} title={video.name} subtitle={video.projectTitle}>
+              {video.downloadUrl ? (
+                <video
+                  src={video.downloadUrl}
+                  controls
+                  playsInline
+                  className="w-full rounded-lg bg-black"
+                  style={{ maxHeight: "280px" }}
+                />
+              ) : (
+                <MediaFrame
+                  label={video.name}
+                  meta={video.format}
+                  gradient={video.gradient}
+                />
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={video.status} />
+                <span className="text-xs text-muted">{formatVideoDuration(video.durationSec)}</span>
+                <span className="text-xs text-muted">{video.format}</span>
+                <span className="text-xs text-muted">{video.createdAt}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
+                  to={`/app/projects/${video.projectId}/exports`}
+                >
+                  View project exports
+                </Link>
+                {video.downloadUrl && (
+                  <a
+                    href={video.downloadUrl}
+                    download={video.name}
+                    className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+                  >
+                    Download MP4
+                  </a>
+                )}
+              </div>
+            </SectionCard>
+          ))}
+        </div>
+      ) : (
+        <SectionCard title="No videos yet">
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <p className="text-sm text-secondary">
+              No generated videos found. Complete a render pipeline in any project to see your exports here.
+            </p>
+            <Link
+              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
+              to="/app/projects"
+            >
+              Browse projects
+            </Link>
+          </div>
+        </SectionCard>
+      )}
     </PageFrame>
   );
 }

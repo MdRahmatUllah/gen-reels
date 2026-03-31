@@ -62,6 +62,7 @@ export function RenderSettingsModal({
               value={subtitleStyle}
               onChange={(event) => setSubtitleStyle(event.target.value)}
             >
+              <option value="none">No Subtitles</option>
               <option value="Karaoke Bold">Karaoke Bold</option>
               <option value="Minimalist White">Minimalist White</option>
               <option value="Burned-in Default">Burned-in Default</option>
@@ -70,33 +71,41 @@ export function RenderSettingsModal({
 
           <div className="form-field">
             <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Music Track
+              Background Music
             </label>
             <select
               className={selectClassName}
               value={musicTrack}
-              onChange={(event) => setMusicTrack(event.target.value)}
+              onChange={(event) => {
+                setMusicTrack(event.target.value);
+                if (event.target.value === "none") {
+                  setMusicDucking("0 dB");
+                }
+              }}
             >
+              <option value="none">No Background Music</option>
               <option value="Ambient Corporate 1">Ambient Corporate 1</option>
               <option value="Lo-fi Chill">Lo-fi Chill</option>
               <option value="Upbeat Electronic">Upbeat Electronic</option>
             </select>
           </div>
 
-          <div className="form-field">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Music Ducking
-            </label>
-            <select
-              className={selectClassName}
-              value={musicDucking}
-              onChange={(event) => setMusicDucking(event.target.value)}
-            >
-              <option value="-6 dB">-6 dB (Loud)</option>
-              <option value="-12 dB">-12 dB (Balanced)</option>
-              <option value="-18 dB">-18 dB (Quiet)</option>
-            </select>
-          </div>
+          {musicTrack !== "none" && (
+            <div className="form-field">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Music Ducking
+              </label>
+              <select
+                className={selectClassName}
+                value={musicDucking}
+                onChange={(event) => setMusicDucking(event.target.value)}
+              >
+                <option value="-6 dB">-6 dB (Loud)</option>
+                <option value="-12 dB">-12 dB (Balanced)</option>
+                <option value="-18 dB">-18 dB (Quiet)</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="mt-6 flex justify-end gap-2 border-t border-border-subtle pt-4">

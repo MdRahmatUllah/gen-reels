@@ -1195,7 +1195,32 @@ export async function liveGetDashboardData(): Promise<DashboardData> {
     api.get<BackendUsageSummary>("/usage").catch(() => null),
   ]);
   const focusProject = shellData.projects[0];
-  const renders = focusProject ? await liveGetRenders(focusProject.id).catch(() => []) : [];
+  const recentProjects = shellData.projects.slice(0, 5);
+
+  const [renders, ...projectExports] = await Promise.all([
+    focusProject ? liveGetRenders(focusProject.id).catch(() => []) : Promise.resolve([]),
+    ...recentProjects.map((project) =>
+      liveGetExports(project.id)
+        .then((exports) => exports.map((exp) => ({ ...exp, projectId: project.id, projectTitle: project.title })))
+        .catch(() => []),
+    ),
+  ]);
+
+  const allExports = projectExports.flat();
+  allExports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const recentVideos = allExports.slice(0, 5).map((exp) => ({
+    id: exp.id,
+    projectId: exp.projectId,
+    projectTitle: exp.projectTitle,
+    name: exp.name,
+    status: exp.status,
+    downloadUrl: exp.downloadUrl,
+    durationSec: exp.durationSec,
+    createdAt: exp.createdAt,
+    format: exp.format,
+    gradient: exp.gradient,
+  }));
+
   return {
     focusProject,
     metrics: [
@@ -1234,8 +1259,36 @@ export async function liveGetDashboardData(): Promise<DashboardData> {
       },
     ],
     compositionRules: renders[0]?.checks ?? [],
-    recentProjects: shellData.projects.slice(0, 5),
+    recentProjects,
+    recentVideos,
   };
+}
+
+export async function liveGetAllVideos(): Promise<import("../types/domain").DashboardVideo[]> {
+  const projects = await getProjectSummaries();
+  const exportResults = await Promise.all(
+    projects.map((project) =>
+      liveGetExports(project.id)
+        .then((exports) =>
+          exports.map((exp) => ({
+            id: exp.id,
+            projectId: project.id,
+            projectTitle: project.title,
+            name: exp.name,
+            status: exp.status,
+            downloadUrl: exp.downloadUrl,
+            durationSec: exp.durationSec,
+            createdAt: exp.createdAt,
+            format: exp.format,
+            gradient: exp.gradient,
+          })),
+        )
+        .catch(() => []),
+    ),
+  );
+  const all = exportResults.flat();
+  all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return all;
 }
 
 export async function liveGetProjects(): Promise<ProjectSummary[]> {

@@ -444,6 +444,19 @@ export interface DashboardMetric {
   tone: HealthTone;
 }
 
+export interface DashboardVideo {
+  id: string;
+  projectId: string;
+  projectTitle: string;
+  name: string;
+  status: "ready" | "processing";
+  downloadUrl: string | null;
+  durationSec: number;
+  createdAt: string;
+  format: string;
+  gradient: string;
+}
+
 export interface DashboardData {
   focusProject: ProjectSummary;
   metrics: DashboardMetric[];
@@ -451,6 +464,7 @@ export interface DashboardData {
   queueOverview: DashboardMetric[];
   compositionRules: RenderCheck[];
   recentProjects: ProjectSummary[];
+  recentVideos: DashboardVideo[];
 }
 
 /* ─── Bundles ─────────────────────────────────────────────────────────────── */

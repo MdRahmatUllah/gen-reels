@@ -92,6 +92,7 @@ const icons = {
 
 const navIconMap: Record<string, string> = {
   "Dashboard": icons.dashboard,
+  "Videos":    icons.scenes,
   "Projects":  icons.projects,
   "Presets":   icons.presets,
   "Templates": icons.templates,
@@ -300,6 +301,7 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
               label="Studio"
               items={[
                 { to: "/app", label: "Dashboard" },
+                { to: "/app/videos", label: "Videos" },
                 { to: "/app/projects", label: "Projects" },
                 { to: "/app/assets", label: "Assets" },
                 { to: "/app/presets", label: "Presets" },

@@ -117,6 +117,7 @@ import {
   liveRejectQueueItem,
   liveGetAdminWorkspaces,
   liveGetAdminRenders,
+  liveGetAllVideos,
 } from "./live-api";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -1130,6 +1131,26 @@ export async function mockGetDashboardData(): Promise<DashboardData> {
   const projects = Array.from(state.projects.values());
   const focusProject = projects[0] ?? makeSeedProject("empty", "No projects yet", "brief");
 
+  const recentVideos: import("../types/domain").DashboardVideo[] = [];
+  for (const project of projects) {
+    const projectExports = state.exports.get(project.id) ?? [];
+    for (const exp of projectExports) {
+      recentVideos.push({
+        id: exp.id,
+        projectId: project.id,
+        projectTitle: project.title,
+        name: exp.name,
+        status: exp.status,
+        downloadUrl: exp.downloadUrl,
+        durationSec: exp.durationSec,
+        createdAt: exp.createdAt,
+        format: exp.format,
+        gradient: exp.gradient,
+      });
+    }
+  }
+  recentVideos.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   return {
     focusProject,
     metrics: [
@@ -1151,7 +1172,35 @@ export async function mockGetDashboardData(): Promise<DashboardData> {
       { id: "c3", label: "Duration bounds", status: "pass", detail: "60-120 second target range" },
     ],
     recentProjects: projects.slice(0, 5),
+    recentVideos: recentVideos.slice(0, 5),
   };
+}
+
+export async function mockGetAllVideos(): Promise<import("../types/domain").DashboardVideo[]> {
+  if (!isMockMode()) {
+    return liveGetAllVideos();
+  }
+  await randomDelay(200, 500);
+  const videos: import("../types/domain").DashboardVideo[] = [];
+  for (const project of state.projects.values()) {
+    const projectExports = state.exports.get(project.id) ?? [];
+    for (const exp of projectExports) {
+      videos.push({
+        id: exp.id,
+        projectId: project.id,
+        projectTitle: project.title,
+        name: exp.name,
+        status: exp.status,
+        downloadUrl: exp.downloadUrl,
+        durationSec: exp.durationSec,
+        createdAt: exp.createdAt,
+        format: exp.format,
+        gradient: exp.gradient,
+      });
+    }
+  }
+  videos.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return videos;
 }
 
 /* ─── Stub APIs for pages not yet interactive ─────────────────────────────── */
@@ -1590,20 +1639,32 @@ export async function mockStartRender(
   project.stage = "renders";
   state.projects.set(projectId, project);
 
-  const steps: RenderStep[] = planSet.scenes.map((scene, i) => ({
-    id: nextId("step"),
-    sceneId: `Scene ${i + 1}`,
-    name: scene.shotType || "Shot",
-    status: "draft",
-    durationDeltaSec: 0,
-    clipStatus: "Queued",
-    narrationStatus: "Queued",
-    consistency: "Pending",
-    nextAction: "Waiting for queue",
-  }));
+  const previousJob = state.renderJobs.get(projectId);
+  const previousFrameAssets = previousJob?.frameAssets ?? [];
+  const previousSteps = previousJob?.steps ?? [];
+
+  const steps: RenderStep[] = planSet.scenes.map((scene, i) => {
+    const prevStep = previousSteps.find(
+      (s) => s.sceneId === scene.id && s.stepKind === "frame_pair_generation",
+    );
+    if (prevStep && (prevStep.backendStatus === "approved" || prevStep.backendStatus === "review" || prevStep.backendStatus === "completed")) {
+      return { ...prevStep };
+    }
+    return {
+      id: nextId("step"),
+      sceneId: `Scene ${i + 1}`,
+      name: scene.shotType || "Shot",
+      status: "draft" as const,
+      durationDeltaSec: 0,
+      clipStatus: "Queued",
+      narrationStatus: "Queued",
+      consistency: "Pending",
+      nextAction: "Waiting for queue",
+    };
+  });
 
   const job: RenderJob = {
-    id: `render_${projectId}`,
+    id: `render_${projectId}_${Date.now()}`,
     label: `Render ${Math.floor(Math.random() * 100)} · Master vertical export`,
     status: "running",
     progress: 0,
@@ -1616,8 +1677,10 @@ export async function mockStartRender(
     sseState: "Live SSE connected",
     nextAction: "Initializing pipelines...",
     musicTrack: settings?.musicTrack || "Ambient Corporate 1",
-    allowExportWithoutMusic: false,
+    allowExportWithoutMusic: settings?.musicTrack === "none",
     exportUrl: null,
+    scenePlanId: planSet.id,
+    frameAssets: previousFrameAssets.length > 0 ? [...previousFrameAssets] : undefined,
     checks: [
       { id: "c1", label: "Consistency pack provenance", status: "pass", detail: "All clips reference locked snapshot." },
     ],
@@ -1628,8 +1691,8 @@ export async function mockStartRender(
     metrics: { 
       lufsTarget: "-14 LUFS", 
       truePeak: "-1.0 dBTP", 
-      musicDucking: settings?.musicDucking || "-12 dB", 
-      subtitleState: "Burned",
+      musicDucking: settings?.musicTrack === "none" ? "Off" : (settings?.musicDucking || "-12 dB"), 
+      subtitleState: settings?.subtitleStyle === "none" ? "Off" : "Burned",
       subtitleStyle: settings?.subtitleStyle || "Default"
     }
   };

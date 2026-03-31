@@ -38,6 +38,19 @@ function latestRenderForPlan(renders: RenderJob[] | undefined, planId: string): 
   return sorted[0] ?? null;
 }
 
+function renderWithFrameAssets(renders: RenderJob[] | undefined, planId: string): RenderJob | null {
+  if (!renders?.length) return null;
+  const matches = renders.filter((r) => r.scenePlanId === planId);
+  const pool = matches.length ? matches : renders;
+  const sorted = [...pool].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  const withAssets = sorted.find(
+    (r) => (r.frameAssets?.length ?? 0) > 0 || r.steps.some((s) => s.stepKind === "frame_pair_generation"),
+  );
+  return withAssets ?? sorted[0] ?? null;
+}
+
 function frameStepForScene(render: RenderJob, sceneSegmentId: string): RenderStep | undefined {
   return render.steps.find(
     (s) => s.stepKind === "frame_pair_generation" && s.sceneId === sceneSegmentId,
@@ -280,6 +293,11 @@ export function FramesPage() {
     return latestRenderForPlan(renders, planSet.id);
   }, [planSet?.id, renders]);
 
+  const frameSourceRender = useMemo(() => {
+    if (!planSet?.id) return null;
+    return renderWithFrameAssets(renders, planSet.id);
+  }, [planSet?.id, renders]);
+
   const quickCreateBanner =
     quickCreateStatus && (quickCreateStatus.isActive || quickCreateStatus.hasFailed)
       ? quickCreateStatus
@@ -340,14 +358,15 @@ export function FramesPage() {
     );
   }
 
+  const frameRender = frameSourceRender ?? activeRender;
   const anyReview =
-    activeRender?.steps.some(
+    frameRender?.steps.some(
       (s) => s.stepKind === "frame_pair_generation" && s.backendStatus === "review",
     ) ?? false;
   const allFramePairsApproved =
     planSet.scenes.length > 0 &&
     planSet.scenes.every((scene) => {
-      const step = activeRender ? frameStepForScene(activeRender, scene.id) : undefined;
+      const step = frameRender ? frameStepForScene(frameRender, scene.id) : undefined;
       return step?.backendStatus === "approved";
     });
 
@@ -540,9 +559,10 @@ export function FramesPage() {
             </div>
           ) : null}
           {planSet.scenes.map((scene) => {
-            const step = activeRender ? frameStepForScene(activeRender, scene.id) : undefined;
-            const start = activeRender ? assetUrl(activeRender, scene.id, "scene_start_frame") : null;
-            const end = activeRender ? assetUrl(activeRender, scene.id, "scene_end_frame") : null;
+            const displayRender = frameSourceRender ?? activeRender;
+            const step = displayRender ? frameStepForScene(displayRender, scene.id) : undefined;
+            const start = displayRender ? assetUrl(displayRender, scene.id, "scene_start_frame") : null;
+            const end = displayRender ? assetUrl(displayRender, scene.id, "scene_end_frame") : null;
             const inReview = step?.backendStatus === "review";
             const approved = step?.backendStatus === "approved";
             const stepFailed = step?.backendStatus === "failed";
@@ -618,11 +638,11 @@ export function FramesPage() {
                     ) : null}
                   </div>
                 </div>
-                {activeRender ? (
+                {displayRender ? (
                   <NarrationCard
-                    audioSrc={narrationUrl(activeRender, scene.id)}
+                    audioSrc={narrationUrl(displayRender, scene.id)}
                     sceneId={scene.id}
-                    renderJobId={activeRender.id}
+                    renderJobId={displayRender.id}
                     speechConfigured={speechConfigured}
                     generateNarration={generateNarration.mutate}
                     isGenerating={
