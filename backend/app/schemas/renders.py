@@ -13,6 +13,8 @@ class RenderCreateRequest(BaseModel):
     allow_export_without_music: bool = True
     render_mode: str = "slide"
     animation_profile: dict[str, object] = Field(default_factory=dict)
+    subtitle_style_profile: dict[str, object] | None = None
+    audio_mix_profile: dict[str, object] | None = None
 
 
 class RenderStepResponse(BaseModel):

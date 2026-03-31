@@ -6,7 +6,7 @@ from typing import Any
 
 _DEFAULT_SUBTITLE_STYLE_PROFILE: dict[str, Any] = {
     "preset": "clean_bold",
-    "burn_in": True,
+    "burn_in": False,
     "font_family": "Montserrat SemiBold",
     "font_size": 56,
     "max_width_pct": 82,
@@ -32,11 +32,11 @@ _DEFAULT_EXPORT_PROFILE: dict[str, Any] = {
     },
     "frame_rate": 24,
     "video_bitrate_kbps": 8000,
-    "caption_burn_in": True,
+    "caption_burn_in": False,
 }
 
 _DEFAULT_AUDIO_MIX_PROFILE: dict[str, Any] = {
-    "music_enabled": True,
+    "music_enabled": False,
     "music_source": "generated_or_curated",
     "music_gain_db": -20.0,
     "ducking_gain_db": -12.0,

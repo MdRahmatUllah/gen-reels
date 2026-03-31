@@ -959,10 +959,10 @@ function mapRender(render: BackendRender, events: BackendRenderEvent[] = []): Re
         (render.payload.audio_mix_profile as Record<string, unknown> | undefined)?.music_ducking ??
           "Auto",
       ),
-      subtitleState: String(
-        (render.payload.subtitle_style_profile as Record<string, unknown> | undefined)?.enabled ??
-          "auto",
-      ),
+      subtitleState:
+        (render.payload.subtitle_style_profile as Record<string, unknown> | undefined)?.burn_in === true
+          ? "Burned"
+          : "Off",
     },
   };
 }
@@ -982,8 +982,11 @@ function mapExport(exportItem: BackendExport): ExportArtifact {
     sizeMb: 0,
     integratedLufs: Number((exportItem.audio_mix_profile.integrated_lufs as number | undefined) ?? -14),
     truePeak: Number((exportItem.audio_mix_profile.true_peak as number | undefined) ?? -1),
-    subtitles: Boolean(exportItem.subtitle_style_profile.enabled ?? true),
-    musicBed: Boolean((exportItem.audio_mix_profile.music_enabled as boolean | undefined) ?? true),
+    subtitles: Boolean(
+      (exportItem.subtitle_style_profile as Record<string, unknown>)?.burn_in === true ||
+        (exportItem.subtitle_style_profile as Record<string, unknown>)?.enabled === true,
+    ),
+    musicBed: (exportItem.audio_mix_profile as Record<string, unknown>)?.music_enabled === true,
     createdAt: exportItem.created_at,
     gradient: sceneGradients[0],
     ratio: "9:16",
@@ -1644,16 +1647,25 @@ export async function liveStartRender(
   projectId: string,
   settings?: { subtitleStyle: string; musicDucking: string; musicTrack: string; animationEffect: string },
 ): Promise<RenderJob> {
+  const subtitleStyle = settings?.subtitleStyle ?? "none";
+  const musicTrack = settings?.musicTrack ?? "none";
+  const burnInSubtitles = subtitleStyle !== "none";
+  const musicEnabled = musicTrack !== "none";
+
   await api.post(
     `/projects/${projectId}/renders`,
     {
-      allow_export_without_music: true,
+      allow_export_without_music: !musicEnabled,
       render_mode: "slide",
       animation_profile: { effect: settings?.animationEffect ?? "ken_burns" },
-      subtitle_style_profile: { style: settings?.subtitleStyle ?? "default" },
+      subtitle_style_profile: {
+        burn_in: burnInSubtitles,
+        preset: burnInSubtitles ? subtitleStyle.toLowerCase().replace(/\s+/g, "_") : "off",
+      },
       audio_mix_profile: {
-        music_ducking: settings?.musicDucking ?? "auto",
-        music_track_name: settings?.musicTrack ?? "auto",
+        music_enabled: musicEnabled,
+        music_track_name: musicEnabled ? musicTrack : "",
+        music_ducking: settings?.musicDucking ?? "-12 dB",
       },
     },
     idempotencyHeaders(),
@@ -1671,8 +1683,8 @@ export async function liveStartRender(
     consistencyPackSnapshotId: "pending",
     sseState: "queued",
     nextAction: "Waiting for worker pickup.",
-    musicTrack: settings?.musicTrack ?? "Auto soundtrack",
-    allowExportWithoutMusic: true,
+    musicTrack: musicEnabled ? musicTrack : "none",
+    allowExportWithoutMusic: !musicEnabled,
     exportUrl: null,
     checks: [],
     steps: [],
@@ -1680,8 +1692,8 @@ export async function liveStartRender(
     metrics: {
       lufsTarget: "-14 LUFS",
       truePeak: "-1 dBTP",
-      musicDucking: settings?.musicDucking ?? "auto",
-      subtitleState: settings?.subtitleStyle ?? "default",
+      musicDucking: musicEnabled ? (settings?.musicDucking ?? "-12 dB") : "Off",
+      subtitleState: burnInSubtitles ? "Burned" : "Off",
     },
   };
 }

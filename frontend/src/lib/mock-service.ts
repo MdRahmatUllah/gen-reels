@@ -1865,8 +1865,8 @@ export async function mockStartRender(
     consistencyPackSnapshotId: `cps_${projectId}_${Date.now()}`,
     sseState: "Live SSE connected",
     nextAction: "Initializing pipelines...",
-    musicTrack: settings?.musicTrack || "Ambient Corporate 1",
-    allowExportWithoutMusic: settings?.musicTrack === "none",
+    musicTrack: settings?.musicTrack ?? "none",
+    allowExportWithoutMusic: (settings?.musicTrack ?? "none") === "none",
     exportUrl: null,
     scenePlanId: planSet.id,
     frameAssets: previousFrameAssets.length > 0 ? [...previousFrameAssets] : undefined,
@@ -1880,9 +1880,9 @@ export async function mockStartRender(
     metrics: { 
       lufsTarget: "-14 LUFS", 
       truePeak: "-1.0 dBTP", 
-      musicDucking: settings?.musicTrack === "none" ? "Off" : (settings?.musicDucking || "-12 dB"), 
-      subtitleState: settings?.subtitleStyle === "none" ? "Off" : "Burned",
-      subtitleStyle: settings?.subtitleStyle || "Default"
+      musicDucking: (settings?.musicTrack ?? "none") === "none" ? "Off" : (settings?.musicDucking || "-12 dB"),
+      subtitleState: (settings?.subtitleStyle ?? "none") === "none" ? "Off" : "Burned",
+      subtitleStyle: (settings?.subtitleStyle ?? "none") === "none" ? "Off" : (settings?.subtitleStyle || "Default"),
     },
     isVideoGeneration: !!settings,
   };

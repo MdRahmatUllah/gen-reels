@@ -77,6 +77,7 @@ from app.services.execution_policy_service import ExecutionPolicyService
 from app.services.generation_service import GenerationService
 from app.services.notification_service import NotificationService
 from app.services.project_profiles import (
+    merge_profile_overrides,
     normalize_audio_mix_profile,
     normalize_export_profile,
     normalize_subtitle_style_profile,
@@ -1303,6 +1304,14 @@ class RenderService(GenerationService):
             project.workspace_id,
             scene_plan.scene_count or len(self._scene_segments(scene_plan.id)),
         )
+        merged_subtitle = merge_profile_overrides(
+            dict(project.subtitle_style_profile or {}),
+            payload.subtitle_style_profile,
+        )
+        merged_audio = merge_profile_overrides(
+            dict(project.audio_mix_profile or {}),
+            payload.audio_mix_profile,
+        )
         request_payload = {
             "project_id": project_id,
             "scene_plan_id": str(scene_plan.id),
@@ -1312,9 +1321,9 @@ class RenderService(GenerationService):
             "allow_export_without_music": payload.allow_export_without_music,
             "render_mode": payload.render_mode,
             "animation_profile": payload.animation_profile,
-            "subtitle_style_profile": normalize_subtitle_style_profile(project.subtitle_style_profile),
+            "subtitle_style_profile": normalize_subtitle_style_profile(merged_subtitle),
             "export_profile": normalize_export_profile(project.export_profile),
-            "audio_mix_profile": normalize_audio_mix_profile(project.audio_mix_profile),
+            "audio_mix_profile": normalize_audio_mix_profile(merged_audio),
             "voice_preset_snapshot": {
                 "id": str(voice_preset.id) if voice_preset else None,
                 "name": voice_preset.name if voice_preset else None,
@@ -2902,6 +2911,9 @@ class RenderService(GenerationService):
             return self._latest_asset(render_job.id, asset_role=AssetRole.music_bed)
 
         self._set_step_running(step)
+        if not bool(audio_mix_profile.get("music_enabled")):
+            self._complete_step(step, output_payload={"skipped": True, "reason": "music_disabled"})
+            return None
         provider_run = self._create_provider_run(
             render_job=render_job,
             render_step=step,
@@ -2968,6 +2980,9 @@ class RenderService(GenerationService):
             return self._latest_asset(render_job.id, asset_role=AssetRole.subtitle_file)
 
         self._set_step_running(step)
+        if not bool(subtitle_style_profile.get("burn_in")):
+            self._complete_step(step, output_payload={"skipped": True, "reason": "burn_in_disabled"})
+            return None
         try:
             current_ms = 0
             lines: list[str] = []

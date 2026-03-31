@@ -20,7 +20,7 @@ export function RenderSettingsModal({
   isStarting,
 }: RenderSettingsModalProps) {
   const [subtitleStyle, setSubtitleStyle] = useState("none");
-  const [musicDucking, setMusicDucking] = useState("-12 dB");
+  const [musicDucking, setMusicDucking] = useState("0 dB");
   const [musicTrack, setMusicTrack] = useState("none");
   const [animationEffect, setAnimationEffect] = useState("ken_burns");
 
@@ -30,8 +30,8 @@ export function RenderSettingsModal({
         <div>
           <h2 className="font-heading text-lg font-bold text-primary">Generate Video</h2>
           <p className="mt-1 text-sm text-secondary">
-            Animates your scene keyframes with Ken Burns motion, adds voiceover and captions,
-            then exports the final MP4.
+            Animates your scene keyframes with Ken Burns motion, adds voiceover, optionally burns in
+            subtitles and a music bed, then exports the final MP4.
           </p>
         </div>
 
@@ -77,9 +77,12 @@ export function RenderSettingsModal({
               className={selectClassName}
               value={musicTrack}
               onChange={(event) => {
-                setMusicTrack(event.target.value);
-                if (event.target.value === "none") {
+                const next = event.target.value;
+                setMusicTrack(next);
+                if (next === "none") {
                   setMusicDucking("0 dB");
+                } else if (musicTrack === "none") {
+                  setMusicDucking("-12 dB");
                 }
               }}
             >
