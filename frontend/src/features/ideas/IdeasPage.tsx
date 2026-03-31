@@ -63,14 +63,16 @@ export function IdeasPage() {
       description="Generate and evaluate viral content ideas before committing to a script. Select one idea as the creative anchor."
       actions={
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-          <button
-            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            type="button"
-          >
-            {isGenerating ? "Generating…" : hasIdeas ? "Regenerate ideas" : "Generate ideas"}
-          </button>
+          {!canContinue ? (
+            <button
+              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              type="button"
+            >
+              {isGenerating ? "Generating…" : hasIdeas ? "Regenerate ideas" : "Generate ideas"}
+            </button>
+          ) : null}
           {canContinue ? (
             <button
               className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
