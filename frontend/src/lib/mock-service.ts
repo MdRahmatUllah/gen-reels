@@ -1312,6 +1312,81 @@ const sceneGenerationData = [
   { shotType: "Overhead vanity", motion: "Top-down glide", palette: "Fog white / soft cobalt", audioCue: "Ambient pause" },
 ];
 
+function buildImagePrompt(opts: {
+  frameKind: "start" | "end";
+  sceneIndex: number;
+  totalScenes: number;
+  shotType: string;
+  motion: string;
+  narration: string;
+  visualDirection: string;
+  beat: string;
+  palette: string;
+  brandNorthStar: string;
+  primaryPalette: string;
+  objective: string;
+  previousSceneEndDescription: string | null;
+}): string {
+  const parts: string[] = [];
+
+  parts.push(
+    `Vertical 9:16 cinematic keyframe still, sharp focus, production-quality lighting, no text overlays, no watermark. ` +
+    `Frame role: ${opts.frameKind} frame of scene ${opts.sceneIndex}/${opts.totalScenes}.`
+  );
+
+  parts.push(
+    `VISUAL_STYLE:\n` +
+    `Brand tone: ${opts.brandNorthStar}.\n` +
+    `Color palette: ${opts.primaryPalette || opts.palette}.\n` +
+    `All scenes must share a consistent look, lighting style, and color grading throughout the video.`
+  );
+
+  if (opts.objective) {
+    parts.push(`VIDEO_CONTEXT:\n${opts.objective}`);
+  }
+
+  const sceneLines = [
+    `Scene ${opts.sceneIndex}: "${opts.beat}"`,
+    opts.narration ? `Narration: ${opts.narration}` : "",
+    opts.visualDirection ? `Visual direction: ${opts.visualDirection}` : "",
+    `Shot: ${opts.shotType}, Camera: ${opts.motion}`,
+  ].filter(Boolean);
+  parts.push(`SCENE_CONTEXT:\n${sceneLines.join("\n")}`);
+
+  if (opts.frameKind === "start" && opts.previousSceneEndDescription) {
+    parts.push(
+      `CONTINUITY (CRITICAL):\n` +
+      `The previous scene ended with: "${opts.previousSceneEndDescription}"\n` +
+      `This frame MUST visually continue from that image. Match the subjects, wardrobe, color palette, ` +
+      `environment, and lighting. Show a natural progression into this scene's opening moment.`
+    );
+  } else if (opts.frameKind === "start" && opts.sceneIndex === 1) {
+    parts.push(
+      `CONTINUITY:\nThis is the opening frame of the entire video. Establish the visual world, ` +
+      `introduce the key subject, and set the tone for every scene that follows.`
+    );
+  }
+
+  if (opts.frameKind === "end") {
+    parts.push(
+      `CONTINUITY:\n` +
+      `This is the closing frame of scene ${opts.sceneIndex}. It must visually match this scene's start frame ` +
+      `(same cast, wardrobe, location, palette) while showing clear progression toward the scene's resolution. ` +
+      `Compose it so the NEXT scene can naturally cut or crossfade from this image.`
+    );
+  }
+
+  parts.push(
+    `DIRECTOR_SHOT_INSTRUCTION:\n` +
+    `${opts.shotType} shot — ${opts.motion}. ` +
+    (opts.frameKind === "start"
+      ? `Establish the scene: ${opts.narration.substring(0, 120)}`
+      : `Resolve the scene and prepare transition: ${opts.narration.substring(0, 120)}`)
+  );
+
+  return parts.join("\n\n");
+}
+
 const gradients = [
   "linear-gradient(145deg, #edf4ff 0%, #c9d8ff 40%, #fdfdff 100%)",
   "linear-gradient(145deg, #f4f8ff 0%, #d7e2ff 48%, #f7fbff 100%)",
@@ -1340,10 +1415,50 @@ export async function mockGenerateScenePlan(projectId: string): Promise<ScenePla
     segments = await mockSegmentScript(projectId);
   }
 
-  const scenes: ScenePlan[] = segments.map((seg, index) => {
+  const brandNorthStar = state.brandKits[0]?.brandNorthStar ?? brief?.brandNorthStar ?? "premium editorial";
+  const primaryPalette = state.brandKits[0]?.primaryPalette ?? "";
+  const objective = brief?.objective ?? "";
+  const totalScenes = segments.length;
+
+  const scenes: ScenePlan[] = [];
+  let previousEndDescription: string | null = null;
+
+  for (let index = 0; index < segments.length; index++) {
+    const seg = segments[index];
     const meta = sceneGenerationData[index % sceneGenerationData.length];
     const beatTitle = script.lines[index]?.beat ?? `Scene ${index + 1}`;
-    return {
+    const visualDirection = script.lines[index]?.visualDirection ?? "";
+    const scenePalette = primaryPalette || meta.palette;
+
+    const promptOpts = {
+      sceneIndex: index + 1,
+      totalScenes,
+      shotType: meta.shotType,
+      motion: meta.motion,
+      narration: seg.narration,
+      visualDirection,
+      beat: beatTitle,
+      palette: scenePalette,
+      brandNorthStar,
+      primaryPalette,
+      objective,
+    };
+
+    const startPrompt = buildImagePrompt({
+      ...promptOpts,
+      frameKind: "start",
+      previousSceneEndDescription: previousEndDescription,
+    });
+
+    const endPrompt = buildImagePrompt({
+      ...promptOpts,
+      frameKind: "end",
+      previousSceneEndDescription: null,
+    });
+
+    previousEndDescription = `Scene ${index + 1} (${beatTitle}) — ${meta.shotType}, ${meta.motion}. ${seg.narration.substring(0, 100)}`;
+
+    scenes.push({
       id: nextId("scene"),
       index: index + 1,
       title: beatTitle,
@@ -1351,8 +1466,8 @@ export async function mockGenerateScenePlan(projectId: string): Promise<ScenePla
       shotType: meta.shotType,
       motion: meta.motion,
       prompt: `${meta.shotType} shot: ${seg.narration.substring(0, 80)}`,
-      startImagePrompt: `Opening frame — ${meta.shotType.toLowerCase()}, ${state.brandKits[0]?.brandNorthStar ?? brief?.brandNorthStar ?? "premium editorial"}, establishing the scene for: ${seg.narration.substring(0, 50)}`,
-      endImagePrompt: `Closing frame — ${meta.motion.toLowerCase()} completing, transitional composition ready for next scene, ${seg.narration.substring(0, 50)}`,
+      startImagePrompt: startPrompt,
+      endImagePrompt: endPrompt,
       continuityScore: 85 + Math.floor(Math.random() * 15),
       durationSec: seg.estimatedDurationSec,
       estimatedWordCount: seg.estimatedWordCount,
@@ -1362,18 +1477,18 @@ export async function mockGenerateScenePlan(projectId: string): Promise<ScenePla
       keyframeStatus: "Awaiting generation",
       notes: [],
       promptHistory: [],
-      palette: state.brandKits[0]?.primaryPalette ?? meta.palette,
+      palette: scenePalette,
       audioCue: meta.audioCue,
       thumbnailLabel: beatTitle.substring(0, 16),
       gradient: gradients[index % gradients.length],
       subtitleStatus: "Draft",
       narration: seg.narration,
       caption: seg.caption,
-      visualDirection: script.lines[index]?.visualDirection ?? "",
+      visualDirection,
       voicePacing: script.lines[index]?.voicePacing ?? "",
       version: 1,
-    };
-  });
+    });
+  }
 
   const totalDuration = scenes.reduce((sum, s) => sum + s.durationSec, 0);
   const warningsCount = scenes.filter((s) => s.durationWarning).length;
@@ -1425,15 +1540,50 @@ export async function mockGeneratePromptPairs(projectId: string, sceneId: string
   const scene = planSet.scenes.find((s) => s.id === sceneId);
   if (!scene) throw new Error(`Scene ${sceneId} not found`);
 
-  // History tracking for Phase 5 lineage
   if (scene.startImagePrompt || scene.endImagePrompt) {
     if (!scene.promptHistory) scene.promptHistory = [];
     scene.promptHistory.unshift(`[${new Date().toLocaleTimeString()}] Start: ${scene.startImagePrompt.substring(0, 40)}... | End: ${scene.endImagePrompt.substring(0, 40)}...`);
   }
 
   const brief = state.briefs.get(projectId);
-  scene.startImagePrompt = `Opening frame — ${scene.shotType.toLowerCase()}, ${state.brandKits[0]?.brandNorthStar ?? brief?.brandNorthStar ?? "premium editorial"}, setting up: ${scene.narration.substring(0, 60)}`;
-  scene.endImagePrompt = `Closing frame — ${scene.motion.toLowerCase()} completing, ${state.brandKits[0]?.primaryPalette ?? scene.palette}, transition-ready: ${scene.narration.substring(0, 60)}`;
+  const brandNorthStar = state.brandKits[0]?.brandNorthStar ?? brief?.brandNorthStar ?? "premium editorial";
+  const primaryPalette = state.brandKits[0]?.primaryPalette ?? "";
+  const objective = brief?.objective ?? "";
+  const totalScenes = planSet.scenes.length;
+
+  let previousEndDescription: string | null = null;
+  const sceneIdx = planSet.scenes.findIndex((s) => s.id === sceneId);
+  if (sceneIdx > 0) {
+    const prev = planSet.scenes[sceneIdx - 1];
+    previousEndDescription = `Scene ${prev.index} (${prev.title}) — ${prev.shotType}, ${prev.motion}. ${prev.narration.substring(0, 100)}`;
+  }
+
+  const promptOpts = {
+    sceneIndex: scene.index,
+    totalScenes,
+    shotType: scene.shotType,
+    motion: scene.motion,
+    narration: scene.narration,
+    visualDirection: scene.visualDirection ?? "",
+    beat: scene.title,
+    palette: scene.palette,
+    brandNorthStar,
+    primaryPalette,
+    objective,
+  };
+
+  scene.startImagePrompt = buildImagePrompt({
+    ...promptOpts,
+    frameKind: "start",
+    previousSceneEndDescription: previousEndDescription,
+  });
+
+  scene.endImagePrompt = buildImagePrompt({
+    ...promptOpts,
+    frameKind: "end",
+    previousSceneEndDescription: null,
+  });
+
   scene.status = "review";
   scene.keyframeStatus = "Prompts generated";
 
