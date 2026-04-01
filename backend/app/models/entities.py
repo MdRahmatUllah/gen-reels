@@ -1138,6 +1138,16 @@ class WebhookEndpoint(Base, TimestampMixin):
     last_tested_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
+class LocalFolderProject(Base):
+    __tablename__ = "local_folder_projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    path: Mapped[str] = mapped_column(sa.String(2048), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 class VideoLibraryProject(Base):
     __tablename__ = "video_library_projects"
 

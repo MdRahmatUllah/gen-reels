@@ -531,13 +531,31 @@ export function VideoEditorPage() {
     : null;
 
   useEffect(() => {
-    if (!latestRender?.videoEffects) return;
-    setEffects((prev) => {
-      const ve = latestRender.videoEffects!;
-      if (JSON.stringify(prev) === JSON.stringify(ve)) return prev;
-      return { ...ve };
-    });
-  }, [latestRender?.videoEffects]);
+    if (!latestRender) return;
+
+    if (latestRender.videoEffects) {
+      setEffects((prev) => {
+        const ve = latestRender.videoEffects!;
+        if (JSON.stringify(prev) === JSON.stringify(ve)) return prev;
+        return { ...ve };
+      });
+    }
+
+    const hasSubs = latestRender.metrics.subtitleState === "Burned";
+    setSubtitleEnabled(hasSubs);
+    if (hasSubs && latestRender.metrics.subtitleStyle && latestRender.metrics.subtitleStyle !== "Off") {
+      setSubtitleStyle(latestRender.metrics.subtitleStyle);
+    }
+
+    const hasMusic = latestRender.musicTrack !== "none";
+    setMusicEnabled(hasMusic);
+    if (hasMusic) {
+      setMusicTrack(latestRender.musicTrack);
+    }
+    if (latestRender.metrics.musicDucking && latestRender.metrics.musicDucking !== "Off") {
+      setMusicDucking(latestRender.metrics.musicDucking);
+    }
+  }, [latestRender]);
 
   const scenes = planSet?.scenes ?? [];
   const activeScene = scenes[activeSceneIndex] ?? null;

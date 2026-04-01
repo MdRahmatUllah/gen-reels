@@ -54,6 +54,7 @@ import type {
   VideoLibraryItem,
   BrowseFolderResult,
   UploadLocalFilePayload,
+  LocalFolderProject,
 } from "../types/domain";
 import { DEFAULT_VIDEO_EFFECTS } from "../types/domain";
 import { isMockMode } from "./config";
@@ -262,6 +263,7 @@ interface MockState {
   quickCreateStatuses: Map<string, QuickCreateStatus>;
   videoLibraryProjects: VideoLibraryProject[];
   videoLibraryItems: VideoLibraryItem[];
+  localFolderProjects: LocalFolderProject[];
 }
 
 const seedTemplates: TemplateCard[] = [
@@ -546,6 +548,10 @@ const state: MockState = {
     { id: "vli_2", workspace_id: "workspace_north_star", project_id: "vlp_1", file_name: "serum_drop_closeup.mp4", content_type: "video/mp4", size_bytes: 18874368, duration_ms: 8000, width: 1080, height: 1920, url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", created_at: new Date(Date.now() - 4 * 86400000).toISOString(), updated_at: new Date(Date.now() - 4 * 86400000).toISOString() },
     { id: "vli_3", workspace_id: "workspace_north_star", project_id: "vlp_2", file_name: "lifestyle_kitchen.mp4", content_type: "video/mp4", size_bytes: 31457280, duration_ms: 12000, width: 1920, height: 1080, url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", created_at: new Date(Date.now() - 2 * 86400000).toISOString(), updated_at: new Date(Date.now() - 2 * 86400000).toISOString() },
     { id: "vli_4", workspace_id: "workspace_north_star", project_id: null, file_name: "raw_footage_01.mp4", content_type: "video/mp4", size_bytes: 104857600, duration_ms: 45000, width: 3840, height: 2160, url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4", created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: new Date(Date.now() - 86400000).toISOString() },
+  ],
+  localFolderProjects: [
+    { id: "lfp_1", name: "Food Reels", path: String.raw`F:\Personal\Ai Reels on Food\Bangla`, created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
+    { id: "lfp_2", name: "Product Shots", path: String.raw`F:\Personal\Products\2024`, created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
   ],
 };
 
@@ -2842,4 +2848,32 @@ export function mockGetStreamUrl(filePath: string): string {
   if (!isMockMode()) return liveGetStreamUrl(filePath);
   // In mock mode return a sample video for any path
   return "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+}
+
+/* ─── Local Folder Projects ───────────────────────────────────────────────── */
+
+export async function mockGetLocalFolderProjects(): Promise<LocalFolderProject[]> {
+  await randomDelay(100, 200);
+  return [...state.localFolderProjects];
+}
+
+export async function mockCreateLocalFolderProject(payload: {
+  name: string;
+  path: string;
+}): Promise<LocalFolderProject> {
+  await randomDelay(150, 300);
+  const project: LocalFolderProject = {
+    id: nextId("lfp"),
+    name: payload.name,
+    path: payload.path.trim().replace(/[/\\]+$/, ""),
+    created_at: new Date().toISOString(),
+  };
+  state.localFolderProjects.push(project);
+  return project;
+}
+
+export async function mockDeleteLocalFolderProject(id: string): Promise<void> {
+  await randomDelay(100, 200);
+  const idx = state.localFolderProjects.findIndex((p) => p.id === id);
+  if (idx !== -1) state.localFolderProjects.splice(idx, 1);
 }

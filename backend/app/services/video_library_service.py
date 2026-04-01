@@ -12,9 +12,11 @@ from app.api.deps import AuthContext
 from app.core.config import Settings
 from app.core.errors import ApiError
 from app.integrations.storage import StorageClient, build_storage_client
-from app.models.entities import VideoLibraryItem, VideoLibraryProject
+from app.models.entities import LocalFolderProject, VideoLibraryItem, VideoLibraryProject
 from app.schemas.video_library import (
     BrowseFolderResponse,
+    LocalFolderProjectCreate,
+    LocalFolderProjectResponse,
     LocalVideoFile,
     MoveToProjectRequest,
     UploadLocalFileRequest,
@@ -53,6 +55,16 @@ def _resolve_path(raw: str) -> Path:
         if alt_path.exists():
             return alt_path
     return Path(raw)
+
+
+def _local_folder_to_response(p: LocalFolderProject) -> LocalFolderProjectResponse:
+    return LocalFolderProjectResponse(
+        id=str(p.id),
+        workspace_id=str(p.workspace_id),
+        name=p.name,
+        path=p.path,
+        created_at=p.created_at,
+    )
 
 
 def _project_to_response(p: VideoLibraryProject) -> VideoLibraryProjectResponse:
@@ -94,6 +106,43 @@ class VideoLibraryService:
         if self._storage is None:
             self._storage = build_storage_client(self.settings)
         return self._storage
+
+    # ── Local Folder Projects ─────────────────────────────────────────────────
+
+    def list_local_folder_projects(self, auth: AuthContext) -> list[LocalFolderProjectResponse]:
+        rows = self.db.scalars(
+            select(LocalFolderProject)
+            .where(LocalFolderProject.workspace_id == uuid.UUID(auth.workspace_id))
+            .order_by(LocalFolderProject.created_at.desc())
+        ).all()
+        return [_local_folder_to_response(r) for r in rows]
+
+    def create_local_folder_project(
+        self, auth: AuthContext, payload: LocalFolderProjectCreate
+    ) -> LocalFolderProjectResponse:
+        # Normalise path: strip trailing separators
+        path = payload.path.strip().rstrip("/\\")
+        project = LocalFolderProject(
+            workspace_id=uuid.UUID(auth.workspace_id),
+            name=payload.name,
+            path=path,
+        )
+        self.db.add(project)
+        self.db.commit()
+        self.db.refresh(project)
+        return _local_folder_to_response(project)
+
+    def delete_local_folder_project(self, auth: AuthContext, project_id: str) -> None:
+        project = self.db.scalar(
+            select(LocalFolderProject).where(
+                LocalFolderProject.id == uuid.UUID(project_id),
+                LocalFolderProject.workspace_id == uuid.UUID(auth.workspace_id),
+            )
+        )
+        if not project:
+            raise ApiError(404, "not_found", "Local folder project not found.")
+        self.db.delete(project)
+        self.db.commit()
 
     # ── Projects ──────────────────────────────────────────────────────────────
 

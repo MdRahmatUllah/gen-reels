@@ -61,6 +61,7 @@ import type {
   BrowseFolderResult,
   VideoLibraryItem,
   UploadLocalFilePayload,
+  LocalFolderProject,
 } from "../types/domain";
 
 type BackendSession = {
@@ -974,7 +975,28 @@ function mapRender(render: BackendRender, events: BackendRenderEvent[] = []): Re
         (render.payload.subtitle_style_profile as Record<string, unknown> | undefined)?.burn_in === true
           ? "Burned"
           : "Off",
+      subtitleStyle: (() => {
+        const prof = render.payload.subtitle_style_profile as Record<string, unknown> | undefined;
+        if (!prof || prof.burn_in !== true) return "Off";
+        const preset = String(prof.preset ?? "off");
+        if (preset === "off") return "Off";
+        return preset.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      })(),
     },
+    videoEffects: (() => {
+      const vfx = render.payload.video_effects_profile as Record<string, unknown> | undefined;
+      if (!vfx) return undefined;
+      return {
+        brightness: Number(vfx.brightness ?? 0),
+        contrast: Number(vfx.contrast ?? 0),
+        saturation: Number(vfx.saturation ?? 0),
+        speed: Number(vfx.speed ?? 1),
+        fadeInSec: Number(vfx.fade_in_sec ?? 0),
+        fadeOutSec: Number(vfx.fade_out_sec ?? 0),
+        colorFilter: String(vfx.color_filter ?? "none") as import("../types/domain").ColorFilterType,
+        vignetteStrength: Number(vfx.vignette_strength ?? 0),
+      };
+    })(),
   };
 }
 
@@ -2303,4 +2325,19 @@ export async function liveDeleteUploadedVideo(itemId: string): Promise<void> {
 
 export function liveGetStreamUrl(filePath: string): string {
   return `${config.apiBaseUrl}/api/v1/video-library/stream?path=${encodeURIComponent(filePath)}`;
+}
+
+export async function liveGetLocalFolderProjects(): Promise<LocalFolderProject[]> {
+  return api.get<LocalFolderProject[]>("/video-library/local-folders");
+}
+
+export async function liveCreateLocalFolderProject(payload: {
+  name: string;
+  path: string;
+}): Promise<LocalFolderProject> {
+  return api.post<LocalFolderProject>("/video-library/local-folders", payload);
+}
+
+export async function liveDeleteLocalFolderProject(id: string): Promise<void> {
+  return api.delete(`/video-library/local-folders/${id}`);
 }

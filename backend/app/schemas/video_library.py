@@ -53,3 +53,16 @@ class VideoLibraryItemResponse(BaseModel):
 
 class MoveToProjectRequest(BaseModel):
     project_id: str | None
+
+
+class LocalFolderProjectCreate(BaseModel):
+    name: str
+    path: str
+
+
+class LocalFolderProjectResponse(BaseModel):
+    id: str
+    workspace_id: str
+    name: str
+    path: str
+    created_at: datetime

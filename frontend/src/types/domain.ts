@@ -744,6 +744,13 @@ export interface LocalWorker {
 }
 
 /* ─── Video Library ───────────────────────────────────────────────────────── */
+export interface LocalFolderProject {
+  id: string;
+  name: string;
+  path: string;
+  created_at: string;
+}
+
 export interface VideoLibraryProject {
   id: string;
   workspace_id: string;

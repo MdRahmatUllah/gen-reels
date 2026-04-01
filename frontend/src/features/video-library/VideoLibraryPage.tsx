@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Dialog } from "../../components/Dialog";
@@ -12,8 +12,11 @@ import {
   mockGetVideoLibraryProjects,
   mockMoveVideoToProject,
   mockUploadLocalFile,
+  mockGetLocalFolderProjects,
+  mockCreateLocalFolderProject,
+  mockDeleteLocalFolderProject,
 } from "../../lib/mock-service";
-import type { LocalVideoFile, VideoLibraryItem, VideoLibraryProject } from "../../types/domain";
+import type { LocalFolderProject, LocalVideoFile, VideoLibraryItem, VideoLibraryProject } from "../../types/domain";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 function formatBytes(bytes: number): string {
@@ -328,39 +331,206 @@ function UploadProjectDialog({
   );
 }
 
+/* ─── CreateLocalProjectDialog ───────────────────────────────────────────── */
+function CreateLocalProjectDialog({
+  open,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (name: string, path: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [path, setPath] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim() && path.trim()) {
+      onCreate(name.trim(), path.trim());
+      setName("");
+      setPath("");
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="New Folder Project"
+      actions={
+        <div className="flex gap-3 justify-end">
+          <button type="button" className="btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form="create-local-project-form" className="btn-primary">
+            Create
+          </button>
+        </div>
+      }
+    >
+      <form id="create-local-project-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-secondary uppercase tracking-wider" htmlFor="lfp-name">
+            Project name
+          </label>
+          <input
+            id="lfp-name"
+            type="text"
+            className="w-full rounded-lg border border-border-card bg-card px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
+            placeholder="e.g. Food Reels"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+            required
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-secondary uppercase tracking-wider" htmlFor="lfp-path">
+            Folder path
+          </label>
+          <input
+            id="lfp-path"
+            type="text"
+            className="w-full rounded-lg border border-border-card bg-card px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all font-mono"
+            placeholder={String.raw`F:\Personal\Ai Reels on Food\Bangla`}
+            value={path}
+            onChange={(e) => setPath(e.target.value)}
+            required
+          />
+          <p className="text-[11px] text-muted">
+            Windows (e.g. <span className="font-mono">F:\Videos</span>) or Linux paths. Spaces and special characters are supported.
+          </p>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/* ─── VideoThumbnail ──────────────────────────────────────────────────────── */
+function VideoThumbnail({ src }: { src: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [inView, setInView] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState(false);
+
+  // Only start loading when the card scrolls into view — prevents 50 concurrent
+  // network requests on page load from overwhelming the browser connection pool.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" }, // start loading slightly before fully visible
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleMetadata = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    // Seek to 10% of duration (clamped to 1–5 s range) for a representative frame
+    const target = Math.min(5, Math.max(1, v.duration * 0.1));
+    v.currentTime = isFinite(target) ? target : 0;
+  };
+
+  const handleSeeked = () => setReady(true);
+
+  // Fallback: some browsers fire timeupdate but not seeked after a currentTime set
+  const handleTimeUpdate = () => {
+    if (!ready && videoRef.current && videoRef.current.currentTime > 0) {
+      setReady(true);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="absolute inset-0">
+      {/* Placeholder while loading */}
+      {!ready && (
+        <div className="absolute inset-0 flex items-center justify-center bg-neutral-bg">
+          {inView && !error && (
+            <div className="w-4 h-4 border-2 border-border-subtle border-t-muted rounded-full animate-spin" />
+          )}
+        </div>
+      )}
+      {inView && (
+        <video
+          ref={videoRef}
+          src={src}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${ready ? "opacity-100" : "opacity-0"}`}
+          preload="metadata"
+          muted
+          playsInline
+          onLoadedMetadata={handleMetadata}
+          onSeeked={handleSeeked}
+          onTimeUpdate={handleTimeUpdate}
+          onError={() => { setError(true); }}
+        />
+      )}
+    </div>
+  );
+}
+
 /* ─── LocalFileCard ───────────────────────────────────────────────────────── */
 function LocalFileCard({
   file,
   selected,
   onSelect,
   onPlay,
+  duplicates = [],
+  thumbnailSrc,
 }: {
   file: LocalVideoFile;
   selected: boolean;
   onSelect: () => void;
   onPlay: () => void;
+  duplicates?: VideoLibraryItem[];
+  thumbnailSrc?: string;
 }) {
+  const [showDupTooltip, setShowDupTooltip] = useState(false);
+  const isDuplicate = duplicates.length > 0;
+
   return (
     <div
       className={`relative flex flex-col rounded-xl border transition-all duration-150 overflow-hidden cursor-pointer group ${
         selected
           ? "border-accent shadow-[0_0_0_2px_var(--accent-glow-sm)] bg-primary-bg"
-          : "border-border-card bg-card hover:border-border-active"
+          : isDuplicate
+            ? "border-warning/50 bg-warning-bg/20 hover:border-warning"
+            : "border-border-card bg-card hover:border-border-active"
       }`}
     >
       {/* Thumbnail / play area */}
       <div
-        className="relative h-32 bg-neutral-bg flex items-center justify-center"
+        className="relative h-32 bg-neutral-bg flex items-center justify-center overflow-hidden"
         onClick={onPlay}
       >
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white transition-transform group-hover:scale-110">
+        {thumbnailSrc && <VideoThumbnail src={thumbnailSrc} />}
+        {/* Play button overlay */}
+        <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M5 3l14 9-14 9V3z" />
           </svg>
         </div>
-        <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
+        <div className="absolute bottom-2 right-2 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
           {file.content_type.split("/")[1]?.toUpperCase() ?? "VIDEO"}
         </div>
+        {/* Duplicate overlay banner */}
+        {isDuplicate && (
+          <div className="absolute top-0 inset-x-0 z-10 flex items-center justify-center gap-1 bg-warning/80 py-0.5 text-[10px] font-bold text-black">
+            <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+            </svg>
+            Already uploaded
+          </div>
+        )}
       </div>
 
       {/* Info */}
@@ -368,7 +538,39 @@ function LocalFileCard({
         <p className="text-xs font-semibold text-primary truncate" title={file.name}>
           {file.name}
         </p>
-        <p className="text-[11px] text-muted">{formatBytes(file.size_bytes)}</p>
+        <div className="flex items-center justify-between gap-1">
+          <p className="text-[11px] text-muted">{formatBytes(file.size_bytes)}</p>
+          {isDuplicate && (
+            <div className="relative">
+              <button
+                type="button"
+                className="text-[10px] font-semibold text-warning hover:text-warning/70 transition-colors underline underline-offset-2"
+                onClick={(e) => { e.stopPropagation(); setShowDupTooltip((v) => !v); }}
+              >
+                {duplicates.length} match{duplicates.length > 1 ? "es" : ""}
+              </button>
+              {showDupTooltip && (
+                <div
+                  className="absolute bottom-full right-0 mb-2 w-52 rounded-xl border border-border-card bg-surface shadow-lg z-30 overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="px-3 py-2 text-[0.65rem] uppercase tracking-wider font-bold text-muted border-b border-border-subtle">
+                    Matched by file size
+                  </p>
+                  {duplicates.map((d) => (
+                    <div key={d.id} className="px-3 py-2 border-b border-border-subtle last:border-0">
+                      <p className="text-xs font-semibold text-primary truncate">{d.file_name}</p>
+                      <p className="text-[11px] text-muted">{formatBytes(d.size_bytes)}</p>
+                    </div>
+                  ))}
+                  <p className="px-3 py-2 text-[10px] text-muted italic">
+                    Same size strongly suggests identical content, even if names differ.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Select checkbox */}
@@ -419,21 +621,23 @@ function UploadedVideoCard({
     >
       {/* Thumbnail / play area */}
       <div
-        className="relative h-32 bg-neutral-bg flex items-center justify-center cursor-pointer"
+        className="relative h-32 bg-neutral-bg flex items-center justify-center cursor-pointer overflow-hidden"
         onClick={onPlay}
       >
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white transition-transform group-hover:scale-110">
+        <VideoThumbnail src={item.url} />
+        {/* Play button overlay */}
+        <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M5 3l14 9-14 9V3z" />
           </svg>
         </div>
         {item.duration_ms && (
-          <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
+          <div className="absolute bottom-2 right-2 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
             {formatDuration(item.duration_ms)}
           </div>
         )}
         {item.width && item.height && (
-          <div className="absolute bottom-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
+          <div className="absolute bottom-2 left-2 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
             {item.width}×{item.height}
           </div>
         )}
@@ -517,14 +721,36 @@ function UploadedVideoCard({
 }
 
 /* ─── LocalFilesTab ───────────────────────────────────────────────────────── */
+const LOCAL_FILES_PAGE_SIZE = 50;
+
 function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
   const queryClient = useQueryClient();
-  const [folderPath, setFolderPath] = useState("");
+  const [openProject, setOpenProject] = useState<LocalFolderProject | null>(null);
   const [committedPath, setCommittedPath] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [playingFile, setPlayingFile] = useState<{ src: string; name: string } | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [page, setPage] = useState(1);
   const [uploadStatus, setUploadStatus] = useState<Map<string, "pending" | "uploading" | "done" | "error">>(new Map());
+
+  const { data: localProjects = [], isLoading: localProjectsLoading } = useQuery({
+    queryKey: ["local-folder-projects"],
+    queryFn: mockGetLocalFolderProjects,
+    staleTime: 60_000,
+  });
+
+  // Auto-browse when a project is opened
+  useEffect(() => {
+    if (openProject) {
+      setCommittedPath(openProject.path);
+      setSelectedFiles(new Set());
+      setUploadStatus(new Map());
+      setPage(1);
+    } else {
+      setCommittedPath("");
+    }
+  }, [openProject]);
 
   const { data: browseResult, isLoading: isBrowsing, error: browseError } = useQuery({
     queryKey: ["video-library-browse", committedPath],
@@ -533,43 +759,51 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
     staleTime: 30_000,
   });
 
-  const handleBrowse = useCallback(() => {
-    // Trim whitespace and any trailing path separators (\ or /)
-    const normalized = folderPath.trim().replace(/[/\\]+$/, "");
-    if (normalized) {
-      setCommittedPath(normalized);
-      setSelectedFiles(new Set());
-    }
-  }, [folderPath]);
+  const createProjectMutation = useMutation({
+    mutationFn: (payload: { name: string; path: string }) =>
+      mockCreateLocalFolderProject(payload),
+    onSuccess: (created) => {
+      void queryClient.invalidateQueries({ queryKey: ["local-folder-projects"] });
+      setShowCreateProject(false);
+      setOpenProject(created);
+    },
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: (id: string) => mockDeleteLocalFolderProject(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["local-folder-projects"] });
+      setOpenProject(null);
+    },
+  });
 
   const handleSelectFile = useCallback((path: string) => {
     setSelectedFiles((prev) => {
       const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
+      next.has(path) ? next.delete(path) : next.add(path);
       return next;
     });
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    const files = browseResult?.files ?? [];
-    setSelectedFiles((prev) =>
-      prev.size === files.length ? new Set() : new Set(files.map((f) => f.path))
-    );
-  }, [browseResult]);
+    const pf = browseResult?.files.slice((page - 1) * LOCAL_FILES_PAGE_SIZE, page * LOCAL_FILES_PAGE_SIZE) ?? [];
+    const allChecked = pf.length > 0 && pf.every((f) => selectedFiles.has(f.path));
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      if (allChecked) pf.forEach((f) => next.delete(f.path));
+      else pf.forEach((f) => next.add(f.path));
+      return next;
+    });
+  }, [browseResult, page, selectedFiles]);
 
   const handleUpload = useCallback(async (projectId: string | null) => {
     const files = browseResult?.files.filter((f) => selectedFiles.has(f.path)) ?? [];
     if (!files.length) return;
     setShowUploadDialog(false);
-
     for (const file of files) {
       setUploadStatus((prev) => new Map(prev).set(file.path, "uploading"));
       try {
-        await mockUploadLocalFile({
-          local_path: file.path,
-          project_id: projectId,
-        });
+        await mockUploadLocalFile({ local_path: file.path, project_id: projectId });
         setUploadStatus((prev) => new Map(prev).set(file.path, "done"));
       } catch {
         setUploadStatus((prev) => new Map(prev).set(file.path, "error"));
@@ -580,153 +814,299 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
   }, [browseResult, selectedFiles, queryClient]);
 
   const files = browseResult?.files ?? [];
+  const totalPages = Math.max(1, Math.ceil(files.length / LOCAL_FILES_PAGE_SIZE));
+  const pageFiles = files.slice((page - 1) * LOCAL_FILES_PAGE_SIZE, page * LOCAL_FILES_PAGE_SIZE);
   const selectedCount = selectedFiles.size;
-  const allSelected = files.length > 0 && selectedCount === files.length;
+  // "Select all" on current page only
+  const allPageSelected = pageFiles.length > 0 && pageFiles.every((f) => selectedFiles.has(f.path));
+
+  // Fetch all uploaded items to detect duplicates by file size
+  const { data: allUploaded = [] } = useQuery({
+    queryKey: ["video-library-uploaded", null],
+    queryFn: () => mockGetUploadedVideos(null),
+    enabled: openProject !== null,
+    staleTime: 30_000,
+  });
+
+  // Build size → uploaded items map for O(1) lookup
+  const uploadedBySize = new Map<number, VideoLibraryItem[]>();
+  for (const item of allUploaded) {
+    const bucket = uploadedBySize.get(item.size_bytes) ?? [];
+    bucket.push(item);
+    uploadedBySize.set(item.size_bytes, bucket);
+  }
+
+  /* ── Inside a project ─────────────────────────────────────── */
+  if (openProject) {
+    return (
+      <>
+        {/* Breadcrumb */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors"
+              onClick={() => setOpenProject(null)}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              All Folders
+            </button>
+            <span className="text-muted text-sm">/</span>
+            <span className="text-sm font-semibold text-primary">{openProject.name}</span>
+          </div>
+          <button
+            type="button"
+            className="text-xs text-error hover:text-error/70 transition-colors"
+            onClick={() => deleteProjectMutation.mutate(openProject.id)}
+          >
+            Remove folder
+          </button>
+        </div>
+
+        {/* Path badge */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border-subtle">
+          <svg viewBox="0 0 24 24" className="w-4 h-4 text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+          </svg>
+          <span className="text-xs font-mono text-muted truncate">{openProject.path}</span>
+        </div>
+
+        {/* Toolbar */}
+        {files.length > 0 && (() => {
+          const dupCount = files.filter((f) => (uploadedBySize.get(f.size_bytes)?.length ?? 0) > 0).length;
+          return (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-accent rounded"
+                  checked={allPageSelected}
+                  onChange={handleSelectAll}
+                />
+                {allPageSelected ? "Deselect page" : "Select page"} ({pageFiles.length})
+              </label>
+              {dupCount > 0 && (
+                <span className="text-xs font-semibold text-warning bg-warning/10 border border-warning/30 rounded-full px-2 py-0.5">
+                  {dupCount} already uploaded
+                </span>
+              )}
+            </div>
+            {selectedCount > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-primary">{selectedCount} selected</span>
+                <button
+                  type="button"
+                  className="btn-primary text-sm"
+                  onClick={() => setShowUploadDialog(true)}
+                >
+                  Upload ({selectedCount}) →
+                </button>
+              </div>
+            )}
+          </div>
+          );
+        })()}
+
+        {/* Gallery */}
+        {isBrowsing && (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-6 h-6 border-4 border-border-subtle border-t-primary rounded-full animate-spin" />
+          </div>
+        )}
+
+        {!isBrowsing && browseError && (
+          <div className="rounded-xl border border-error/30 bg-error-bg px-4 py-3 text-sm text-error">
+            {browseError instanceof Error ? browseError.message : "Failed to browse folder."}
+          </div>
+        )}
+
+        {!isBrowsing && !browseError && files.length === 0 && (
+          <EmptyState
+            title="No video files found"
+            description={`No supported video files were found in: ${openProject.path}`}
+          />
+        )}
+
+        {!isBrowsing && files.length > 0 && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+              {pageFiles.map((file) => {
+                const status = uploadStatus.get(file.path);
+                return (
+                  <div key={file.path} className="relative">
+                    <LocalFileCard
+                      file={file}
+                      selected={selectedFiles.has(file.path)}
+                      onSelect={() => handleSelectFile(file.path)}
+                      onPlay={() => setPlayingFile({ src: mockGetStreamUrl(file.path), name: file.name })}
+                      thumbnailSrc={mockGetStreamUrl(file.path)}
+                      duplicates={uploadedBySize.get(file.size_bytes) ?? []}
+                    />
+                    {status === "uploading" && (
+                      <div className="absolute inset-0 rounded-xl bg-black/60 flex items-center justify-center">
+                        <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      </div>
+                    )}
+                    {status === "done" && (
+                      <div className="absolute inset-0 rounded-xl bg-success/20 flex items-center justify-center">
+                        <span className="text-success font-bold text-xl">✓</span>
+                      </div>
+                    )}
+                    {status === "error" && (
+                      <div className="absolute inset-0 rounded-xl bg-error/20 flex items-center justify-center">
+                        <span className="text-error font-bold text-sm">Error</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-1 pt-2">
+                <p className="text-xs text-muted">
+                  {files.length} files · showing {(page - 1) * LOCAL_FILES_PAGE_SIZE + 1}–{Math.min(page * LOCAL_FILES_PAGE_SIZE, files.length)}
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={page === 1}
+                    onClick={() => setPage((p) => p - 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-card bg-card text-sm text-secondary transition-all hover:border-border-active hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-label="Previous page"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Page number buttons — show max 7 with ellipsis */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                    .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                      if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("…");
+                      acc.push(p);
+                      return acc;
+                    }, [])
+                    .map((item, i) =>
+                      item === "…" ? (
+                        <span key={`ellipsis-${i}`} className="px-1 text-muted text-sm">…</span>
+                      ) : (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => setPage(item as number)}
+                          className={`h-8 min-w-[2rem] px-2 rounded-lg border text-sm font-semibold transition-all ${
+                            page === item
+                              ? "border-accent bg-primary-bg text-accent"
+                              : "border-border-card bg-card text-secondary hover:border-border-active hover:text-primary"
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      )
+                    )}
+
+                  <button
+                    type="button"
+                    disabled={page === totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-card bg-card text-sm text-secondary transition-all hover:border-border-active hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-label="Next page"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {playingFile && (
+          <VideoPlayerModal
+            src={playingFile.src}
+            title={playingFile.name}
+            onClose={() => setPlayingFile(null)}
+          />
+        )}
+
+        <UploadProjectDialog
+          open={showUploadDialog}
+          fileCount={selectedFiles.size}
+          projects={projects}
+          onClose={() => setShowUploadDialog(false)}
+          onConfirm={(projectId) => void handleUpload(projectId)}
+          onCreateProject={async (name, description) => {
+            const created = await mockCreateVideoLibraryProject({ name, description });
+            void queryClient.invalidateQueries({ queryKey: ["video-library-projects"] });
+            return created;
+          }}
+        />
+      </>
+    );
+  }
+
+  /* ── Root: folder project grid ────────────────────────────── */
+  if (localProjectsLoading) return <LoadingPage />;
 
   return (
     <>
-      {/* Folder path input */}
-      <div className="flex flex-col gap-3 p-5 rounded-xl bg-card border border-border-card shadow-card">
-        <div className="flex flex-col gap-0.5">
-          <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-muted">Server folder path</p>
-          <p className="text-[0.75rem] text-muted">
-            Paste a Windows path (e.g. <span className="font-mono">F:\Personal\Videos</span>) or a Linux path. Spaces and special characters are supported.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            className="flex-1 rounded-lg border border-border-card bg-surface px-3 py-2.5 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all font-mono placeholder:text-muted placeholder:font-sans"
-            placeholder={String.raw`F:\Personal\Ai Reels on Food\Bangla (500+)`}
-            value={folderPath}
-            onChange={(e) => setFolderPath(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleBrowse()}
-          />
-          <button
-            type="button"
-            className="btn-primary px-5"
-            onClick={handleBrowse}
-            disabled={!folderPath.trim()}
-          >
-            Browse
-          </button>
-        </div>
-        {browseError && (
-          <p className="text-xs text-error">
-            {browseError instanceof Error ? browseError.message : "Failed to browse folder."}
-          </p>
-        )}
+      {/* Header */}
+      <div className="flex items-center justify-between px-1">
+        <p className="text-sm text-muted">
+          {localProjects.length} saved {localProjects.length === 1 ? "folder" : "folders"}
+        </p>
+        <button
+          type="button"
+          className="btn-ghost text-sm"
+          onClick={() => setShowCreateProject(true)}
+        >
+          + New folder
+        </button>
       </div>
 
-      {/* Toolbar: select all, project, upload */}
-      {files.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-accent rounded"
-                checked={allSelected}
-                onChange={handleSelectAll}
-              />
-              {allSelected ? "Deselect all" : "Select all"} ({files.length})
-            </label>
-            {selectedCount > 0 && (
-              <span className="text-sm font-semibold text-primary">{selectedCount} selected</span>
-            )}
-          </div>
-
-          <button
-            type="button"
-            className="btn-primary text-sm"
-            disabled={selectedCount === 0}
-            onClick={() => setShowUploadDialog(true)}
-          >
-            Upload {selectedCount > 0 ? `(${selectedCount})` : ""} →
-          </button>
-        </div>
-      )}
-
-      {/* Gallery */}
-      {isBrowsing && (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-6 h-6 border-4 border-border-subtle border-t-primary rounded-full animate-spin" />
-        </div>
-      )}
-
-      {!isBrowsing && !browseError && committedPath && files.length === 0 && (
+      {localProjects.length === 0 ? (
         <EmptyState
-          title="No video files found"
-          description={`No supported video files were found in: ${committedPath}`}
+          title="No saved folders"
+          description="Save a server folder path as a project to quickly browse it again."
         />
-      )}
-
-      {!isBrowsing && !committedPath && (
-        <EmptyState
-          title="Enter a folder path"
-          description="Paste a local server folder path above to browse video files stored on the server."
-        />
-      )}
-
-      {!isBrowsing && files.length > 0 && (
+      ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-          {files.map((file) => {
-            const status = uploadStatus.get(file.path);
-            return (
-              <div key={file.path} className="relative">
-                <LocalFileCard
-                  file={file}
-                  selected={selectedFiles.has(file.path)}
-                  onSelect={() => handleSelectFile(file.path)}
-                  onPlay={() =>
-                    setPlayingFile({
-                      src: mockGetStreamUrl(file.path),
-                      name: file.name,
-                    })
-                  }
-                />
-                {status === "uploading" && (
-                  <div className="absolute inset-0 rounded-xl bg-black/60 flex items-center justify-center">
-                    <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  </div>
-                )}
-                {status === "done" && (
-                  <div className="absolute inset-0 rounded-xl bg-success/20 flex items-center justify-center">
-                    <span className="text-success font-bold text-xl">✓</span>
-                  </div>
-                )}
-                {status === "error" && (
-                  <div className="absolute inset-0 rounded-xl bg-error/20 flex items-center justify-center">
-                    <span className="text-error font-bold text-sm">Error</span>
-                  </div>
-                )}
+          {localProjects.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setOpenProject(p)}
+              className="group flex flex-col gap-2 rounded-xl bg-glass border border-border-subtle p-4 text-left transition-all hover:border-accent/50 hover:bg-primary-bg/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="w-10 h-10 text-accent/70 group-hover:text-accent transition-colors"
+                fill="currentColor"
+              >
+                <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
+              </svg>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold text-primary group-hover:text-accent transition-colors line-clamp-1">
+                  {p.name}
+                </span>
+                <span className="text-[11px] text-muted font-mono truncate">{p.path}</span>
               </div>
-            );
-          })}
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Video player modal */}
-      {playingFile && (
-        <VideoPlayerModal
-          src={playingFile.src}
-          title={playingFile.name}
-          onClose={() => setPlayingFile(null)}
-        />
-      )}
-
-      {/* Upload project picker */}
-      <UploadProjectDialog
-        open={showUploadDialog}
-        fileCount={selectedFiles.size}
-        projects={projects}
-        onClose={() => setShowUploadDialog(false)}
-        onConfirm={(projectId) => void handleUpload(projectId)}
-        onCreateProject={async (name, description) => {
-          const created = await mockCreateVideoLibraryProject({ name, description });
-          void queryClient.invalidateQueries({ queryKey: ["video-library-projects"] });
-          return created;
-        }}
+      <CreateLocalProjectDialog
+        open={showCreateProject}
+        onClose={() => setShowCreateProject(false)}
+        onCreate={(name, path) => createProjectMutation.mutate({ name, path })}
       />
     </>
   );

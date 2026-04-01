@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import AuthContext, get_db_dep, get_settings_dep, require_auth
 from app.schemas.video_library import (
     BrowseFolderResponse,
+    LocalFolderProjectCreate,
+    LocalFolderProjectResponse,
     MoveToProjectRequest,
     UploadLocalFileRequest,
     VideoLibraryItemResponse,
@@ -20,6 +22,39 @@ from app.services.video_library_service import VideoLibraryService
 
 router = APIRouter()
 
+
+# ── Local Folder Projects ─────────────────────────────────────────────────────
+
+@router.get("/local-folders", response_model=list[LocalFolderProjectResponse])
+def list_local_folders(
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return VideoLibraryService(db, settings).list_local_folder_projects(auth)
+
+
+@router.post("/local-folders", response_model=LocalFolderProjectResponse, status_code=201)
+def create_local_folder(
+    payload: LocalFolderProjectCreate,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return VideoLibraryService(db, settings).create_local_folder_project(auth, payload)
+
+
+@router.delete("/local-folders/{project_id}", status_code=204)
+def delete_local_folder(
+    project_id: str,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    VideoLibraryService(db, settings).delete_local_folder_project(auth, project_id)
+
+
+# ── Upload Projects ───────────────────────────────────────────────────────────
 
 @router.get("/projects", response_model=list[VideoLibraryProjectResponse])
 def list_projects(
