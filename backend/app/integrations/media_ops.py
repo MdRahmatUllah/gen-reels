@@ -192,6 +192,134 @@ def retime_video_to_target(
         }
 
 
+_COLOR_FILTER_GRAPHS: dict[str, str] = {
+    "warm": "colorbalance=rs=0.1:gs=0.0:bs=-0.1",
+    "cool": "colorbalance=rs=-0.1:gs=0.0:bs=0.12",
+    "sepia": "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131",
+    "grayscale": "hue=s=0",
+    "vintage": "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,curves=m='0/0 0.5/0.45 1/0.9'",
+    "vibrant": "eq=saturation=1.5:contrast=1.05",
+    "moody": "eq=saturation=0.7:contrast=1.15:brightness=-0.05",
+}
+
+
+def apply_video_effects(
+    settings: Settings,
+    *,
+    source_bytes: bytes,
+    source_file_name: str,
+    brightness: float = 0.0,
+    contrast: float = 0.0,
+    saturation: float = 0.0,
+    speed: float = 1.0,
+    fade_in_sec: float = 0.0,
+    fade_out_sec: float = 0.0,
+    color_filter: str = "none",
+    vignette_strength: float = 0.0,
+) -> tuple[bytes, dict[str, object]]:
+    """Apply video effects using FFmpeg filter chains.
+
+    Parameters use the same range conventions as the frontend:
+      brightness/contrast/saturation: -50..50 (0 = no change)
+      speed: 0.25..2.0 (1.0 = normal)
+      vignette_strength: 0..100 (0 = off)
+      color_filter: one of _COLOR_FILTER_GRAPHS keys or "none"
+    """
+    runner = FFmpegRunner(settings)
+    if not runner.available():
+        return source_bytes, {"effects_applied": False}
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workdir = Path(temp_dir)
+        ext = Path(source_file_name).suffix or ".mp4"
+        (workdir / f"input{ext}").write_bytes(source_bytes)
+
+        video_filters: list[str] = []
+
+        eq_parts: list[str] = []
+        if brightness != 0:
+            eq_parts.append(f"brightness={brightness / 100:.3f}")
+        if contrast != 0:
+            eq_parts.append(f"contrast={1 + contrast / 50:.3f}")
+        if saturation != 0:
+            eq_parts.append(f"saturation={1 + saturation / 50:.3f}")
+        if eq_parts:
+            video_filters.append(f"eq={':'.join(eq_parts)}")
+
+        if color_filter in _COLOR_FILTER_GRAPHS:
+            video_filters.append(_COLOR_FILTER_GRAPHS[color_filter])
+
+        if vignette_strength > 0:
+            angle = f"PI/4*{vignette_strength / 100:.2f}"
+            video_filters.append(f"vignette=angle={angle}")
+
+        if speed != 1.0 and 0.25 <= speed <= 4.0:
+            video_filters.append(f"setpts={1 / speed:.6f}*PTS")
+
+        try:
+            probe = _probe_result(settings, f"input{ext}", workdir=workdir)
+        except FFmpegError:
+            return source_bytes, {"effects_applied": False}
+
+        format_payload = probe.get("format", {})
+        total_duration = float(format_payload.get("duration") or 0)
+
+        if fade_in_sec > 0:
+            video_filters.append(f"fade=t=in:st=0:d={fade_in_sec:.2f}")
+        if fade_out_sec > 0 and total_duration > fade_out_sec:
+            fade_start = total_duration - fade_out_sec
+            video_filters.append(f"fade=t=out:st={fade_start:.2f}:d={fade_out_sec:.2f}")
+
+        if not video_filters:
+            return source_bytes, {"effects_applied": False, "reason": "no_filters"}
+
+        vf_chain = ",".join(video_filters)
+
+        audio_filters: list[str] = []
+        if speed != 1.0 and 0.25 <= speed <= 4.0:
+            audio_filters.append(f"atempo={speed:.6f}")
+        if fade_in_sec > 0:
+            audio_filters.append(f"afade=t=in:st=0:d={fade_in_sec:.2f}")
+        if fade_out_sec > 0 and total_duration > fade_out_sec:
+            fade_start = total_duration - fade_out_sec
+            audio_filters.append(f"afade=t=out:st={fade_start:.2f}:d={fade_out_sec:.2f}")
+
+        args = [
+            "-y",
+            "-i", f"input{ext}",
+            "-vf", vf_chain,
+        ]
+        if audio_filters:
+            args.extend(["-af", ",".join(audio_filters)])
+        args.extend([
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-preset", "fast",
+            "output.mp4",
+        ])
+
+        try:
+            runner.run("ffmpeg", args, workdir=workdir)
+        except FFmpegError:
+            return source_bytes, {"effects_applied": False, "reason": "ffmpeg_error"}
+
+        out_probe = _probe_result(settings, "output.mp4", workdir=workdir)
+        out_stream = next(
+            (s for s in out_probe.get("streams", []) if s.get("codec_type") == "video"),
+            {},
+        )
+        out_format = out_probe.get("format", {})
+        return (workdir / "output.mp4").read_bytes(), {
+            "effects_applied": True,
+            "duration_ms": int(float(out_format.get("duration") or 0) * 1000),
+            "width": int(out_stream.get("width") or 0) or None,
+            "height": int(out_stream.get("height") or 0) or None,
+            "frame_rate": _frame_rate_from_probe(out_stream),
+            "filters": vf_chain,
+        }
+
+
 _SLIDE_EFFECTS: dict[str, dict[str, str]] = {
     "ken_burns": {
         "start": "z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",

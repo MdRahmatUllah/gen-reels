@@ -274,6 +274,8 @@ export interface RenderStep {
   sceneId: string;
   name: string;
   status: WorkflowStatus;
+  /** Backend step_index (e.g. 100 + scene_index for frame pairs) */
+  stepIndex?: number;
   /** Backend step_kind, e.g. frame_pair_generation */
   stepKind?: string;
   /** Raw API status before workflowStatus mapping */
@@ -339,6 +341,8 @@ export interface RenderJob {
   };
   /** True when this render was initiated as a final video generation (with render settings), not just keyframe generation */
   isVideoGeneration?: boolean;
+  /** Video effects applied during this render */
+  videoEffects?: VideoEffectsProfile;
 }
 
 /* ─── Exports ─────────────────────────────────────────────────────────────── */
@@ -384,6 +388,86 @@ export interface PresetCard {
   transitionMode?: string;
   voice?: string;
   look?: string;
+}
+
+/* ─── Render Presets ──────────────────────────────────────────────────────── */
+export type RenderPresetCategory =
+  | "social"
+  | "corporate"
+  | "cinematic"
+  | "minimal"
+  | "custom";
+
+export interface RenderPresetSettings {
+  animationEffect: string;
+  subtitleStyle: string;
+  musicTrack: string;
+  musicDucking: string;
+  transitionMode: "hard_cut" | "crossfade";
+  videoEffects: VideoEffectsProfile;
+}
+
+export interface RenderPreset {
+  id: string;
+  name: string;
+  description: string;
+  category: RenderPresetCategory;
+  gradient: string;
+  icon: string;
+  settings: RenderPresetSettings;
+  tags: string[];
+  recommended?: boolean;
+}
+
+/* ─── Video Effects ──────────────────────────────────────────────────────── */
+export type ColorFilterType =
+  | "none"
+  | "warm"
+  | "cool"
+  | "sepia"
+  | "grayscale"
+  | "vintage"
+  | "vibrant"
+  | "moody";
+
+export interface VideoEffectsProfile {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  speed: number;
+  fadeInSec: number;
+  fadeOutSec: number;
+  colorFilter: ColorFilterType;
+  vignetteStrength: number;
+}
+
+export const DEFAULT_VIDEO_EFFECTS: VideoEffectsProfile = {
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+  speed: 1.0,
+  fadeInSec: 0,
+  fadeOutSec: 0,
+  colorFilter: "none",
+  vignetteStrength: 0,
+};
+
+/* ─── Editor Settings ────────────────────────────────────────────────────── */
+export interface EditorSettings {
+  subtitleEnabled: boolean;
+  subtitleStyle: string;
+  subtitleFont: string;
+  subtitlePosition: "top" | "center" | "bottom";
+  subtitleColor: string;
+  musicEnabled: boolean;
+  musicTrack: string;
+  musicVolume: number;
+  musicDucking: string;
+  musicFadeIn: number;
+  musicFadeOut: number;
+  videoEffects: VideoEffectsProfile;
+  animationEffect: string;
+  transitionMode: "hard_cut" | "crossfade";
 }
 
 export interface TemplateCard {
@@ -657,4 +741,46 @@ export interface LocalWorker {
     localTTS: boolean;
     videoFrames: boolean;
   };
+}
+
+/* ─── Video Library ───────────────────────────────────────────────────────── */
+export interface VideoLibraryProject {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocalVideoFile {
+  name: string;
+  path: string;
+  size_bytes: number;
+  content_type: string;
+}
+
+export interface BrowseFolderResult {
+  path: string;
+  files: LocalVideoFile[];
+}
+
+export interface VideoLibraryItem {
+  id: string;
+  workspace_id: string;
+  project_id: string | null;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  duration_ms: number | null;
+  width: number | null;
+  height: number | null;
+  url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UploadLocalFilePayload {
+  local_path: string;
+  project_id?: string | null;
 }

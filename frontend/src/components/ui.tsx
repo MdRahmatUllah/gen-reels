@@ -89,19 +89,22 @@ const icons = {
   queue:     "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
   workspaces:"M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   arrow:     "M9 18l6-6-6-6",
+  library:   "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14 M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z M5 3h2 M9 3h2 M13 3h2",
 };
 
 const navIconMap: Record<string, string> = {
-  "Dashboard": icons.dashboard,
-  "Videos":    icons.scenes,
-  "Projects":  icons.projects,
-  "Presets":   icons.presets,
-  "Templates": icons.templates,
+  "Dashboard":      icons.dashboard,
+  "Videos":         icons.scenes,
+  "Projects":       icons.projects,
+  "Presets":        icons.presets,
+  "Templates":      icons.templates,
+  "Video Library":  icons.library,
   "Brief":     icons.brief,
   "Ideas":     icons.ideas,
   "Script":    icons.script,
   "Scenes":    icons.scenes,
   "Renders":   icons.renders,
+  "Editor":    "M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z",
   "Exports":   icons.exports,
   "Settings":  icons.settings,
   "Billing":   icons.billing,
@@ -117,6 +120,7 @@ const workflowRoutes = [
   { key: "script", label: "Script" },
   { key: "scenes", label: "Scenes" },
   { key: "renders", label: "Renders" },
+  { key: "editor", label: "Editor" },
   { key: "exports", label: "Exports" },
 ];
 
@@ -382,6 +386,7 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
                 { to: "/app/videos", label: "Videos" },
                 { to: "/app/projects", label: "Projects" },
                 { to: "/app/assets", label: "Assets" },
+                { to: "/app/video-library", label: "Video Library" },
                 { to: "/app/presets", label: "Presets" },
                 { to: "/app/templates", label: "Templates" },
               ]}
@@ -406,6 +411,7 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
                     { to: `/app/projects/${currentProject.id}/scenes`, label: "Scenes" },
                     { to: `/app/projects/${currentProject.id}/frames`, label: "Frames" },
                     { to: `/app/projects/${currentProject.id}/renders`, label: "Renders" },
+                    { to: `/app/projects/${currentProject.id}/editor`, label: "Editor" },
                     { to: `/app/projects/${currentProject.id}/exports`, label: "Exports" },
                   ]}
                 />

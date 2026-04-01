@@ -27,6 +27,8 @@ import { AdminQueuePage } from "../features/admin/AdminQueuePage";
 import { AdminRendersPage } from "../features/admin/AdminRendersPage";
 import { AdminWorkspacesPage } from "../features/admin/AdminWorkspacesPage";
 import { QuickStartProgressPage } from "../features/projects/QuickStartProgressPage";
+import { VideoEditorPage } from "../features/editor/VideoEditorPage";
+import { VideoLibraryPage } from "../features/video-library/VideoLibraryPage";
 
 export const router = createBrowserRouter([
   {
@@ -90,6 +92,10 @@ export const router = createBrowserRouter([
         element: <RendersPage />,
       },
       {
+        path: "projects/:projectId/editor",
+        element: <VideoEditorPage />,
+      },
+      {
         path: "projects/:projectId/exports",
         element: <ExportsPage />,
       },
@@ -104,6 +110,10 @@ export const router = createBrowserRouter([
       {
         path: "assets",
         element: <AssetsPage />,
+      },
+      {
+        path: "video-library",
+        element: <VideoLibraryPage />,
       },
       {
         path: "settings/brand",

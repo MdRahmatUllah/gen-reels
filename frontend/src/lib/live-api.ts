@@ -1,4 +1,5 @@
 import { api, ApiError } from "./api-client";
+import { config } from "./config";
 import {
   generationTypeFromModality,
   getProviderCatalogOption,
@@ -53,6 +54,13 @@ import type {
   VoicePreset,
   WorkspaceExecutionPolicy,
   WorkspaceSummary,
+  RenderPreset,
+  DEFAULT_VIDEO_EFFECTS,
+  EditorSettings,
+  VideoLibraryProject,
+  BrowseFolderResult,
+  VideoLibraryItem,
+  UploadLocalFilePayload,
 } from "../types/domain";
 
 type BackendSession = {
@@ -206,7 +214,9 @@ type BackendRenderStep = {
   id: string;
   scene_segment_id: string | null;
   step_kind: string;
+  step_index?: number;
   status: string;
+  input_payload?: Record<string, unknown>;
   output_payload: Record<string, unknown> | null;
   error_code?: string | null;
   error_message?: string | null;
@@ -838,6 +848,7 @@ function mapRenderStep(step: BackendRenderStep): RenderStep {
     sceneId: step.scene_segment_id ?? step.id,
     name: titleize(kind.replace(/_/g, " ")),
     status: workflowStatus(rawStatus),
+    stepIndex: step.step_index,
     stepKind: kind,
     backendStatus: rawStatus,
     errorCode: step.error_code ?? null,
@@ -1645,7 +1656,14 @@ export async function liveGetRenders(projectId: string): Promise<RenderJob[]> {
 
 export async function liveStartRender(
   projectId: string,
-  settings?: { subtitleStyle: string; musicDucking: string; musicTrack: string; animationEffect: string },
+  settings?: {
+    subtitleStyle: string;
+    musicDucking: string;
+    musicTrack: string;
+    animationEffect: string;
+    videoEffects?: import("../types/domain").VideoEffectsProfile;
+    presetId?: string;
+  },
 ): Promise<RenderJob> {
   const subtitleStyle = settings?.subtitleStyle ?? "none";
   const musicTrack = settings?.musicTrack ?? "none";
@@ -1667,6 +1685,19 @@ export async function liveStartRender(
         music_track_name: musicEnabled ? musicTrack : "",
         music_ducking: settings?.musicDucking ?? "-12 dB",
       },
+      video_effects_profile: settings?.videoEffects
+        ? {
+            brightness: settings.videoEffects.brightness,
+            contrast: settings.videoEffects.contrast,
+            saturation: settings.videoEffects.saturation,
+            speed: settings.videoEffects.speed,
+            fade_in_sec: settings.videoEffects.fadeInSec,
+            fade_out_sec: settings.videoEffects.fadeOutSec,
+            color_filter: settings.videoEffects.colorFilter,
+            vignette_strength: settings.videoEffects.vignetteStrength,
+          }
+        : null,
+      preset_id: settings?.presetId ?? null,
     },
     idempotencyHeaders(),
   );
@@ -1824,6 +1855,42 @@ export async function liveGetPresets(): Promise<PresetCard[]> {
       voice: `${preset.pacing} · ${preset.tone}`,
     })),
   ];
+}
+
+export async function liveGetRenderPresets(): Promise<RenderPreset[]> {
+  try {
+    return await api.get<RenderPreset[]>("/presets/render-presets");
+  } catch {
+    return [
+      {
+        id: "rp_social_reel", name: "Social Reel", description: "Bold captions & upbeat energy for social media",
+        category: "social", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", icon: "social",
+        settings: { animationEffect: "ken_burns", subtitleStyle: "Karaoke Bold", musicTrack: "Upbeat Electronic", musicDucking: "-12 dB", transitionMode: "crossfade", videoEffects: { ...DEFAULT_VIDEO_EFFECTS, saturation: 15, contrast: 8, vignetteStrength: 20 } },
+        tags: ["instagram", "tiktok"], recommended: true,
+      },
+      {
+        id: "rp_corporate", name: "Corporate Clean", description: "Professional with subtle motion",
+        category: "corporate", gradient: "linear-gradient(135deg, #2c3e50 0%, #3498db 100%)", icon: "corporate",
+        settings: { animationEffect: "zoom_in", subtitleStyle: "Minimalist White", musicTrack: "Ambient Corporate 1", musicDucking: "-18 dB", transitionMode: "crossfade", videoEffects: { ...DEFAULT_VIDEO_EFFECTS, contrast: 5 } },
+        tags: ["professional", "business"],
+      },
+      {
+        id: "rp_quick_share", name: "Quick Share", description: "Fast render with no extras",
+        category: "minimal", gradient: "linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%)", icon: "minimal",
+        settings: { animationEffect: "ken_burns", subtitleStyle: "none", musicTrack: "none", musicDucking: "0 dB", transitionMode: "hard_cut", videoEffects: { ...DEFAULT_VIDEO_EFFECTS } },
+        tags: ["fast", "simple"],
+      },
+    ];
+  }
+}
+
+export async function liveApplyEditorSettings(
+  projectId: string,
+  editorSettings: EditorSettings,
+): Promise<RenderJob> {
+  const raw = await api.post<{ id: string }>(`/projects/${projectId}/renders/apply-editor`, editorSettings);
+  const renders = await liveGetRenders(projectId);
+  return renders.find((r) => r.id === raw.id) ?? renders[0];
 }
 
 export async function liveGetTemplates(): Promise<TemplateCard[]> {
@@ -2195,4 +2262,45 @@ export async function liveGetWorkspaceMembers(): Promise<
     role: titleize(member.role),
     status: "Active",
   }));
+}
+
+/* ─── Video Library ───────────────────────────────────────────────────────── */
+
+export async function liveGetVideoLibraryProjects(): Promise<VideoLibraryProject[]> {
+  return api.get<VideoLibraryProject[]>("/video-library/projects");
+}
+
+export async function liveCreateVideoLibraryProject(payload: {
+  name: string;
+  description?: string | null;
+}): Promise<VideoLibraryProject> {
+  return api.post<VideoLibraryProject>("/video-library/projects", payload);
+}
+
+export async function liveBrowseFolder(folderPath: string): Promise<BrowseFolderResult> {
+  return api.get<BrowseFolderResult>(`/video-library/browse?path=${encodeURIComponent(folderPath)}`);
+}
+
+export async function liveUploadLocalFile(payload: UploadLocalFilePayload): Promise<VideoLibraryItem> {
+  return api.post<VideoLibraryItem>("/video-library/upload", payload);
+}
+
+export async function liveGetUploadedVideos(projectId?: string | null): Promise<VideoLibraryItem[]> {
+  const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+  return api.get<VideoLibraryItem[]>(`/video-library/uploaded${qs}`);
+}
+
+export async function liveMoveVideoToProject(
+  itemId: string,
+  projectId: string | null,
+): Promise<VideoLibraryItem> {
+  return api.patch<VideoLibraryItem>(`/video-library/uploaded/${itemId}/project`, { project_id: projectId });
+}
+
+export async function liveDeleteUploadedVideo(itemId: string): Promise<void> {
+  return api.delete(`/video-library/uploaded/${itemId}`);
+}
+
+export function liveGetStreamUrl(filePath: string): string {
+  return `${config.apiBaseUrl}/api/v1/video-library/stream?path=${encodeURIComponent(filePath)}`;
 }

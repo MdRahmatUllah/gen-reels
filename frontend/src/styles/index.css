@@ -142,6 +142,14 @@
     @apply inline-flex items-center justify-center rounded-full border border-border-subtle bg-glass px-3 py-1.5 text-xs font-semibold capitalize text-secondary transition-all duration-200 hover:border-border-active hover:bg-glass-hover hover:text-primary;
   }
 
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-4 py-1.5 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-4 py-1.5 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px;
+  }
+
   .chip-button--active {
     @apply border-border-active bg-primary-bg text-primary-fg shadow-sm;
   }

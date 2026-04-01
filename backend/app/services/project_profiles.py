@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-
 _DEFAULT_SUBTITLE_STYLE_PROFILE: dict[str, Any] = {
     "preset": "clean_bold",
     "burn_in": False,
@@ -49,6 +48,18 @@ _DEFAULT_AUDIO_MIX_PROFILE: dict[str, Any] = {
 }
 
 
+_DEFAULT_VIDEO_EFFECTS_PROFILE: dict[str, Any] = {
+    "brightness": 0.0,
+    "contrast": 0.0,
+    "saturation": 0.0,
+    "speed": 1.0,
+    "fade_in_sec": 0.0,
+    "fade_out_sec": 0.0,
+    "color_filter": "none",
+    "vignette_strength": 0.0,
+}
+
+
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     merged = deepcopy(base)
     for key, value in override.items():
@@ -88,3 +99,11 @@ def normalize_export_profile(profile: dict[str, Any] | None) -> dict[str, Any]:
 
 def normalize_audio_mix_profile(profile: dict[str, Any] | None) -> dict[str, Any]:
     return _deep_merge(_DEFAULT_AUDIO_MIX_PROFILE, profile or {})
+
+
+def default_video_effects_profile() -> dict[str, Any]:
+    return deepcopy(_DEFAULT_VIDEO_EFFECTS_PROFILE)
+
+
+def normalize_video_effects_profile(profile: dict[str, Any] | None) -> dict[str, Any]:
+    return _deep_merge(_DEFAULT_VIDEO_EFFECTS_PROFILE, profile or {})

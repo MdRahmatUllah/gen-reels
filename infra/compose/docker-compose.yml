@@ -10,6 +10,14 @@ x-backend-service: &backend-service
     - ../env/backend.env
   volumes:
     - ../../backend:/workspace/backend
+    # Windows host drives — accessible inside the container at /mnt/<drive>.
+    # Add or remove drive letters to match the drives on your machine.
+    # Docker Desktop on Windows: enable "File sharing" for these drives in
+    # Settings → Resources → File sharing.
+    - /c:/mnt/c
+    - /d:/mnt/d
+    - /e:/mnt/e
+    - /f:/mnt/f
   networks:
     - reels-net
   restart: unless-stopped

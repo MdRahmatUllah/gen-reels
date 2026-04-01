@@ -43,7 +43,11 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.redis = redis.Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.storage = build_storage_client(settings)
-    get_engine(settings.database_url)
+    engine = get_engine(settings.database_url)
+    if settings.environment in {"development", "test"}:
+        from app.db.base import Base
+        import app.models.entities as _models  # noqa: F401 – ensure all models are registered
+        Base.metadata.create_all(bind=engine)
     logger.info("app_startup_complete")
     yield
     app.state.redis.close()

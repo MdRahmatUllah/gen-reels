@@ -48,7 +48,14 @@ import type {
   AdminRenderRow,
   ProviderKey,
   LocalWorker,
+  RenderPreset,
+  EditorSettings,
+  VideoLibraryProject,
+  VideoLibraryItem,
+  BrowseFolderResult,
+  UploadLocalFilePayload,
 } from "../types/domain";
+import { DEFAULT_VIDEO_EFFECTS } from "../types/domain";
 import { isMockMode } from "./config";
 import {
   generationTypeFromModality,
@@ -83,6 +90,8 @@ import {
   liveGetIdeas,
   liveGetLocalWorkers,
   liveGetPresets,
+  liveGetRenderPresets,
+  liveApplyEditorSettings,
   liveGetProject,
   liveGetProjectBundle,
   liveGetProjects,
@@ -120,6 +129,14 @@ import {
   liveGetAdminWorkspaces,
   liveGetAdminRenders,
   liveGetAllVideos,
+  liveGetVideoLibraryProjects,
+  liveCreateVideoLibraryProject,
+  liveBrowseFolder,
+  liveUploadLocalFile,
+  liveGetUploadedVideos,
+  liveMoveVideoToProject,
+  liveDeleteUploadedVideo,
+  liveGetStreamUrl,
 } from "./live-api";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -243,6 +260,8 @@ interface MockState {
   executionPolicy: WorkspaceExecutionPolicy;
   localWorkers: LocalWorker[];
   quickCreateStatuses: Map<string, QuickCreateStatus>;
+  videoLibraryProjects: VideoLibraryProject[];
+  videoLibraryItems: VideoLibraryItem[];
 }
 
 const seedTemplates: TemplateCard[] = [
@@ -269,6 +288,129 @@ const seedVoicePresets: VoicePreset[] = [
   { id: "voice_confident", name: "Confident Narrator", description: "Clear, authoritative, measured pacing", tone: "authoritative", pacing: "measured", accent: "neutral" },
   { id: "voice_warm", name: "Warm Storyteller", description: "Friendly, conversational, approachable", tone: "warm", pacing: "natural", accent: "neutral" },
   { id: "voice_editorial", name: "Ava Editorial", description: "Polished, calm, premium feel", tone: "polished", pacing: "calm", accent: "neutral" },
+];
+
+const seedRenderPresets: RenderPreset[] = [
+  {
+    id: "rp_social_reel",
+    name: "Social Reel",
+    description: "Optimized for Instagram Reels & TikTok with bold captions and upbeat energy",
+    category: "social",
+    gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    icon: "social",
+    settings: {
+      animationEffect: "ken_burns",
+      subtitleStyle: "Karaoke Bold",
+      musicTrack: "Upbeat Electronic",
+      musicDucking: "-12 dB",
+      transitionMode: "crossfade",
+      videoEffects: { ...DEFAULT_VIDEO_EFFECTS, saturation: 15, contrast: 8, vignetteStrength: 20 },
+    },
+    tags: ["instagram", "tiktok", "vertical", "captions"],
+    recommended: true,
+  },
+  {
+    id: "rp_corporate",
+    name: "Corporate Clean",
+    description: "Professional and polished look with subtle motion and ambient audio",
+    category: "corporate",
+    gradient: "linear-gradient(135deg, #2c3e50 0%, #3498db 100%)",
+    icon: "corporate",
+    settings: {
+      animationEffect: "zoom_in",
+      subtitleStyle: "Minimalist White",
+      musicTrack: "Ambient Corporate 1",
+      musicDucking: "-18 dB",
+      transitionMode: "crossfade",
+      videoEffects: { ...DEFAULT_VIDEO_EFFECTS, contrast: 5 },
+    },
+    tags: ["professional", "business", "clean"],
+  },
+  {
+    id: "rp_cinematic",
+    name: "Cinematic Story",
+    description: "Moody color grading with slow pans and dramatic feel",
+    category: "cinematic",
+    gradient: "linear-gradient(135deg, #0c0c1d 0%, #3a1c71 50%, #d76d77 100%)",
+    icon: "cinematic",
+    settings: {
+      animationEffect: "pan_left",
+      subtitleStyle: "none",
+      musicTrack: "Lo-fi Chill",
+      musicDucking: "-6 dB",
+      transitionMode: "crossfade",
+      videoEffects: { ...DEFAULT_VIDEO_EFFECTS, contrast: 12, saturation: -10, vignetteStrength: 40, colorFilter: "moody" },
+    },
+    tags: ["film", "dramatic", "storytelling"],
+  },
+  {
+    id: "rp_quick_share",
+    name: "Quick Share",
+    description: "Minimal processing for fast renders — no subtitles, no music",
+    category: "minimal",
+    gradient: "linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%)",
+    icon: "minimal",
+    settings: {
+      animationEffect: "ken_burns",
+      subtitleStyle: "none",
+      musicTrack: "none",
+      musicDucking: "0 dB",
+      transitionMode: "hard_cut",
+      videoEffects: { ...DEFAULT_VIDEO_EFFECTS },
+    },
+    tags: ["fast", "simple", "no-frills"],
+  },
+  {
+    id: "rp_podcast_clip",
+    name: "Podcast Clip",
+    description: "Large readable subtitles with static frames — perfect for talking-head content",
+    category: "social",
+    gradient: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)",
+    icon: "podcast",
+    settings: {
+      animationEffect: "zoom_out",
+      subtitleStyle: "Burned-in Default",
+      musicTrack: "none",
+      musicDucking: "0 dB",
+      transitionMode: "hard_cut",
+      videoEffects: { ...DEFAULT_VIDEO_EFFECTS, brightness: 5 },
+    },
+    tags: ["podcast", "subtitles", "accessibility"],
+  },
+  {
+    id: "rp_product",
+    name: "Product Showcase",
+    description: "Vibrant colors with smooth zoom to highlight product details",
+    category: "corporate",
+    gradient: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+    icon: "product",
+    settings: {
+      animationEffect: "zoom_in",
+      subtitleStyle: "Minimalist White",
+      musicTrack: "Ambient Corporate 1",
+      musicDucking: "-12 dB",
+      transitionMode: "crossfade",
+      videoEffects: { ...DEFAULT_VIDEO_EFFECTS, saturation: 20, brightness: 5, contrast: 5, colorFilter: "vibrant" },
+    },
+    tags: ["ecommerce", "product", "vibrant"],
+  },
+  {
+    id: "rp_vintage",
+    name: "Vintage Nostalgia",
+    description: "Warm sepia tones with film grain feel and gentle motion",
+    category: "cinematic",
+    gradient: "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)",
+    icon: "vintage",
+    settings: {
+      animationEffect: "pan_right",
+      subtitleStyle: "none",
+      musicTrack: "Lo-fi Chill",
+      musicDucking: "-12 dB",
+      transitionMode: "crossfade",
+      videoEffects: { ...DEFAULT_VIDEO_EFFECTS, saturation: -20, brightness: 5, contrast: 8, colorFilter: "vintage", vignetteStrength: 50 },
+    },
+    tags: ["retro", "warm", "nostalgic"],
+  },
 ];
 
 const mockExecutionDefaults: WorkspaceExecutionPolicy = {
@@ -395,6 +537,16 @@ const state: MockState = {
     }
   ],
   quickCreateStatuses: new Map(),
+  videoLibraryProjects: [
+    { id: "vlp_1", workspace_id: "workspace_north_star", name: "Brand Assets 2024", description: "Product and lifestyle videos for the Aurora line", created_at: new Date(Date.now() - 7 * 86400000).toISOString(), updated_at: new Date(Date.now() - 7 * 86400000).toISOString() },
+    { id: "vlp_2", workspace_id: "workspace_north_star", name: "Social Campaign Q1", description: null, created_at: new Date(Date.now() - 3 * 86400000).toISOString(), updated_at: new Date(Date.now() - 3 * 86400000).toISOString() },
+  ],
+  videoLibraryItems: [
+    { id: "vli_1", workspace_id: "workspace_north_star", project_id: "vlp_1", file_name: "aurora_hero.mp4", content_type: "video/mp4", size_bytes: 52428800, duration_ms: 15000, width: 1080, height: 1920, url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", created_at: new Date(Date.now() - 5 * 86400000).toISOString(), updated_at: new Date(Date.now() - 5 * 86400000).toISOString() },
+    { id: "vli_2", workspace_id: "workspace_north_star", project_id: "vlp_1", file_name: "serum_drop_closeup.mp4", content_type: "video/mp4", size_bytes: 18874368, duration_ms: 8000, width: 1080, height: 1920, url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", created_at: new Date(Date.now() - 4 * 86400000).toISOString(), updated_at: new Date(Date.now() - 4 * 86400000).toISOString() },
+    { id: "vli_3", workspace_id: "workspace_north_star", project_id: "vlp_2", file_name: "lifestyle_kitchen.mp4", content_type: "video/mp4", size_bytes: 31457280, duration_ms: 12000, width: 1920, height: 1080, url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", created_at: new Date(Date.now() - 2 * 86400000).toISOString(), updated_at: new Date(Date.now() - 2 * 86400000).toISOString() },
+    { id: "vli_4", workspace_id: "workspace_north_star", project_id: null, file_name: "raw_footage_01.mp4", content_type: "video/mp4", size_bytes: 104857600, duration_ms: 45000, width: 3840, height: 2160, url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4", created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: new Date(Date.now() - 86400000).toISOString() },
+  ],
 };
 
 /* ─── Idea Generation Templates ───────────────────────────────────────────── */
@@ -1276,6 +1428,29 @@ export async function mockGetPresets(): Promise<PresetCard[]> {
   ];
 }
 
+export async function mockGetRenderPresets(): Promise<RenderPreset[]> {
+  if (!isMockMode()) {
+    return liveGetRenderPresets();
+  }
+  await randomDelay(100, 200);
+  return [...seedRenderPresets];
+}
+
+export async function mockApplyEditorSettings(
+  projectId: string,
+  _editorSettings: EditorSettings,
+): Promise<RenderJob> {
+  if (!isMockMode()) {
+    return liveApplyEditorSettings(projectId, _editorSettings);
+  }
+  await randomDelay(400, 800);
+  const existing = state.renderJobs.get(projectId);
+  if (!existing) throw new Error("No render job found for project");
+  const updated = { ...existing, updatedAt: new Date().toISOString() };
+  state.renderJobs.set(projectId, updated);
+  return updated;
+}
+
 // Replaced by global template library
 
 export async function mockGetSettings(): Promise<SettingsSection[]> {
@@ -1815,10 +1990,10 @@ export async function mockRetryRenderStep(projectId: string, stepId: string): Pr
 
 export async function mockStartRender(
   projectId: string,
-  settings?: { subtitleStyle?: string; musicDucking?: string; musicTrack?: string; animationEffect?: string }
+  settings?: { subtitleStyle?: string; musicDucking?: string; musicTrack?: string; animationEffect?: string; videoEffects?: import("../types/domain").VideoEffectsProfile; presetId?: string }
 ): Promise<RenderJob> {
   if (!isMockMode()) {
-    return liveStartRender(projectId, settings as { subtitleStyle: string; musicDucking: string; musicTrack: string; animationEffect: string } | undefined);
+    return liveStartRender(projectId, settings as { subtitleStyle: string; musicDucking: string; musicTrack: string; animationEffect: string; videoEffects?: import("../types/domain").VideoEffectsProfile; presetId?: string } | undefined);
   }
   await randomDelay(300, 600);
   const planSet = state.scenePlanSets.get(projectId);
@@ -1885,6 +2060,7 @@ export async function mockStartRender(
       subtitleStyle: (settings?.subtitleStyle ?? "none") === "none" ? "Off" : (settings?.subtitleStyle || "Default"),
     },
     isVideoGeneration: !!settings,
+    videoEffects: settings?.videoEffects ?? undefined,
   };
 
   state.renderJobs.set(projectId, job);
@@ -2567,4 +2743,103 @@ export async function mockGetLocalWorkers(): Promise<LocalWorker[]> {
   }
   await randomDelay(200, 400);
   return state.localWorkers;
+}
+
+/* ─── Video Library ───────────────────────────────────────────────────────── */
+
+export async function mockGetVideoLibraryProjects(): Promise<VideoLibraryProject[]> {
+  if (!isMockMode()) return liveGetVideoLibraryProjects();
+  await randomDelay(150, 300);
+  return [...state.videoLibraryProjects];
+}
+
+export async function mockCreateVideoLibraryProject(payload: {
+  name: string;
+  description?: string | null;
+}): Promise<VideoLibraryProject> {
+  if (!isMockMode()) return liveCreateVideoLibraryProject(payload);
+  await randomDelay(200, 400);
+  const project: VideoLibraryProject = {
+    id: nextId("vlp"),
+    workspace_id: state.activeWorkspaceId,
+    name: payload.name,
+    description: payload.description ?? null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  state.videoLibraryProjects.push(project);
+  return project;
+}
+
+export async function mockBrowseFolder(folderPath: string): Promise<BrowseFolderResult> {
+  if (!isMockMode()) return liveBrowseFolder(folderPath);
+  await randomDelay(300, 600);
+  // Detect path separator from the input (Windows uses \, Unix uses /)
+  const sep = folderPath.includes("\\") ? "\\" : "/";
+  const join = (name: string) => `${folderPath}${sep}${name}`;
+  const mockFiles = [
+    { name: "intro_clip.mp4",       path: join("intro_clip.mp4"),       size_bytes: 25165824,  content_type: "video/mp4" },
+    { name: "product_shot_01.mp4",  path: join("product_shot_01.mp4"),  size_bytes: 15728640,  content_type: "video/mp4" },
+    { name: "lifestyle_b_roll.mov", path: join("lifestyle_b_roll.mov"), size_bytes: 62914560,  content_type: "video/quicktime" },
+    { name: "talking_head.mp4",     path: join("talking_head.mp4"),     size_bytes: 41943040,  content_type: "video/mp4" },
+    { name: "outro_animation.mp4",  path: join("outro_animation.mp4"),  size_bytes: 8388608,   content_type: "video/mp4" },
+  ];
+  return { path: folderPath, files: mockFiles };
+}
+
+export async function mockUploadLocalFile(payload: UploadLocalFilePayload): Promise<VideoLibraryItem> {
+  if (!isMockMode()) return liveUploadLocalFile(payload);
+  await randomDelay(800, 1500);
+  const fileName = payload.local_path.split(/[\\/]/).pop() ?? "video.mp4";
+  const item: VideoLibraryItem = {
+    id: nextId("vli"),
+    workspace_id: state.activeWorkspaceId,
+    project_id: payload.project_id ?? null,
+    file_name: fileName,
+    content_type: "video/mp4",
+    size_bytes: Math.floor(Math.random() * 50000000) + 5000000,
+    duration_ms: Math.floor(Math.random() * 30000) + 5000,
+    width: 1080,
+    height: 1920,
+    url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  state.videoLibraryItems.push(item);
+  return item;
+}
+
+export async function mockGetUploadedVideos(projectId?: string | null): Promise<VideoLibraryItem[]> {
+  if (!isMockMode()) return liveGetUploadedVideos(projectId);
+  await randomDelay(150, 300);
+  const items = projectId
+    ? state.videoLibraryItems.filter((i) => i.project_id === projectId)
+    : [...state.videoLibraryItems];
+  return items;
+}
+
+export async function mockMoveVideoToProject(
+  itemId: string,
+  projectId: string | null,
+): Promise<VideoLibraryItem> {
+  if (!isMockMode()) return liveMoveVideoToProject(itemId, projectId);
+  await randomDelay(200, 400);
+  const item = state.videoLibraryItems.find((i) => i.id === itemId);
+  if (!item) throw new Error("Item not found");
+  item.project_id = projectId;
+  item.updated_at = new Date().toISOString();
+  return { ...item };
+}
+
+export async function mockDeleteUploadedVideo(itemId: string): Promise<void> {
+  if (!isMockMode()) return liveDeleteUploadedVideo(itemId);
+  await randomDelay(200, 400);
+  const idx = state.videoLibraryItems.findIndex((i) => i.id === itemId);
+  if (idx !== -1) state.videoLibraryItems.splice(idx, 1);
+}
+
+export function mockGetStreamUrl(filePath: string): string {
+  if (!isMockMode()) return liveGetStreamUrl(filePath);
+  // In mock mode return a sample video for any path
+  return "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
 }

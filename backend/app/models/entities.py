@@ -1138,6 +1138,35 @@ class WebhookEndpoint(Base, TimestampMixin):
     last_tested_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
+class VideoLibraryProject(Base):
+    __tablename__ = "video_library_projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(sa.Text)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class VideoLibraryItem(Base):
+    __tablename__ = "video_library_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("video_library_projects.id"), nullable=True, index=True)
+    file_name: Mapped[str] = mapped_column(sa.String(512), nullable=False)
+    bucket_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    object_name: Mapped[str] = mapped_column(sa.String(1024), nullable=False)
+    content_type: Mapped[str] = mapped_column(sa.String(128), nullable=False, default="video/mp4")
+    size_bytes: Mapped[int] = mapped_column(sa.BigInteger, nullable=False, default=0)
+    duration_ms: Mapped[int | None] = mapped_column(sa.Integer)
+    width: Mapped[int | None] = mapped_column(sa.Integer)
+    height: Mapped[int | None] = mapped_column(sa.Integer)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
 

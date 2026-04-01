@@ -38,42 +38,67 @@ function latestRenderForPlan(renders: RenderJob[] | undefined, planId: string): 
   return sorted[0] ?? null;
 }
 
-function renderWithFrameAssets(renders: RenderJob[] | undefined, planId: string): RenderJob | null {
-  if (!renders?.length) return null;
+/** Newest-first list of renders for this scene plan (or all project renders if plan id missing on older jobs). */
+function rendersPoolForPlan(renders: RenderJob[] | undefined, planId: string): RenderJob[] {
+  if (!renders?.length) return [];
   const matches = renders.filter((r) => r.scenePlanId === planId);
   const pool = matches.length ? matches : renders;
-  const sorted = [...pool].sort(
+  return [...pool].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
-  const withAssets = sorted.find(
-    (r) => (r.frameAssets?.length ?? 0) > 0 || r.steps.some((s) => s.stepKind === "frame_pair_generation"),
-  );
-  return withAssets ?? sorted[0] ?? null;
 }
 
-function frameStepForScene(render: RenderJob, sceneSegmentId: string): RenderStep | undefined {
-  return render.steps.find(
-    (s) => s.stepKind === "frame_pair_generation" && s.sceneId === sceneSegmentId,
-  );
+/**
+ * Job that still has frame-pair steps (the keyframe approval workflow).
+ * Do not fall back to the newest job: after "Generate video", the latest job is often slide/export-only
+ * and would hide previously approved frames.
+ */
+function renderJobWithFramePairSteps(renders: RenderJob[] | undefined, planId: string): RenderJob | null {
+  const sorted = rendersPoolForPlan(renders, planId);
+  return sorted.find((r) => r.steps.some((s) => s.stepKind === "frame_pair_generation")) ?? null;
 }
 
-function assetUrl(render: RenderJob, sceneSegmentId: string, role: string): string | null {
-  return (
-    render.frameAssets?.find((a) => a.sceneSegmentId === sceneSegmentId && a.assetRole === role)
-      ?.downloadUrl ?? null
-  );
+/** Resolve keyframe or narration asset URL across all plan renders (newest job first per asset). */
+function keyframeAssetUrl(
+  renders: RenderJob[] | undefined,
+  planId: string,
+  sceneSegmentId: string,
+  role: string,
+): string | null {
+  for (const r of rendersPoolForPlan(renders, planId)) {
+    const url =
+      r.frameAssets?.find((a) => a.sceneSegmentId === sceneSegmentId && a.assetRole === role)?.downloadUrl ?? null;
+    if (url) return url;
+  }
+  return null;
+}
+
+function narrationAssetUrlAcrossRenders(
+  renders: RenderJob[] | undefined,
+  planId: string,
+  sceneSegmentId: string,
+): string | null {
+  for (const r of rendersPoolForPlan(renders, planId)) {
+    const matches = r.frameAssets?.filter(
+      (a) => a.sceneSegmentId === sceneSegmentId && a.assetRole === "narration_track",
+    );
+    if (matches?.length) return matches[matches.length - 1].downloadUrl ?? null;
+  }
+  return null;
+}
+
+function frameStepForScene(render: RenderJob, scene: { id: string; index: number }): RenderStep | undefined {
+  const frameSteps = render.steps.filter((s) => s.stepKind === "frame_pair_generation");
+  const bySegment = frameSteps.find((s) => s.sceneId === scene.id);
+  if (bySegment) return bySegment;
+  const byStepIndex = frameSteps.find((s) => s.stepIndex != null && s.stepIndex === 100 + scene.index);
+  if (byStepIndex) return byStepIndex;
+  const ordered = [...frameSteps].sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0));
+  return ordered[scene.index - 1];
 }
 
 function firstFailedStep(render: RenderJob): RenderStep | undefined {
   return render.steps.find((s) => s.backendStatus === "failed");
-}
-
-function narrationUrl(render: RenderJob, sceneSegmentId: string): string | null {
-  const matches = render.frameAssets?.filter(
-    (a) => a.sceneSegmentId === sceneSegmentId && a.assetRole === "narration_track",
-  );
-  if (!matches?.length) return null;
-  return matches[matches.length - 1].downloadUrl ?? null;
 }
 
 function NarrationCard({
@@ -293,9 +318,9 @@ export function FramesPage() {
     return latestRenderForPlan(renders, planSet.id);
   }, [planSet?.id, renders]);
 
-  const frameSourceRender = useMemo(() => {
+  const frameStepsRender = useMemo(() => {
     if (!planSet?.id) return null;
-    return renderWithFrameAssets(renders, planSet.id);
+    return renderJobWithFramePairSteps(renders, planSet.id);
   }, [planSet?.id, renders]);
 
   const quickCreateBanner =
@@ -358,7 +383,7 @@ export function FramesPage() {
     );
   }
 
-  const frameRender = frameSourceRender ?? activeRender;
+  const frameRender = frameStepsRender ?? activeRender;
   const anyReview =
     frameRender?.steps.some(
       (s) => s.stepKind === "frame_pair_generation" && s.backendStatus === "review",
@@ -366,7 +391,7 @@ export function FramesPage() {
   const allFramePairsApproved =
     planSet.scenes.length > 0 &&
     planSet.scenes.every((scene) => {
-      const step = frameRender ? frameStepForScene(frameRender, scene.id) : undefined;
+      const step = frameRender ? frameStepForScene(frameRender, scene) : undefined;
       return step?.backendStatus === "approved";
     });
 
@@ -559,10 +584,10 @@ export function FramesPage() {
             </div>
           ) : null}
           {planSet.scenes.map((scene) => {
-            const displayRender = frameSourceRender ?? activeRender;
-            const step = displayRender ? frameStepForScene(displayRender, scene.id) : undefined;
-            const start = displayRender ? assetUrl(displayRender, scene.id, "scene_start_frame") : null;
-            const end = displayRender ? assetUrl(displayRender, scene.id, "scene_end_frame") : null;
+            const stepsRender = frameStepsRender ?? activeRender;
+            const step = stepsRender ? frameStepForScene(stepsRender, scene) : undefined;
+            const start = keyframeAssetUrl(renders, planSet.id, scene.id, "scene_start_frame");
+            const end = keyframeAssetUrl(renders, planSet.id, scene.id, "scene_end_frame");
             const inReview = step?.backendStatus === "review";
             const approved = step?.backendStatus === "approved";
             const stepFailed = step?.backendStatus === "failed";
@@ -638,11 +663,11 @@ export function FramesPage() {
                     ) : null}
                   </div>
                 </div>
-                {displayRender ? (
+                {stepsRender || activeRender ? (
                   <NarrationCard
-                    audioSrc={narrationUrl(displayRender, scene.id)}
+                    audioSrc={narrationAssetUrlAcrossRenders(renders, planSet.id, scene.id)}
                     sceneId={scene.id}
-                    renderJobId={displayRender.id}
+                    renderJobId={frameStepsRender?.id ?? activeRender?.id ?? ""}
                     speechConfigured={speechConfigured}
                     generateNarration={generateNarration.mutate}
                     isGenerating={

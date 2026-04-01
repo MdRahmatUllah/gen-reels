@@ -43,7 +43,14 @@ export function useRenders(projectId: string) {
 export function useStartRender(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (settings?: { subtitleStyle: string; musicDucking: string; musicTrack: string; animationEffect: string }) =>
+    mutationFn: (settings?: {
+      subtitleStyle: string;
+      musicDucking: string;
+      musicTrack: string;
+      animationEffect: string;
+      videoEffects?: import("../types/domain").VideoEffectsProfile;
+      presetId?: string;
+    }) =>
       isMockMode() ? mockStartRender(projectId, settings) : liveStartRender(projectId, settings),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["renders", projectId] });

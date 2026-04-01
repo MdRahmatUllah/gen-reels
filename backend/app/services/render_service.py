@@ -12,13 +12,6 @@ from sqlalchemy import func, select
 from app.api.deps import AuthContext
 from app.core.errors import AdapterError, ApiError
 from app.integrations.azure import ModerationProvider
-from app.integrations.media_ops import (
-    compose_reel_export,
-    create_slide_clip_from_images,
-    probe_media_bytes,
-    retime_video_to_target,
-    strip_audio_from_video,
-)
 from app.integrations.media import (
     GeneratedMedia,
     ImageProvider,
@@ -34,6 +27,14 @@ from app.integrations.media import (
     build_speech_provider,
     build_video_provider,
     compose_frame_generation_prompt,
+)
+from app.integrations.media_ops import (
+    apply_video_effects,
+    compose_reel_export,
+    create_slide_clip_from_images,
+    probe_media_bytes,
+    retime_video_to_target,
+    strip_audio_from_video,
 )
 from app.integrations.storage import StorageClient, build_storage_client
 from app.models.entities import (
@@ -59,8 +60,8 @@ from app.models.entities import (
     ProviderErrorCategory,
     ProviderRun,
     ProviderRunStatus,
-    RenderJob,
     RenderEvent,
+    RenderJob,
     RenderStep,
     ScenePlan,
     SceneSegment,
@@ -76,13 +77,14 @@ from app.services.billing_service import BillingService
 from app.services.execution_policy_service import ExecutionPolicyService
 from app.services.generation_service import GenerationService
 from app.services.notification_service import NotificationService
+from app.services.presenters import asset_to_dict, export_to_dict, job_to_dict, render_step_to_dict
 from app.services.project_profiles import (
     merge_profile_overrides,
     normalize_audio_mix_profile,
     normalize_export_profile,
     normalize_subtitle_style_profile,
+    normalize_video_effects_profile,
 )
-from app.services.presenters import asset_to_dict, export_to_dict, job_to_dict, render_step_to_dict
 from app.services.routing_service import RoutingDecision, RoutingService
 
 
@@ -1399,6 +1401,11 @@ class RenderService(GenerationService):
             "subtitle_style_profile": normalize_subtitle_style_profile(merged_subtitle),
             "export_profile": normalize_export_profile(project.export_profile),
             "audio_mix_profile": normalize_audio_mix_profile(merged_audio),
+            "video_effects_profile": (
+                payload.video_effects_profile.model_dump()
+                if payload.video_effects_profile
+                else normalize_video_effects_profile(None)
+            ),
             "voice_preset_snapshot": {
                 "id": str(voice_preset.id) if voice_preset else None,
                 "name": voice_preset.name if voice_preset else None,
@@ -3187,6 +3194,7 @@ class RenderService(GenerationService):
         subtitle_style_profile: dict[str, object],
         export_profile: dict[str, object],
         audio_mix_profile: dict[str, object],
+        video_effects_profile: dict[str, object] | None = None,
     ) -> ExportRecord:
         step = self._get_or_create_step(
             render_job,
@@ -3232,6 +3240,34 @@ class RenderService(GenerationService):
             ),
             subtitle_text=subtitle_text,
         )
+
+        fx = video_effects_profile or {}
+        has_effects = (
+            fx.get("brightness", 0) != 0
+            or fx.get("contrast", 0) != 0
+            or fx.get("saturation", 0) != 0
+            or fx.get("speed", 1.0) != 1.0
+            or fx.get("fade_in_sec", 0) > 0
+            or fx.get("fade_out_sec", 0) > 0
+            or fx.get("color_filter", "none") not in ("none", "")
+            or fx.get("vignette_strength", 0) > 0
+        )
+        effects_metadata: dict[str, object] = {}
+        if has_effects:
+            export_bytes, effects_metadata = apply_video_effects(
+                self.settings,
+                source_bytes=export_bytes,
+                source_file_name="final-export.mp4",
+                brightness=float(fx.get("brightness", 0)),
+                contrast=float(fx.get("contrast", 0)),
+                saturation=float(fx.get("saturation", 0)),
+                speed=float(fx.get("speed", 1.0)),
+                fade_in_sec=float(fx.get("fade_in_sec", 0)),
+                fade_out_sec=float(fx.get("fade_out_sec", 0)),
+                color_filter=str(fx.get("color_filter", "none")),
+                vignette_strength=float(fx.get("vignette_strength", 0)),
+            )
+
         export_generated = GeneratedMedia(
             provider_name="internal_ffmpeg_composer",
             provider_model="ffmpeg-export-v1",
@@ -3240,11 +3276,13 @@ class RenderService(GenerationService):
             bytes_payload=export_bytes,
             metadata={
                 **export_metadata,
+                **effects_metadata,
                 "scene_count": len(segments),
                 "aspect_ratio": "9:16",
                 "subtitle_style_profile": subtitle_style_profile,
                 "export_profile": export_profile,
                 "audio_mix_profile": audio_mix_profile,
+                "video_effects_profile": fx,
             },
         )
         export_asset = self._store_generated_asset(
@@ -3404,6 +3442,9 @@ class RenderService(GenerationService):
             render_job=render_job,
             project=project,
         )
+        video_effects_profile = normalize_video_effects_profile(
+            (render_job.payload or {}).get("video_effects_profile")
+        )
         segments = self._scene_segments(scene_plan.id)
         render_job.status = JobStatus.running
         render_job.started_at = render_job.started_at or datetime.now(UTC)
@@ -3512,6 +3553,7 @@ class RenderService(GenerationService):
             subtitle_style_profile=subtitle_style_profile,
             export_profile=export_profile,
             audio_mix_profile=audio_mix_profile,
+            video_effects_profile=video_effects_profile,
         )
         project.stage = ProjectStage.exports
         render_job.status = JobStatus.completed

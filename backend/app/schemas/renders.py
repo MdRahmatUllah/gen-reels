@@ -8,6 +8,17 @@ from pydantic import BaseModel, Field
 from app.schemas.common import JobAcceptedResponse
 
 
+class VideoEffectsProfile(BaseModel):
+    brightness: float = 0.0
+    contrast: float = 0.0
+    saturation: float = 0.0
+    speed: float = 1.0
+    fade_in_sec: float = 0.0
+    fade_out_sec: float = 0.0
+    color_filter: str = "none"
+    vignette_strength: float = 0.0
+
+
 class RenderCreateRequest(BaseModel):
     scene_plan_id: str | None = None
     allow_export_without_music: bool = True
@@ -15,6 +26,8 @@ class RenderCreateRequest(BaseModel):
     animation_profile: dict[str, object] = Field(default_factory=dict)
     subtitle_style_profile: dict[str, object] | None = None
     audio_mix_profile: dict[str, object] | None = None
+    video_effects_profile: VideoEffectsProfile | None = None
+    preset_id: str | None = None
 
 
 class RenderStepResponse(BaseModel):

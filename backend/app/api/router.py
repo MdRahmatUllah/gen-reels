@@ -18,6 +18,7 @@ from app.api.routes import (
     scripts,
     templates,
     usage,
+    video_library,
     workspace,
 )
 
@@ -42,3 +43,4 @@ api_router.include_router(workspace.router, prefix="/workspace", tags=["workspac
 api_router.include_router(local_workers.router, prefix="/local-workers", tags=["local-workers"])
 api_router.include_router(local_workers.router, prefix="/workers", tags=["workers"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(video_library.router, prefix="/video-library", tags=["video-library"])
