@@ -7,7 +7,7 @@ Create Date: 2026-03-29 23:59:00
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from alembic import op
 import sqlalchemy as sa
@@ -143,7 +143,7 @@ def upgrade() -> None:
         sa.column("created_at", sa.DateTime(timezone=True)),
         sa.column("updated_at", sa.DateTime(timezone=True)),
     )
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     op.bulk_insert(
         plan_table,
         [

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -438,7 +438,7 @@ class RenderService(GenerationService):
         step.status = JobStatus.running
         step.error_code = None
         step.error_message = None
-        step.started_at = datetime.now(UTC)
+        step.started_at = datetime.now(timezone.utc)
         step.completed_at = None
         self._set_step_checkpoint(step, {"status": "running"})
 
@@ -446,14 +446,14 @@ class RenderService(GenerationService):
         step.output_payload = output_payload
         step.status = JobStatus.completed
         step.is_stale = False
-        step.completed_at = datetime.now(UTC)
+        step.completed_at = datetime.now(timezone.utc)
         self._set_step_checkpoint(step, output_payload or {"status": "completed"})
 
     def _fail_step(self, step: RenderStep, error: AdapterError) -> None:
         step.status = JobStatus.failed
         step.error_code = error.code
         step.error_message = error.message
-        step.completed_at = datetime.now(UTC)
+        step.completed_at = datetime.now(timezone.utc)
         self._set_step_checkpoint(
             step,
             {"status": "failed", "error_code": error.code, "error_message": error.message},
@@ -519,7 +519,7 @@ class RenderService(GenerationService):
         asset.quarantine_bucket_name = self.settings.minio_bucket_quarantine
         asset.quarantine_object_name = quarantine_object_name
         asset.status = "quarantined"
-        asset.quarantined_at = datetime.now(UTC)
+        asset.quarantined_at = datetime.now(timezone.utc)
 
     def _moderate_generated_asset(
         self,
@@ -626,7 +626,7 @@ class RenderService(GenerationService):
         step.status = JobStatus.blocked
         step.error_code = error_code
         step.error_message = error_message
-        step.completed_at = datetime.now(UTC)
+        step.completed_at = datetime.now(timezone.utc)
         step.output_payload = checkpoint_payload
         self._set_step_checkpoint(step, checkpoint_payload)
         render_job.status = JobStatus.blocked
@@ -847,14 +847,14 @@ class RenderService(GenerationService):
     ) -> None:
         provider_run.status = ProviderRunStatus.completed
         provider_run.response_payload = response_payload
-        provider_run.completed_at = datetime.now(UTC)
+        provider_run.completed_at = datetime.now(timezone.utc)
         if duration_seconds is not None:
             provider_run.latency_ms = int(duration_seconds * 1000)
         elif provider_run.started_at:
             provider_run.latency_ms = int(
                 max(
                     0.0,
-                    (datetime.now(UTC) - provider_run.started_at).total_seconds(),
+                    (datetime.now(timezone.utc) - provider_run.started_at).total_seconds(),
                 )
                 * 1000
             )
@@ -923,7 +923,7 @@ class RenderService(GenerationService):
         if not render_job or not step or not project:
             raise ApiError(404, "local_worker_job_not_found", "Local worker job inputs are missing.")
 
-        worker.last_polled_at = datetime.now(UTC)
+        worker.last_polled_at = datetime.now(timezone.utc)
         worker.last_error_at = None
         worker.last_error_code = None
         worker.last_error_message = None
@@ -931,7 +931,7 @@ class RenderService(GenerationService):
 
         if payload.status == "failed":
             provider_run.status = ProviderRunStatus.failed
-            provider_run.completed_at = datetime.now(UTC)
+            provider_run.completed_at = datetime.now(timezone.utc)
             if payload.error_code == "capability_mismatch":
                 provider_run.error_category = ProviderErrorCategory.deterministic_input
                 provider_run.error_code = payload.error_code
@@ -962,7 +962,7 @@ class RenderService(GenerationService):
                     "provider_run_id": provider_run.id,
                     "status": "rerouted",
                 }
-            worker.last_error_at = datetime.now(UTC)
+            worker.last_error_at = datetime.now(timezone.utc)
             worker.last_error_code = payload.error_code
             worker.last_error_message = payload.error_message
             error = AdapterError(
@@ -974,7 +974,7 @@ class RenderService(GenerationService):
             render_job.status = JobStatus.failed
             render_job.error_code = error.code
             render_job.error_message = error.message
-            render_job.completed_at = datetime.now(UTC)
+            render_job.completed_at = datetime.now(timezone.utc)
             BillingService(self.db, self.settings).release_render_reservation(render_job, reason="failed")
             self._append_render_event(
                 render_job=render_job,
@@ -1104,7 +1104,7 @@ class RenderService(GenerationService):
                 )
             else:
                 step.status = JobStatus.review
-                step.completed_at = datetime.now(UTC)
+                step.completed_at = datetime.now(timezone.utc)
                 self._set_step_checkpoint(step, step.output_payload)
                 render_job.status = JobStatus.review
                 render_job.error_code = None
@@ -1506,7 +1506,7 @@ class RenderService(GenerationService):
         if render_job.status in {JobStatus.completed, JobStatus.cancelled}:
             raise ApiError(400, "render_not_cancellable", "This render can no longer be cancelled.")
         render_job.status = JobStatus.cancelled
-        render_job.cancelled_at = datetime.now(UTC)
+        render_job.cancelled_at = datetime.now(timezone.utc)
         BillingService(self.db, self.settings).release_render_reservation(render_job, reason="cancelled")
         record_audit_event(
             self.db,
@@ -1756,7 +1756,7 @@ class RenderService(GenerationService):
         render_job.status = JobStatus.failed
         render_job.error_code = error.code
         render_job.error_message = error.message
-        render_job.completed_at = datetime.now(UTC)
+        render_job.completed_at = datetime.now(timezone.utc)
         if running_step:
             self._fail_step(running_step, error)
             self._append_render_event(
@@ -2325,7 +2325,7 @@ class RenderService(GenerationService):
                 return True
             step.status = JobStatus.review
             step.is_stale = False
-            step.completed_at = datetime.now(UTC)
+            step.completed_at = datetime.now(timezone.utc)
             self._set_step_checkpoint(step, step.output_payload)
             awaiting_review = True
             record_audit_event(
@@ -3159,7 +3159,7 @@ class RenderService(GenerationService):
             step.status = JobStatus.failed
             step.error_code = "subtitle_generation_failed"
             step.error_message = str(exc)
-            step.completed_at = datetime.now(UTC)
+            step.completed_at = datetime.now(timezone.utc)
             return None
 
         self._complete_step(step, output_payload={"asset_id": str(subtitle_asset.id)})
@@ -3215,7 +3215,7 @@ class RenderService(GenerationService):
         return all_entries
 
     def _should_hold_export_for_moderation(self, render_job: RenderJob) -> tuple[bool, int, str]:
-        lookback = datetime.now(UTC) - timedelta(days=self.settings.export_moderation_lookback_days)
+        lookback = datetime.now(timezone.utc) - timedelta(days=self.settings.export_moderation_lookback_days)
         blocked_count = int(
             self.db.scalar(
                 select(func.count())
@@ -3392,8 +3392,8 @@ class RenderService(GenerationService):
             object_name=export_asset.object_name,
             duration_ms=export_generated.metadata.get("duration_ms"),
             availability_status="moderation_hold" if hold_export else "available",
-            held_at=datetime.now(UTC) if hold_export else None,
-            available_at=None if hold_export else datetime.now(UTC),
+            held_at=datetime.now(timezone.utc) if hold_export else None,
+            available_at=None if hold_export else datetime.now(timezone.utc),
             subtitle_style_profile=subtitle_style_profile,
             export_profile=export_profile,
             audio_mix_profile=audio_mix_profile,
@@ -3401,7 +3401,7 @@ class RenderService(GenerationService):
                 **export_generated.metadata,
                 "manifest_asset_id": str(manifest_asset.id),
             },
-            completed_at=datetime.now(UTC),
+            completed_at=datetime.now(timezone.utc),
         )
         self.db.add(export_record)
         self.db.flush()
@@ -3500,7 +3500,7 @@ class RenderService(GenerationService):
         )
         segments = self._scene_segments(scene_plan.id)
         render_job.status = JobStatus.running
-        render_job.started_at = render_job.started_at or datetime.now(UTC)
+        render_job.started_at = render_job.started_at or datetime.now(timezone.utc)
         self._append_render_event(
             render_job=render_job,
             event_type="render.started",
@@ -3611,7 +3611,7 @@ class RenderService(GenerationService):
         )
         project.stage = ProjectStage.exports
         render_job.status = JobStatus.completed
-        render_job.completed_at = datetime.now(UTC)
+        render_job.completed_at = datetime.now(timezone.utc)
         render_job.error_code = None
         render_job.error_message = None
         BillingService(self.db, self.settings).release_render_reservation(render_job, reason="completed")
@@ -3619,7 +3619,7 @@ class RenderService(GenerationService):
         self.db.commit()
 
     def expire_stale_render_jobs(self) -> int:
-        threshold = datetime.now(UTC) - timedelta(minutes=self.settings.render_job_timeout_minutes)
+        threshold = datetime.now(timezone.utc) - timedelta(minutes=self.settings.render_job_timeout_minutes)
         stale_jobs = self.db.scalars(
             select(RenderJob).where(
                 RenderJob.queue_name == "render",
@@ -3631,7 +3631,7 @@ class RenderService(GenerationService):
             render_job.status = JobStatus.failed
             render_job.error_code = "job_timeout"
             render_job.error_message = "The render expired before completion."
-            render_job.completed_at = datetime.now(UTC)
+            render_job.completed_at = datetime.now(timezone.utc)
             running_step = self.db.scalar(
                 select(RenderStep)
                 .where(
@@ -3644,7 +3644,7 @@ class RenderService(GenerationService):
                 running_step.status = JobStatus.failed
                 running_step.error_code = "job_timeout"
                 running_step.error_message = "The render expired before completion."
-                running_step.completed_at = datetime.now(UTC)
+                running_step.completed_at = datetime.now(timezone.utc)
                 self._set_step_checkpoint(
                     running_step,
                     {
@@ -3672,7 +3672,7 @@ class RenderService(GenerationService):
         return len(stale_jobs)
 
     def process_frame_pair_review_timeouts(self) -> int:
-        threshold = datetime.now(UTC) - timedelta(minutes=max(60, self.settings.render_job_timeout_minutes // 2))
+        threshold = datetime.now(timezone.utc) - timedelta(minutes=max(60, self.settings.render_job_timeout_minutes // 2))
         steps = self.db.scalars(
             select(RenderStep).where(
                 RenderStep.step_kind == StepKind.frame_pair_generation,
@@ -3688,11 +3688,11 @@ class RenderService(GenerationService):
             step.status = JobStatus.failed
             step.error_code = "frame_pair_review_timeout"
             step.error_message = "Frame-pair review expired before approval."
-            step.completed_at = datetime.now(UTC)
+            step.completed_at = datetime.now(timezone.utc)
             render_job.status = JobStatus.failed
             render_job.error_code = step.error_code
             render_job.error_message = step.error_message
-            render_job.completed_at = datetime.now(UTC)
+            render_job.completed_at = datetime.now(timezone.utc)
             BillingService(self.db, self.settings).release_render_reservation(
                 render_job,
                 reason="frame_pair_review_timeout",
@@ -3711,7 +3711,7 @@ class RenderService(GenerationService):
         return updated
 
     def cleanup_expired_assets(self) -> int:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         assets = self.db.scalars(
             select(Asset).where(Asset.expires_at.is_not(None), Asset.expires_at < now, Asset.deleted_at.is_(None))
         ).all()
@@ -3729,7 +3729,7 @@ class RenderService(GenerationService):
         return deleted
 
     def archive_old_quarantine_records(self) -> int:
-        threshold = datetime.now(UTC) - timedelta(days=7)
+        threshold = datetime.now(timezone.utc) - timedelta(days=7)
         assets = self.db.scalars(
             select(Asset).where(
                 Asset.quarantined_at.is_not(None),

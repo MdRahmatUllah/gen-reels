@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Generator
 
 from fastapi import Depends, Request
@@ -106,7 +106,7 @@ def require_workspace_api_key(
 ) -> ApiKeyAuthContext:
     token = _authorization_bearer_token(request)
     api_key = db.scalar(select(WorkspaceApiKey).where(WorkspaceApiKey.key_hash == hash_token(token)))
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     if not api_key or api_key.revoked_at is not None or (
         api_key.expires_at is not None and api_key.expires_at <= now
     ):

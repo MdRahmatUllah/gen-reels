@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -145,7 +145,7 @@ class ReviewService:
         review.status = ReviewStatus.approved
         review.decision_notes = decision_notes
         review.decided_by_user_id = UUID(auth.user_id)
-        review.decided_at = review.decided_at or datetime.now(UTC)
+        review.decided_at = review.decided_at or datetime.now(timezone.utc)
         record_audit_event(
             self.db,
             workspace_id=review.workspace_id,
@@ -186,7 +186,7 @@ class ReviewService:
         review.status = ReviewStatus.rejected
         review.decision_notes = decision_notes
         review.decided_by_user_id = UUID(auth.user_id)
-        review.decided_at = review.decided_at or datetime.now(UTC)
+        review.decided_at = review.decided_at or datetime.now(timezone.utc)
         record_audit_event(
             self.db,
             workspace_id=review.workspace_id,

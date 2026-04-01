@@ -111,9 +111,9 @@ class NotificationService:
         if not notification:
             raise ApiError(404, "notification_not_found", "Notification not found.")
         if notification.read_at is None:
-            from datetime import UTC, datetime
+            from datetime import datetime, timezone
 
-            notification.read_at = datetime.now(UTC)
+            notification.read_at = datetime.now(timezone.utc)
             self.db.commit()
         return self._to_dict(notification)
 

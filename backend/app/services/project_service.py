@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -275,7 +275,7 @@ class ProjectService:
         if "stage" in payload.model_fields_set and payload.stage is not None:
             project.stage = ProjectStage(payload.stage)
         if "archived" in payload.model_fields_set and payload.archived is not None:
-            project.archived_at = datetime.now(UTC) if payload.archived else None
+            project.archived_at = datetime.now(timezone.utc) if payload.archived else None
         if "default_visual_preset_id" in payload.model_fields_set:
             if payload.default_visual_preset_id is None:
                 project.default_visual_preset_id = None
@@ -323,7 +323,7 @@ class ProjectService:
     def delete_project(self, auth: AuthContext, project_id: str) -> None:
         project = self._get_project(project_id, auth.workspace_id)
         self._assert_mutation_rights(project, auth)
-        project.deleted_at = datetime.now(UTC)
+        project.deleted_at = datetime.now(timezone.utc)
         record_audit_event(
             self.db,
             workspace_id=project.workspace_id,

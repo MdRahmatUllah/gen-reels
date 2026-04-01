@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -350,7 +350,7 @@ class QuickStartService(ContentPlanningService):
         idempotency_key: str,
         request_hash: str,
     ) -> RenderJob | None:
-        window_start = datetime.now(UTC) - timedelta(hours=self.settings.idempotency_retention_hours)
+        window_start = datetime.now(timezone.utc) - timedelta(hours=self.settings.idempotency_retention_hours)
         existing = self.db.scalar(
             select(RenderJob)
             .where(
@@ -558,7 +558,7 @@ class QuickStartService(ContentPlanningService):
         if not job:
             return
         step = self._active_bootstrap_step(job)
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         job.status = JobStatus.failed
         job.error_code = error.code
         job.error_message = error.message
@@ -622,7 +622,7 @@ class QuickStartService(ContentPlanningService):
         return output
 
     def _mark_step_running(self, job: RenderJob, step: RenderStep) -> None:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         job.status = JobStatus.running
         job.started_at = job.started_at or now
         job.error_code = None
@@ -635,7 +635,7 @@ class QuickStartService(ContentPlanningService):
 
     def _complete_step(self, step: RenderStep, payload: dict[str, object]) -> None:
         step.status = JobStatus.completed
-        step.completed_at = datetime.now(UTC)
+        step.completed_at = datetime.now(timezone.utc)
         step.output_payload = payload
         self._set_step_checkpoint(step, payload)
 
@@ -646,7 +646,7 @@ class QuickStartService(ContentPlanningService):
         )
         BrandKitService(self.db).validate_text_against_brand_kit(project, script_text)
         script.approval_state = "approved"
-        script.approved_at = datetime.now(UTC)
+        script.approved_at = datetime.now(timezone.utc)
         script.approved_by_user_id = approved_by_user_id
         script.version += 1
         project.active_script_version_id = script.id
@@ -705,7 +705,7 @@ class QuickStartService(ContentPlanningService):
 
         scene_plan.consistency_pack_id = consistency_pack.id
         scene_plan.approval_state = "approved"
-        scene_plan.approved_at = datetime.now(UTC)
+        scene_plan.approved_at = datetime.now(timezone.utc)
         scene_plan.approved_by_user_id = approved_by_user_id
         scene_plan.version += 1
         project.active_scene_plan_id = scene_plan.id
@@ -1103,5 +1103,5 @@ class QuickStartService(ContentPlanningService):
         job.status = JobStatus.completed
         job.error_code = None
         job.error_message = None
-        job.completed_at = datetime.now(UTC)
+        job.completed_at = datetime.now(timezone.utc)
         self.db.commit()

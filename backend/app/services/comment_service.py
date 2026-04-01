@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -118,7 +118,7 @@ class CommentService:
         )
         if not comment:
             raise ApiError(404, "comment_not_found", "Comment not found.")
-        comment.resolved_at = comment.resolved_at or datetime.now(UTC)
+        comment.resolved_at = comment.resolved_at or datetime.now(timezone.utc)
         comment.resolved_by_user_id = UUID(auth.user_id)
         record_audit_event(
             self.db,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -86,7 +86,7 @@ class LocalWorkerService:
         require_workspace_admin(auth, message="Only workspace admins can manage local workers.")
         worker = self._worker(auth.workspace_id, worker_id)
         worker.status = LocalWorkerStatus.revoked
-        worker.revoked_at = worker.revoked_at or datetime.now(UTC)
+        worker.revoked_at = worker.revoked_at or datetime.now(timezone.utc)
         record_audit_event(
             self.db,
             workspace_id=worker.workspace_id,
@@ -112,7 +112,7 @@ class LocalWorkerService:
                 "That API key does not have permission to register local workers.",
             )
         raw_worker_token = f"rglw_{generate_token(32)}"
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         worker = LocalWorker(
             workspace_id=UUID(auth.workspace_id),
             registered_by_api_key_id=UUID(auth.api_key_id),
@@ -160,7 +160,7 @@ class LocalWorkerService:
             raise ApiError(403, "forbidden", "Worker token does not match the requested worker.")
         worker = self._worker(auth.workspace_id, worker_id)
         worker.status = LocalWorkerStatus.online
-        worker.last_heartbeat_at = datetime.now(UTC)
+        worker.last_heartbeat_at = datetime.now(timezone.utc)
         worker.metadata_payload = {
             **dict(worker.metadata_payload or {}),
             **dict(payload.metadata_payload or {}),
@@ -188,7 +188,7 @@ class LocalWorkerService:
         if worker.status == LocalWorkerStatus.revoked or worker.revoked_at is not None:
             raise ApiError(403, "worker_revoked", "This local worker has been revoked.")
         worker.status = LocalWorkerStatus.online
-        worker.last_polled_at = datetime.now(UTC)
+        worker.last_polled_at = datetime.now(timezone.utc)
         provider_run = self.db.scalar(
             select(ProviderRun)
             .where(
@@ -203,7 +203,7 @@ class LocalWorkerService:
             return LocalWorkerJobPollResponse(job=None).model_dump()
 
         provider_run.status = ProviderRunStatus.running
-        worker.last_job_claimed_at = datetime.now(UTC)
+        worker.last_job_claimed_at = datetime.now(timezone.utc)
         self.db.commit()
         payload = dict(provider_run.request_payload or {})
         job = {

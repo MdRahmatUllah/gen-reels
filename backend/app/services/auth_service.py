@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -179,7 +179,7 @@ class AuthService:
             refresh_token_hash="pending",
             user_agent=user_agent,
             ip_address=ip_address,
-            expires_at=datetime.now(UTC) + timedelta(days=self.settings.jwt_refresh_token_ttl_days),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=self.settings.jwt_refresh_token_ttl_days),
         )
         self.db.add(session_record)
         self.db.flush()
@@ -191,7 +191,7 @@ class AuthService:
             session_id=session_record.id,
         )
         session_record.refresh_token_hash = hash_token(refresh_token)
-        session_record.last_used_at = datetime.now(UTC)
+        session_record.last_used_at = datetime.now(timezone.utc)
 
         record_audit_event(
             self.db,
@@ -243,7 +243,7 @@ class AuthService:
         if (
             not session_record
             or session_record.revoked_at
-            or self._normalize_datetime(session_record.expires_at) <= datetime.now(UTC)
+            or self._normalize_datetime(session_record.expires_at) <= datetime.now(timezone.utc)
         ):
             raise ApiError(401, "invalid_session", "Session is no longer valid.")
 
@@ -252,7 +252,7 @@ class AuthService:
             self.db.execute(
                 update(SessionRecord)
                 .where(SessionRecord.user_id == session_record.user_id, SessionRecord.revoked_at.is_(None))
-                .values(revoked_at=datetime.now(UTC))
+                .values(revoked_at=datetime.now(timezone.utc))
             )
             self.db.commit()
             raise ApiError(401, "refresh_reuse_detected", "Refresh token reuse detected.")
@@ -278,7 +278,7 @@ class AuthService:
             session_id=session_record.id,
         )
         session_record.refresh_token_hash = hash_token(new_refresh_token)
-        session_record.last_used_at = datetime.now(UTC)
+        session_record.last_used_at = datetime.now(timezone.utc)
         self.db.commit()
         return (
             self._session_payload(
@@ -304,7 +304,7 @@ class AuthService:
             return
         session_record = self.db.get(SessionRecord, UUID(payload["session_id"]))
         if session_record and not session_record.revoked_at:
-            session_record.revoked_at = datetime.now(UTC)
+            session_record.revoked_at = datetime.now(timezone.utc)
             self.db.commit()
 
     def select_workspace(self, auth: AuthContext, workspace_id: str) -> tuple[dict[str, Any], str]:
@@ -320,7 +320,7 @@ class AuthService:
         if not session_record or session_record.revoked_at:
             raise ApiError(401, "invalid_session", "Session is no longer valid.")
         session_record.active_workspace_id = workspace.id
-        session_record.last_used_at = datetime.now(UTC)
+        session_record.last_used_at = datetime.now(timezone.utc)
 
         access_token = create_access_token(
             private_key=self.settings.jwt_private_key_resolved,
@@ -359,7 +359,7 @@ class AuthService:
         reset = PasswordResetToken(
             user_id=user.id,
             token_hash=hash_token(token),
-            expires_at=datetime.now(UTC) + timedelta(minutes=self.settings.password_reset_ttl_minutes),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=self.settings.password_reset_ttl_minutes),
         )
         self.db.add(reset)
         record_audit_event(
@@ -384,7 +384,7 @@ class AuthService:
                 )
             )
         )
-        if not reset or self._normalize_datetime(reset.expires_at) <= datetime.now(UTC):
+        if not reset or self._normalize_datetime(reset.expires_at) <= datetime.now(timezone.utc):
             raise ApiError(400, "invalid_reset_token", "Password reset token is invalid or expired.")
 
         user = self.db.get(User, reset.user_id)
@@ -392,11 +392,11 @@ class AuthService:
             raise ApiError(400, "invalid_reset_token", "Password reset token is invalid or expired.")
 
         user.password_hash = hash_password(new_password)
-        reset.used_at = datetime.now(UTC)
+        reset.used_at = datetime.now(timezone.utc)
         self.db.execute(
             update(SessionRecord)
             .where(SessionRecord.user_id == user.id, SessionRecord.revoked_at.is_(None))
-            .values(revoked_at=datetime.now(UTC))
+            .values(revoked_at=datetime.now(timezone.utc))
         )
         record_audit_event(
             self.db,

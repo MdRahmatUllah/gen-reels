@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -75,7 +75,7 @@ class GenerationService:
 
     def _set_step_checkpoint(self, step: RenderStep, payload: dict[str, object] | None = None) -> None:
         step.checkpoint_payload = payload or {}
-        step.last_checkpoint_at = datetime.now(UTC)
+        step.last_checkpoint_at = datetime.now(timezone.utc)
 
     def _record_step_retry(
         self,
@@ -90,7 +90,7 @@ class GenerationService:
             {
                 "requested_by_user_id": str(requested_by_user_id) if requested_by_user_id else None,
                 "reason": reason,
-                "at": datetime.now(UTC).isoformat(),
+                "at": datetime.now(timezone.utc).isoformat(),
                 "recovery_source_step_id": str(recovery_source_step_id) if recovery_source_step_id else None,
             }
         )
@@ -107,7 +107,7 @@ class GenerationService:
         error: AdapterError | None = None,
     ) -> None:
         provider_run.latency_ms = round((time.perf_counter() - started_at) * 1000)
-        provider_run.completed_at = datetime.now(UTC)
+        provider_run.completed_at = datetime.now(timezone.utc)
         if error:
             provider_run.status = ProviderRunStatus.failed
             provider_run.error_category = ProviderErrorCategory(error.category)
@@ -157,7 +157,7 @@ class GenerationService:
         idempotency_key: str,
         request_hash: str,
     ) -> RenderJob | None:
-        window_start = datetime.now(UTC) - timedelta(hours=self.settings.idempotency_retention_hours)
+        window_start = datetime.now(timezone.utc) - timedelta(hours=self.settings.idempotency_retention_hours)
         existing = self.db.scalar(
             select(RenderJob).where(
                 RenderJob.project_id == project_id,
@@ -503,12 +503,12 @@ class GenerationService:
         job.status = JobStatus.failed
         job.error_code = error.code
         job.error_message = error.message
-        job.completed_at = datetime.now(UTC)
+        job.completed_at = datetime.now(timezone.utc)
         if step:
             step.status = JobStatus.failed
             step.error_code = error.code
             step.error_message = error.message
-            step.completed_at = datetime.now(UTC)
+            step.completed_at = datetime.now(timezone.utc)
         self.db.commit()
 
     def execute_idea_job(self, job_id: str, text_provider: TextProvider | None = None) -> None:
@@ -524,9 +524,9 @@ class GenerationService:
         )
 
         job.status = JobStatus.running
-        job.started_at = datetime.now(UTC)
+        job.started_at = datetime.now(timezone.utc)
         step.status = JobStatus.running
-        step.started_at = datetime.now(UTC)
+        step.started_at = datetime.now(timezone.utc)
         provider_run = ProviderRun(
             render_job_id=job.id,
             render_step_id=step.id,
@@ -591,9 +591,9 @@ class GenerationService:
         project.stage = ProjectStage.script
         self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
-        job.completed_at = datetime.now(UTC)
+        job.completed_at = datetime.now(timezone.utc)
         step.status = JobStatus.completed
-        step.completed_at = datetime.now(UTC)
+        step.completed_at = datetime.now(timezone.utc)
         step.output_payload = {"idea_set_id": str(idea_set.id)}
         self._set_step_checkpoint(step, {"idea_set_id": str(idea_set.id)})
         record_audit_event(
@@ -621,9 +621,9 @@ class GenerationService:
         )
 
         job.status = JobStatus.running
-        job.started_at = datetime.now(UTC)
+        job.started_at = datetime.now(timezone.utc)
         step.status = JobStatus.running
-        step.started_at = datetime.now(UTC)
+        step.started_at = datetime.now(timezone.utc)
         provider_run = ProviderRun(
             render_job_id=job.id,
             render_step_id=step.id,
@@ -692,9 +692,9 @@ class GenerationService:
         project.stage = ProjectStage.script
         self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
-        job.completed_at = datetime.now(UTC)
+        job.completed_at = datetime.now(timezone.utc)
         step.status = JobStatus.completed
-        step.completed_at = datetime.now(UTC)
+        step.completed_at = datetime.now(timezone.utc)
         step.output_payload = {"script_version_id": str(script.id)}
         self._set_step_checkpoint(step, {"script_version_id": str(script.id)})
         record_audit_event(
@@ -709,7 +709,7 @@ class GenerationService:
         self.db.commit()
 
     def expire_stale_jobs(self) -> int:
-        threshold = datetime.now(UTC) - timedelta(minutes=self.settings.planning_job_timeout_minutes)
+        threshold = datetime.now(timezone.utc) - timedelta(minutes=self.settings.planning_job_timeout_minutes)
         stale_jobs = self.db.scalars(
             select(RenderJob).where(
                 RenderJob.queue_name == "planning",
@@ -721,12 +721,12 @@ class GenerationService:
             job.status = JobStatus.failed
             job.error_code = "job_timeout"
             job.error_message = "The planning job expired before completion."
-            job.completed_at = datetime.now(UTC)
+            job.completed_at = datetime.now(timezone.utc)
             step = self.db.scalar(select(RenderStep).where(RenderStep.render_job_id == job.id))
             if step:
                 step.status = JobStatus.failed
                 step.error_code = "job_timeout"
                 step.error_message = "The planning job expired before completion."
-                step.completed_at = datetime.now(UTC)
+                step.completed_at = datetime.now(timezone.utc)
         self.db.commit()
         return len(stale_jobs)

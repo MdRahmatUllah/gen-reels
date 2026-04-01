@@ -1,7 +1,7 @@
-"""Add music_presets and subtitle_presets tables.
+"""Add music_presets and subtitle_presets tables (merge heads).
 
 Revision ID: 20260401_0008
-Revises: 20260401_0007
+Revises: 20260401_0007, 20260330_0010
 Create Date: 2026-04-01 12:00:00
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from app.db.types import GUID
 
 revision = "20260401_0008"
-down_revision = "20260401_0007"
+down_revision = ("20260401_0007", "20260330_0010")
 branch_labels = None
 depends_on = None
 

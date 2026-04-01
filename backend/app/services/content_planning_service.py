@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -269,7 +269,7 @@ class ContentPlanningService(GenerationService):
         BrandKitService(self.db).validate_text_against_brand_kit(project, script_text)
 
         script.approval_state = "approved"
-        script.approved_at = datetime.now(UTC)
+        script.approved_at = datetime.now(timezone.utc)
         script.approved_by_user_id = UUID(auth.user_id)
         script.version += 1
         project.active_script_version_id = script.id
@@ -670,7 +670,7 @@ class ContentPlanningService(GenerationService):
 
         scene_plan.consistency_pack_id = consistency_pack.id
         scene_plan.approval_state = "approved"
-        scene_plan.approved_at = datetime.now(UTC)
+        scene_plan.approved_at = datetime.now(timezone.utc)
         scene_plan.approved_by_user_id = UUID(auth.user_id)
         scene_plan.version += 1
         project.active_scene_plan_id = scene_plan.id
@@ -708,9 +708,9 @@ class ContentPlanningService(GenerationService):
         )
 
         job.status = JobStatus.running
-        job.started_at = datetime.now(UTC)
+        job.started_at = datetime.now(timezone.utc)
         step.status = JobStatus.running
-        step.started_at = datetime.now(UTC)
+        step.started_at = datetime.now(timezone.utc)
         provider_run = ProviderRun(
             render_job_id=job.id,
             render_step_id=step.id,
@@ -786,9 +786,9 @@ class ContentPlanningService(GenerationService):
 
         self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
-        job.completed_at = datetime.now(UTC)
+        job.completed_at = datetime.now(timezone.utc)
         step.status = JobStatus.completed
-        step.completed_at = datetime.now(UTC)
+        step.completed_at = datetime.now(timezone.utc)
         step.output_payload = {"scene_plan_id": str(scene_plan.id)}
         self._set_step_checkpoint(step, {"scene_plan_id": str(scene_plan.id)})
         record_audit_event(
@@ -827,9 +827,9 @@ class ContentPlanningService(GenerationService):
         )
 
         job.status = JobStatus.running
-        job.started_at = datetime.now(UTC)
+        job.started_at = datetime.now(timezone.utc)
         step.status = JobStatus.running
-        step.started_at = datetime.now(UTC)
+        step.started_at = datetime.now(timezone.utc)
         provider_run = ProviderRun(
             render_job_id=job.id,
             render_step_id=step.id,
@@ -908,9 +908,9 @@ class ContentPlanningService(GenerationService):
         scene_plan.version += 1
         self._finalize_provider_run(provider_run, started_at=started, response_payload=output)
         job.status = JobStatus.completed
-        job.completed_at = datetime.now(UTC)
+        job.completed_at = datetime.now(timezone.utc)
         step.status = JobStatus.completed
-        step.completed_at = datetime.now(UTC)
+        step.completed_at = datetime.now(timezone.utc)
         step.output_payload = {"scene_plan_id": str(scene_plan.id)}
         self._set_step_checkpoint(step, {"scene_plan_id": str(scene_plan.id)})
         record_audit_event(

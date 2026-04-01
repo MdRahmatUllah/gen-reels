@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.core.config import get_settings
@@ -114,7 +114,7 @@ def test_phase7_local_worker_registration_and_health(authenticated_client):
     try:
         worker_row = session.get(LocalWorker, worker["id"])
         assert worker_row is not None
-        worker_row.last_heartbeat_at = datetime.now(UTC) - timedelta(minutes=10)
+        worker_row.last_heartbeat_at = datetime.now(timezone.utc) - timedelta(minutes=10)
         session.commit()
     finally:
         session.close()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -123,10 +123,10 @@ class AdminService:
         asset.bucket_name = target_bucket
         asset.object_name = target_object
         asset.status = "completed"
-        asset.released_at = datetime.now(UTC)
+        asset.released_at = datetime.now(timezone.utc)
         event.review_status = ModerationReviewStatus.released
         event.reviewed_by_user_id = UUID(auth.user_id)
-        event.reviewed_at = datetime.now(UTC)
+        event.reviewed_at = datetime.now(timezone.utc)
         event.review_notes = notes
 
         render_step = self.db.get(RenderStep, asset.render_step_id) if asset.render_step_id else None
@@ -172,7 +172,7 @@ class AdminService:
 
         event.review_status = ModerationReviewStatus.rejected
         event.reviewed_by_user_id = UUID(auth.user_id)
-        event.reviewed_at = datetime.now(UTC)
+        event.reviewed_at = datetime.now(timezone.utc)
         event.review_notes = notes
 
         render_step = self.db.get(RenderStep, asset.render_step_id) if asset and asset.render_step_id else None
@@ -181,11 +181,11 @@ class AdminService:
             render_step.status = JobStatus.failed
             render_step.error_code = "moderation_rejected"
             render_step.error_message = "An operator rejected a quarantined asset."
-            render_step.completed_at = datetime.now(UTC)
+            render_step.completed_at = datetime.now(timezone.utc)
             render_job.status = JobStatus.failed
             render_job.error_code = "moderation_rejected"
             render_job.error_message = "An operator rejected a quarantined asset."
-            render_job.completed_at = datetime.now(UTC)
+            render_job.completed_at = datetime.now(timezone.utc)
             self.notifications.notify_render_failed(
                 render_job,
                 reason=render_job.error_message or "An operator rejected a quarantined asset.",
@@ -280,14 +280,14 @@ class AdminService:
         asset = self.db.get(Asset, report.related_asset_id) if report.related_asset_id else None
         if export_record:
             export_record.availability_status = "released"
-            export_record.available_at = datetime.now(UTC)
-            export_record.held_at = export_record.held_at or datetime.now(UTC)
+            export_record.available_at = datetime.now(timezone.utc)
+            export_record.held_at = export_record.held_at or datetime.now(timezone.utc)
         if asset:
             asset.status = "available"
-            asset.released_at = datetime.now(UTC)
+            asset.released_at = datetime.now(timezone.utc)
         report.status = ModerationReportStatus.released
         report.reviewed_by_user_id = UUID(auth.user_id)
-        report.reviewed_at = datetime.now(UTC)
+        report.reviewed_at = datetime.now(timezone.utc)
         report.review_notes = notes
         self.db.commit()
         self.db.refresh(report)
@@ -306,7 +306,7 @@ class AdminService:
             asset.status = "rejected"
         report.status = ModerationReportStatus.rejected
         report.reviewed_by_user_id = UUID(auth.user_id)
-        report.reviewed_at = datetime.now(UTC)
+        report.reviewed_at = datetime.now(timezone.utc)
         report.review_notes = notes
         self.db.commit()
         self.db.refresh(report)

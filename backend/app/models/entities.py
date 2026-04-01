@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from sqlalchemy import ForeignKey, UniqueConstraint
@@ -13,7 +13,7 @@ from app.db.types import GUID, json_type
 
 
 def utcnow() -> datetime:
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 
 class WorkspaceRole(str, enum.Enum):

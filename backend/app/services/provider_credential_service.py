@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -614,7 +614,7 @@ class ProviderCredentialService:
         return credential
 
     def _assert_credential_active(self, credential: WorkspaceProviderCredential) -> None:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         if credential.revoked_at is not None:
             raise ApiError(400, "provider_credential_revoked", "That provider credential has been revoked.")
         if credential.expires_at is not None and credential.expires_at <= now:
@@ -752,7 +752,7 @@ class ProviderCredentialService:
     def validate_credential(self, auth: AuthContext, credential_id: str) -> dict[str, object]:
         require_workspace_admin(auth, message="Only workspace admins can manage provider credentials.")
         credential = self._credential(auth.workspace_id, credential_id)
-        validated_at = datetime.now(UTC)
+        validated_at = datetime.now(timezone.utc)
         try:
             secret_config = self._decrypt_secret_config(credential)
         except ApiError as exc:
@@ -803,7 +803,7 @@ class ProviderCredentialService:
     def revoke_credential(self, auth: AuthContext, credential_id: str) -> dict[str, object]:
         require_workspace_admin(auth, message="Only workspace admins can manage provider credentials.")
         credential = self._credential(auth.workspace_id, credential_id, include_revoked=True)
-        credential.revoked_at = credential.revoked_at or datetime.now(UTC)
+        credential.revoked_at = credential.revoked_at or datetime.now(timezone.utc)
         self._detach_credential_from_policy(credential.workspace_id, credential.id)
         record_audit_event(
             self.db,
@@ -835,4 +835,4 @@ class ProviderCredentialService:
         return credential, self._decrypt_secret_config(credential)
 
     def touch_runtime_use(self, credential: WorkspaceProviderCredential) -> None:
-        credential.last_used_at = datetime.now(UTC)
+        credential.last_used_at = datetime.now(timezone.utc)

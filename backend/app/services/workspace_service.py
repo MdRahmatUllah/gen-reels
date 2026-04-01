@@ -5,7 +5,7 @@ import hmac
 import json
 from urllib import error as urllib_error
 from urllib import request as urllib_request
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -73,14 +73,14 @@ class WorkspaceService:
         endpoint = self.db.get(WebhookEndpoint, delivery.endpoint_id)
         if not endpoint or not endpoint.is_active:
             delivery.status = WebhookDeliveryStatus.exhausted
-            delivery.exhausted_at = datetime.now(UTC)
+            delivery.exhausted_at = datetime.now(timezone.utc)
             self.db.commit()
             return webhook_delivery_to_dict(delivery)
         if not self.settings or self.settings.environment == "test":
             delivery.attempt_count += 1
-            delivery.last_attempt_at = datetime.now(UTC)
+            delivery.last_attempt_at = datetime.now(timezone.utc)
             delivery.status = WebhookDeliveryStatus.delivered
-            delivery.delivered_at = datetime.now(UTC)
+            delivery.delivered_at = datetime.now(timezone.utc)
             self.db.commit()
             return webhook_delivery_to_dict(delivery)
 
@@ -98,7 +98,7 @@ class WorkspaceService:
             },
         )
         delivery.attempt_count += 1
-        delivery.last_attempt_at = datetime.now(UTC)
+        delivery.last_attempt_at = datetime.now(timezone.utc)
         delivery.next_attempt_at = None
         try:
             with urllib_request.urlopen(request, timeout=5) as response:  # pragma: no cover - external I/O
@@ -107,7 +107,7 @@ class WorkspaceService:
                 delivery.response_body = response_body[:4000]
                 if 200 <= response.status < 300:
                     delivery.status = WebhookDeliveryStatus.delivered
-                    delivery.delivered_at = datetime.now(UTC)
+                    delivery.delivered_at = datetime.now(timezone.utc)
                 else:
                     delivery.status = WebhookDeliveryStatus.failed
         except urllib_error.HTTPError as exc:  # pragma: no cover - external I/O
@@ -121,12 +121,12 @@ class WorkspaceService:
         if delivery.status == WebhookDeliveryStatus.failed:
             if delivery.attempt_count >= self.settings.webhook_max_attempts:
                 delivery.status = WebhookDeliveryStatus.exhausted
-                delivery.exhausted_at = datetime.now(UTC)
+                delivery.exhausted_at = datetime.now(timezone.utc)
             else:
                 retry_delay = self.settings.webhook_retry_base_seconds * (
                     2 ** max(delivery.attempt_count - 1, 0)
                 )
-                delivery.next_attempt_at = datetime.now(UTC) + timedelta(seconds=retry_delay)
+                delivery.next_attempt_at = datetime.now(timezone.utc) + timedelta(seconds=retry_delay)
                 self.db.commit()
                 self._queue_delivery_task(delivery.id, countdown=retry_delay)
                 return webhook_delivery_to_dict(delivery)
@@ -379,7 +379,7 @@ class WorkspaceService:
         )
         if not api_key:
             raise ApiError(404, "workspace_api_key_not_found", "Workspace API key not found.")
-        api_key.revoked_at = datetime.now(UTC)
+        api_key.revoked_at = datetime.now(timezone.utc)
         record_audit_event(
             self.db,
             workspace_id=api_key.workspace_id,
@@ -506,7 +506,7 @@ class WorkspaceService:
             raise ApiError(404, "webhook_endpoint_not_found", "Webhook endpoint not found.")
         if not endpoint.is_active:
             raise ApiError(400, "webhook_endpoint_inactive", "Activate the webhook endpoint before testing it.")
-        endpoint.last_tested_at = datetime.now(UTC)
+        endpoint.last_tested_at = datetime.now(timezone.utc)
         delivery = self.emit_workspace_event(
             endpoint.workspace_id,
             "workspace.webhook_test",
@@ -568,7 +568,7 @@ class WorkspaceService:
             config_public=payload.config_public,
             secret_payload_encrypted=encrypt_json(self.settings, payload.secret_config),
             is_enabled=payload.is_enabled,
-            last_validated_at=datetime.now(UTC),
+            last_validated_at=datetime.now(timezone.utc),
             last_validation_error=validation_error,
         )
         self.db.add(configuration)
@@ -602,7 +602,7 @@ class WorkspaceService:
         if "secret_config" in payload.model_fields_set and payload.secret_config is not None:
             configuration.secret_payload_encrypted = encrypt_json(self.settings, payload.secret_config)
         configuration.updated_by_user_id = UUID(auth.user_id)
-        configuration.last_validated_at = datetime.now(UTC)
+        configuration.last_validated_at = datetime.now(timezone.utc)
         configuration.last_validation_error = self._validate_auth_configuration(
             configuration.provider_type,
             configuration.config_public,

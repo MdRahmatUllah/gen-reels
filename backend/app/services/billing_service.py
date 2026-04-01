@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -57,12 +57,12 @@ class BillingService:
         if subscription and subscription.current_period_start_at and subscription.current_period_end_at:
             return subscription.current_period_start_at, subscription.current_period_end_at
 
-        now = datetime.now(UTC)
-        start = datetime(now.year, now.month, 1, tzinfo=UTC)
+        now = datetime.now(timezone.utc)
+        start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
         if now.month == 12:
-            end = datetime(now.year + 1, 1, 1, tzinfo=UTC)
+            end = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
         else:
-            end = datetime(now.year, now.month + 1, 1, tzinfo=UTC)
+            end = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
         return start, end
 
     def _get_subscription(self, workspace_id: UUID) -> Subscription | None:
@@ -251,7 +251,7 @@ class BillingService:
         workspace = self._get_workspace(auth.workspace_id)
         subscription = self._get_subscription(workspace.id)
         if not subscription:
-            now = datetime.now(UTC)
+            now = datetime.now(timezone.utc)
             subscription = Subscription(
                 workspace_id=workspace.id,
                 provider_name="stub_billing",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -76,7 +76,7 @@ class RoutingService:
         heartbeat_at = self._normalized_datetime(worker.last_heartbeat_at)
         if not heartbeat_at:
             return False
-        threshold = datetime.now(UTC) - timedelta(
+        threshold = datetime.now(timezone.utc) - timedelta(
             seconds=self.settings.local_worker_heartbeat_timeout_seconds
         )
         return heartbeat_at >= threshold
@@ -91,7 +91,7 @@ class RoutingService:
 
     def refresh_worker_statuses(self) -> int:
         updated = 0
-        threshold = datetime.now(UTC) - timedelta(
+        threshold = datetime.now(timezone.utc) - timedelta(
             seconds=self.settings.local_worker_heartbeat_timeout_seconds
         )
         workers = self.db.scalars(select(LocalWorker)).all()
