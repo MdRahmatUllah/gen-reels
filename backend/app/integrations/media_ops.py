@@ -321,25 +321,29 @@ def apply_video_effects(
 
 
 _SLIDE_EFFECTS: dict[str, dict[str, str]] = {
+    # Smooth left-to-right pan at full height — pans over the full excess width,
+    # never going beyond the image edges (clamped with max(0,...)).
+    "pan_right": {
+        "start": "z='1.0':x='max(0,(iw-{width})*(on/max({p},1)))':y='0'",
+        "end":   "z='1.0':x='max(0,(iw-{width})*(on/max({p},1)))':y='0'",
+    },
+    # Right-to-left pan
+    "pan_left": {
+        "start": "z='1.0':x='max(0,(iw-{width})*(1-(on/max({p},1))))':y='0'",
+        "end":   "z='1.0':x='max(0,(iw-{width})*(1-(on/max({p},1))))':y='0'",
+    },
+    # Ken Burns: slow zoom-in, centred on the width-scaled image
     "ken_burns": {
-        "start": "z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
-        "end": "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+        "start": "z='min(zoom+0.0015,1.3)':x='(iw-{width}/zoom)/2':y='(ih-{height}/zoom)/2'",
+        "end":   "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='(iw-{width}/zoom)/2':y='(ih-{height}/zoom)/2'",
     },
     "zoom_in": {
-        "start": "z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
-        "end": "z='1.0':x='0':y='0'",
+        "start": "z='min(zoom+0.0015,1.3)':x='(iw-{width}/zoom)/2':y='(ih-{height}/zoom)/2'",
+        "end":   "z='1.0':x='(iw-{width})/2':y='0'",
     },
     "zoom_out": {
-        "start": "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
-        "end": "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
-    },
-    "pan_left": {
-        "start": "z='1.15':x='iw*0.12*(on/max({p},1))':y='ih/2-(ih/zoom/2)'",
-        "end": "z='1.15':x='iw*0.12*(on/max({p},1))':y='ih/2-(ih/zoom/2)'",
-    },
-    "pan_right": {
-        "start": "z='1.15':x='iw*0.12*(1-(on/max({p},1)))':y='ih/2-(ih/zoom/2)'",
-        "end": "z='1.15':x='iw*0.12*(1-(on/max({p},1)))':y='ih/2-(ih/zoom/2)'",
+        "start": "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='(iw-{width}/zoom)/2':y='(ih-{height}/zoom)/2'",
+        "end":   "z='if(eq(on,1),1.3,max(zoom-0.0015,1.0))':x='(iw-{width}/zoom)/2':y='(ih-{height}/zoom)/2'",
     },
 }
 
@@ -387,14 +391,30 @@ def create_slide_clip_from_images(
             "frame_rate": 24.0,
         }
 
-    effect_key = animation_effect if animation_effect in _SLIDE_EFFECTS else "ken_burns"
+    effect_key = animation_effect if animation_effect in _SLIDE_EFFECTS else "pan_right"
     raw_effect = _SLIDE_EFFECTS[effect_key]
-    start_expr = raw_effect["start"].replace("{p}", str(phase1_frames))
-    end_expr = raw_effect["end"].replace("{p}", str(phase2_frames))
+    start_expr = (
+        raw_effect["start"]
+        .replace("{p}", str(phase1_frames))
+        .replace("{width}", str(width))
+        .replace("{height}", str(height))
+    )
+    end_expr = (
+        raw_effect["end"]
+        .replace("{p}", str(phase2_frames))
+        .replace("{width}", str(width))
+        .replace("{height}", str(height))
+    )
 
+    # Scale image to video height, preserving aspect ratio.
+    # This means landscape/square images extend beyond the frame width — the
+    # zoompan effect pans the visible window across that extra width.
+    # Narrow images (portrait narrower than the target width) are padded with
+    # black bars so the output window always has content to show.
     scale_pad = (
-        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},setsar=1"
+        f"scale=-2:{height},"
+        f"pad=max({width}\\,iw):ih:(ow-iw)/2:0:black,"
+        f"setsar=1"
     )
     filter_complex = (
         f"[0:v]{scale_pad},"

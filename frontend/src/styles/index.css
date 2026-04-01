@@ -497,6 +497,52 @@
   }
 
   /* ─── Projects page ────────────────────────────────────────────────────── */
+  /* ─── Ideas page ──────────────────────────────────────────────────────── */
+  .idea-card {
+    @apply relative flex flex-col gap-2 rounded-2xl border border-border-card bg-card p-5 md:p-6 shadow-card transition-all duration-300 cursor-pointer animate-rise-in;
+  }
+
+  .idea-card:hover {
+    @apply border-border-active shadow-lg -translate-y-0.5;
+  }
+
+  .idea-card--selected {
+    @apply border-border-active;
+    background: linear-gradient(135deg, var(--bg-card-hero) 0%, var(--bg-card) 50%, var(--bg-card-raised) 100%);
+    box-shadow: var(--shadow-accent), inset 0 0 0 2px var(--accent);
+  }
+
+  .idea-card--selected:hover {
+    box-shadow: var(--shadow-accent), inset 0 0 0 2px var(--accent);
+  }
+
+  .idea-quote {
+    @apply mt-3 pl-3.5 py-1.5 text-[0.88rem] leading-[1.65] italic text-secondary;
+    border-left: 2.5px solid var(--accent);
+    border-image: var(--accent-gradient-v) 1;
+  }
+
+  .idea-score-bar {
+    @apply h-1.5 rounded-full transition-all duration-700 ease-out;
+  }
+
+  .idea-empty {
+    @apply flex flex-col items-center justify-center text-center gap-6 py-16 px-8 rounded-2xl bg-card border-2 border-dashed border-border-card;
+  }
+
+  .idea-empty__icon {
+    @apply flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-bg text-primary-fg;
+  }
+
+  .idea-empty__feature {
+    @apply flex items-start gap-3 rounded-xl bg-glass px-3.5 py-2.5;
+  }
+
+  .idea-empty__dot {
+    @apply mt-1.5 h-2 w-2 rounded-full bg-accent shrink-0;
+  }
+
+  /* ─── Projects page ────────────────────────────────────────────────────── */
   .projects-toolbar {
     @apply flex flex-col sm:flex-row items-stretch sm:items-center gap-3;
   }
