@@ -506,7 +506,7 @@ class AzureOpenAIImageProvider(ImageProvider):
             headers_base = {"api-key": self.api_key, "Authorization": f"Bearer {self.api_key}"}
         generations_json: dict[str, Any] = {
             "prompt": prompt,
-            "size": "1024x1024",
+            "size": "1024x1792",
             "n": 1,
             "quality": "medium",
         }
@@ -589,7 +589,7 @@ class AzureOpenAIImageProvider(ImageProvider):
                 "reference_asset_ids": [reference.asset_id for reference in reference_images],
                 "consistency_pack_state": consistency_pack_state or {},
                 "width": 1024,
-                "height": 1024,
+                "height": 1792,
             }
             if edit_fallback:
                 meta["azure_image_edit_fallback"] = edit_fallback

@@ -51,13 +51,13 @@ STUDIO_DEFAULT_PROJECT_DEFAULTS = {
     "aspect_ratio": "9:16",
     "duration_target_sec": 90,
     "subtitle_style_profile": {
-        "burn_in": True,
+        "burn_in": False,
         "font_size": 60,
         "placement": {"y_pct": 78},
         "text_color": "#FFF8E8",
     },
     "export_profile": {
-        "caption_burn_in": True,
+        "caption_burn_in": False,
         "video_bitrate_kbps": 12000,
     },
     "audio_mix_profile": {

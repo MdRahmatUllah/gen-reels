@@ -393,8 +393,8 @@ def create_slide_clip_from_images(
     end_expr = raw_effect["end"].replace("{p}", str(phase2_frames))
 
     scale_pad = (
-        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},setsar=1"
     )
     filter_complex = (
         f"[0:v]{scale_pad},"
