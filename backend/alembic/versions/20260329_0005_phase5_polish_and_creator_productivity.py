@@ -24,7 +24,7 @@ depends_on = None
 DEFAULT_SUBTITLE_STYLE_PROFILE = json.dumps(
     {
         "preset": "clean_bold",
-        "burn_in": True,
+        "burn_in": False,
         "font_family": "Montserrat SemiBold",
         "font_size": 56,
         "max_width_pct": 82,
@@ -45,12 +45,12 @@ DEFAULT_EXPORT_PROFILE = json.dumps(
         "resolution": {"width": 1080, "height": 1920},
         "frame_rate": 24,
         "video_bitrate_kbps": 8000,
-        "caption_burn_in": True,
+        "caption_burn_in": False,
     }
 )
 DEFAULT_AUDIO_MIX_PROFILE = json.dumps(
     {
-        "music_enabled": True,
+        "music_enabled": False,
         "music_source": "generated_or_curated",
         "music_gain_db": -20.0,
         "ducking_gain_db": -12.0,

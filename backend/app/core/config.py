@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     azure_openai_speech_model: str = "tts-1-hd"
     azure_openai_speech_api_version: str = "2025-04-01-preview"
     azure_openai_speech_voice: str = "alloy"
+    azure_openai_whisper_deployment: str | None = None
+    azure_openai_whisper_api_version: str = "2024-06-01"
     azure_content_safety_endpoint: str | None = None
     azure_content_safety_api_key: str | None = None
     azure_content_safety_api_version: str = "2024-09-15-preview"

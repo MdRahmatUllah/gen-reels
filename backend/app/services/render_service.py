@@ -13,6 +13,7 @@ from app.api.deps import AuthContext
 from app.core.errors import AdapterError, ApiError
 from app.integrations.azure import ModerationProvider
 from app.integrations.media import (
+    AzureOpenAITranscriptionProvider,
     GeneratedMedia,
     ImageProvider,
     ImageReference,
@@ -21,12 +22,16 @@ from app.integrations.media import (
     StubImageProvider,
     StubSpeechProvider,
     StubVideoProvider,
+    TranscriptionResult,
+    TranscriptionWord,
     VideoProvider,
     build_image_provider,
     build_music_provider,
     build_speech_provider,
     build_video_provider,
     compose_frame_generation_prompt,
+    generate_subtitles_from_text,
+    group_words_into_subtitle_entries,
 )
 from app.integrations.media_ops import (
     apply_video_effects,
@@ -3093,6 +3098,7 @@ class RenderService(GenerationService):
         *,
         render_job: RenderJob,
         segments: list[SceneSegment],
+        narration_assets: list[Asset],
         subtitle_style_profile: dict[str, object],
     ) -> Asset | None:
         step = self._get_or_create_step(
@@ -3109,29 +3115,27 @@ class RenderService(GenerationService):
             self._complete_step(step, output_payload={"skipped": True, "reason": "burn_in_disabled"})
             return None
         try:
-            current_ms = 0
+            all_entries = self._transcribe_narration_for_subtitles(
+                segments=segments,
+                narration_assets=narration_assets,
+            )
             lines: list[str] = []
-            for index, segment in enumerate(segments, start=1):
-                start_ms = current_ms
-                duration_ms = (segment.actual_voice_duration_seconds or segment.target_duration_seconds) * 1000
-                end_ms = start_ms + duration_ms
-                lines.extend(
-                    [
-                        str(index),
-                        f"{self._format_srt_timestamp(start_ms)} --> {self._format_srt_timestamp(end_ms)}",
-                        segment.caption_text or segment.narration_text,
-                        "",
-                    ]
-                )
-                current_ms = end_ms
+            for index, entry in enumerate(all_entries, start=1):
+                lines.extend([
+                    str(index),
+                    f"{self._format_srt_timestamp(entry.start_ms)} --> {self._format_srt_timestamp(entry.end_ms)}",
+                    entry.word,
+                    "",
+                ])
             subtitle_bytes = "\n".join(lines).encode("utf-8")
+            provider_model = "whisper-srt-v1" if self.settings.azure_openai_whisper_deployment else "text-split-srt-v1"
             generated = GeneratedMedia(
-                provider_name="internal_subtitle_generator",
-                provider_model="subtitle-srt-v1",
+                provider_name="auto_subtitle_generator",
+                provider_model=provider_model,
                 content_type="text/plain",
                 file_extension="srt",
                 bytes_payload=subtitle_bytes,
-                metadata={"scene_count": len(segments)},
+                metadata={"scene_count": len(segments), "entry_count": len(all_entries)},
             )
             subtitle_asset = self._store_generated_asset(
                 render_job=render_job,
@@ -3160,6 +3164,55 @@ class RenderService(GenerationService):
 
         self._complete_step(step, output_payload={"asset_id": str(subtitle_asset.id)})
         return subtitle_asset
+
+    def _transcribe_narration_for_subtitles(
+        self,
+        *,
+        segments: list[SceneSegment],
+        narration_assets: list[Asset],
+    ) -> list[TranscriptionWord]:
+        """Try Whisper transcription, fall back to proportional text splitting."""
+        transcription_provider: AzureOpenAITranscriptionProvider | None = None
+        if self.settings.azure_openai_whisper_deployment:
+            transcription_provider = AzureOpenAITranscriptionProvider(self.settings)
+
+        all_entries: list[TranscriptionWord] = []
+        timeline_offset_ms = 0
+
+        for segment, narration_asset in zip(segments, narration_assets):
+            duration_ms = int(
+                (segment.actual_voice_duration_seconds or segment.target_duration_seconds) * 1000
+            )
+            words: list[TranscriptionWord] = []
+
+            if transcription_provider:
+                try:
+                    audio_bytes = self.storage.read_bytes(
+                        narration_asset.bucket_name, narration_asset.object_name
+                    )
+                    result: TranscriptionResult = transcription_provider.transcribe(
+                        audio_bytes=audio_bytes,
+                        content_type=narration_asset.content_type or "audio/wav",
+                    )
+                    words = result.words
+                except Exception:
+                    words = []
+
+            if not words:
+                words = generate_subtitles_from_text(
+                    segment.narration_text, duration_ms
+                )
+
+            grouped = group_words_into_subtitle_entries(words)
+            for entry in grouped:
+                all_entries.append(TranscriptionWord(
+                    word=entry.word,
+                    start_ms=entry.start_ms + timeline_offset_ms,
+                    end_ms=entry.end_ms + timeline_offset_ms,
+                ))
+            timeline_offset_ms += duration_ms
+
+        return all_entries
 
     def _should_hold_export_for_moderation(self, render_job: RenderJob) -> tuple[bool, int, str]:
         lookback = datetime.now(UTC) - timedelta(days=self.settings.export_moderation_lookback_days)
@@ -3540,6 +3593,7 @@ class RenderService(GenerationService):
         subtitle_asset = self._run_subtitle_stage(
             render_job=render_job,
             segments=segments,
+            narration_assets=narration_assets,
             subtitle_style_profile=subtitle_style_profile,
         )
         self._run_composition_stage(

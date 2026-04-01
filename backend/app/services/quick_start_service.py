@@ -61,7 +61,7 @@ STUDIO_DEFAULT_PROJECT_DEFAULTS = {
         "video_bitrate_kbps": 12000,
     },
     "audio_mix_profile": {
-        "music_enabled": True,
+        "music_enabled": False,
         "crossfade_duration_seconds": 0.35,
         "music_gain_db": -18.0,
         "ducking_gain_db": -10.0,

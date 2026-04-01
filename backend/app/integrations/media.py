@@ -212,6 +212,29 @@ class SpeechProvider:
         raise NotImplementedError
 
 
+@dataclass
+class TranscriptionWord:
+    word: str
+    start_ms: int
+    end_ms: int
+
+
+@dataclass
+class TranscriptionResult:
+    words: list[TranscriptionWord]
+    full_text: str
+
+
+class TranscriptionProvider:
+    def transcribe(
+        self,
+        *,
+        audio_bytes: bytes,
+        content_type: str,
+    ) -> TranscriptionResult:  # pragma: no cover - interface
+        raise NotImplementedError
+
+
 class MusicProvider:
     def prepare_track(
         self,
@@ -867,6 +890,160 @@ class AzureOpenAISpeechProvider(SpeechProvider):
             raise AdapterError("transient", "azure_speech_timeout", str(exc)) from exc
         except httpx.HTTPError as exc:
             raise AdapterError("transient", "azure_speech_http_error", str(exc)) from exc
+
+
+class AzureOpenAITranscriptionProvider(TranscriptionProvider):
+    """Whisper-based transcription via Azure OpenAI ``/audio/transcriptions``."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        endpoint: str | None = None,
+        api_key: str | None = None,
+        deployment: str | None = None,
+        api_version: str | None = None,
+    ) -> None:
+        self.endpoint = _normalize_azure_endpoint(endpoint or settings.azure_openai_endpoint or "")
+        self.api_key = api_key or settings.azure_openai_api_key
+        self.deployment = deployment or settings.azure_openai_whisper_deployment
+        self.api_version = _normalize_azure_api_version(
+            api_version or settings.azure_openai_whisper_api_version or ""
+        ) or (settings.azure_openai_whisper_api_version or "")
+
+    def transcribe(
+        self,
+        *,
+        audio_bytes: bytes,
+        content_type: str,
+    ) -> TranscriptionResult:
+        if not self.endpoint or not self.api_key or not self.deployment:
+            raise AdapterError(
+                "configuration",
+                "whisper_not_configured",
+                "Azure OpenAI Whisper deployment is not configured.",
+            )
+        ext = "wav" if "wav" in content_type else "mp3"
+        url = (
+            f"{self.endpoint.rstrip('/')}/openai/deployments/{self.deployment}/audio/transcriptions"
+            f"?api-version={self.api_version}"
+        )
+        try:
+            response = httpx.post(
+                url,
+                headers={"api-key": self.api_key},
+                files={"file": (f"audio.{ext}", audio_bytes, content_type)},
+                data={
+                    "response_format": "verbose_json",
+                    "timestamp_granularities[]": "word",
+                },
+                timeout=120.0,
+            )
+            if response.status_code >= 500:
+                raise AdapterError(
+                    "transient", "whisper_unavailable", "Whisper service is temporarily unavailable."
+                )
+            if response.status_code >= 400:
+                raise AdapterError("deterministic_input", "whisper_rejected", response.text[:500])
+
+            data = response.json()
+            words: list[TranscriptionWord] = []
+            for w in data.get("words", []):
+                words.append(TranscriptionWord(
+                    word=w["word"],
+                    start_ms=int(float(w["start"]) * 1000),
+                    end_ms=int(float(w["end"]) * 1000),
+                ))
+            return TranscriptionResult(words=words, full_text=data.get("text", ""))
+
+        except httpx.TimeoutException as exc:
+            raise AdapterError("transient", "whisper_timeout", str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise AdapterError("transient", "whisper_http_error", str(exc)) from exc
+
+
+_PHRASE_BREAK_RE = re.compile(r'[.!?;:,\-–—]\s*')
+
+
+def _split_text_into_phrases(text: str, max_words: int = 6) -> list[str]:
+    """Split narration text into subtitle-sized phrases."""
+    raw_chunks = _PHRASE_BREAK_RE.split(text.strip())
+    phrases: list[str] = []
+    for chunk in raw_chunks:
+        words = chunk.split()
+        if not words:
+            continue
+        while words:
+            phrases.append(" ".join(words[:max_words]))
+            words = words[max_words:]
+    return phrases
+
+
+def generate_subtitles_from_text(
+    narration_text: str,
+    duration_ms: int,
+) -> list[TranscriptionWord]:
+    """Proportionally-timed fallback when Whisper is not available."""
+    phrases = _split_text_into_phrases(narration_text)
+    if not phrases:
+        return []
+    total_words = sum(len(p.split()) for p in phrases)
+    if total_words == 0:
+        return []
+    ms_per_word = duration_ms / total_words
+    cursor_ms = 0.0
+    result: list[TranscriptionWord] = []
+    for phrase in phrases:
+        word_count = len(phrase.split())
+        phrase_duration = word_count * ms_per_word
+        result.append(TranscriptionWord(
+            word=phrase,
+            start_ms=int(cursor_ms),
+            end_ms=int(cursor_ms + phrase_duration),
+        ))
+        cursor_ms += phrase_duration
+    return result
+
+
+def group_words_into_subtitle_entries(
+    words: list[TranscriptionWord],
+    max_words_per_entry: int = 6,
+    max_duration_ms: int = 4000,
+) -> list[TranscriptionWord]:
+    """Group individual words into readable subtitle entries."""
+    if not words:
+        return []
+    if words[0].start_ms == words[0].end_ms == 0 and len(words[0].word.split()) > 1:
+        return words
+
+    entries: list[TranscriptionWord] = []
+    buf_words: list[str] = []
+    buf_start: int = 0
+    buf_end: int = 0
+
+    for w in words:
+        if not buf_words:
+            buf_start = w.start_ms
+        would_exceed_words = len(buf_words) >= max_words_per_entry
+        would_exceed_time = (w.end_ms - buf_start) > max_duration_ms and buf_words
+        if would_exceed_words or would_exceed_time:
+            entries.append(TranscriptionWord(
+                word=" ".join(buf_words),
+                start_ms=buf_start,
+                end_ms=buf_end,
+            ))
+            buf_words = []
+            buf_start = w.start_ms
+        buf_words.append(w.word)
+        buf_end = w.end_ms
+
+    if buf_words:
+        entries.append(TranscriptionWord(
+            word=" ".join(buf_words),
+            start_ms=buf_start,
+            end_ms=buf_end,
+        ))
+    return entries
 
 
 class CuratedMusicProvider(MusicProvider):
