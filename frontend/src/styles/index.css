@@ -497,6 +497,89 @@
   }
 
   /* ─── Projects page ────────────────────────────────────────────────────── */
+  /* ─── Renders page ────────────────────────────────────────────────────── */
+  .render-step {
+    @apply flex gap-4 rounded-2xl border border-border-card bg-card p-4 md:p-5 shadow-sm transition-all duration-200 hover:border-border-active animate-rise-in;
+  }
+
+  .render-step__number {
+    @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-glass text-sm font-bold font-heading text-primary;
+  }
+
+  .render-step__meta {
+    @apply inline-flex items-center gap-1.5 text-[0.78rem] text-secondary;
+  }
+
+  .render-empty {
+    @apply flex flex-col items-center justify-center text-center gap-6 py-16 px-8 rounded-2xl bg-card border-2 border-dashed border-border-card;
+  }
+
+  .render-empty__icon {
+    @apply flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-bg text-primary-fg;
+  }
+
+  .render-progress-ring {
+    @apply relative flex items-center justify-center shrink-0;
+  }
+
+  /* ─── Scenes page ─────────────────────────────────────────────────────── */
+  .scene-continuity-bar {
+    @apply h-1 w-full rounded-full bg-border-subtle overflow-hidden mt-1.5;
+  }
+
+  .scene-continuity-bar__fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+  }
+
+  .scene-inspector-card {
+    @apply flex flex-col gap-4 p-5 md:p-5 rounded-xl bg-card border border-border-card shadow-card transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in;
+  }
+
+  .scene-inspector-card__title {
+    @apply text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted;
+  }
+
+  .scene-lineage-item {
+    @apply rounded-lg border border-dashed border-border-card bg-glass px-3 py-2.5 text-[0.75rem] leading-[1.5] text-secondary;
+  }
+
+  .scene-empty {
+    @apply flex flex-col items-center justify-center text-center gap-6 py-16 px-8 rounded-2xl bg-card border-2 border-dashed border-border-card;
+  }
+
+  .scene-empty__icon {
+    @apply flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-bg text-primary-fg;
+  }
+
+  /* ─── Script page ─────────────────────────────────────────────────────── */
+  .script-line {
+    @apply flex gap-4 rounded-2xl border border-border-card bg-card p-4 md:p-5 shadow-sm transition-all duration-200 hover:border-border-active hover:shadow-md animate-rise-in;
+  }
+
+  .script-line__number {
+    @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-glass text-sm font-bold font-heading text-primary;
+  }
+
+  .script-line__narration {
+    @apply text-[0.9rem] leading-[1.75] text-primary;
+  }
+
+  .script-line__direction {
+    @apply inline-flex items-center gap-1.5 text-[0.78rem] text-secondary leading-snug;
+  }
+
+  .script-empty {
+    @apply flex flex-col items-center justify-center text-center gap-6 py-16 px-8 rounded-2xl bg-card border-2 border-dashed border-border-card;
+  }
+
+  .script-empty__icon {
+    @apply flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-bg text-primary-fg;
+  }
+
+  .script-stats {
+    @apply grid gap-3 sm:grid-cols-2 lg:grid-cols-4;
+  }
+
   /* ─── Ideas page ──────────────────────────────────────────────────────── */
   .idea-card {
     @apply relative flex flex-col gap-2 rounded-2xl border border-border-card bg-card p-5 md:p-6 shadow-card transition-all duration-300 cursor-pointer animate-rise-in;

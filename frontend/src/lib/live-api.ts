@@ -62,6 +62,10 @@ import type {
   VideoLibraryItem,
   UploadLocalFilePayload,
   LocalFolderProject,
+  RemixProject,
+  RemixProjectCreatePayload,
+  RemixAnalysis,
+  RemixJob,
 } from "../types/domain";
 
 type BackendSession = {
@@ -2390,4 +2394,34 @@ export async function liveCreateLocalFolderProject(payload: {
 
 export async function liveDeleteLocalFolderProject(id: string): Promise<void> {
   return api.delete(`/video-library/local-folders/${id}`);
+}
+
+// ── Remix ────────────────────────────────────────────────────────────────────
+
+export async function liveGetRemixProjects(): Promise<RemixProject[]> {
+  return api.get<RemixProject[]>("/remix/projects");
+}
+
+export async function liveCreateRemixProject(payload: RemixProjectCreatePayload): Promise<RemixProject> {
+  return api.post<RemixProject>("/remix/projects", payload);
+}
+
+export async function liveDeleteRemixProject(id: string): Promise<void> {
+  return api.delete(`/remix/projects/${id}`);
+}
+
+export async function liveAnalyzeRemixProject(id: string): Promise<RemixAnalysis> {
+  return api.get<RemixAnalysis>(`/remix/projects/${id}/analyze`);
+}
+
+export async function liveCreateRemixJob(projectId: string): Promise<RemixJob> {
+  return api.post<RemixJob>(`/remix/projects/${projectId}/jobs`, {});
+}
+
+export async function liveGetRemixJob(jobId: string): Promise<RemixJob> {
+  return api.get<RemixJob>(`/remix/jobs/${jobId}`);
+}
+
+export async function liveListRemixJobs(projectId: string): Promise<RemixJob[]> {
+  return api.get<RemixJob[]>(`/remix/projects/${projectId}/jobs`);
 }

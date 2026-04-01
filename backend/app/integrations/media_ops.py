@@ -683,3 +683,79 @@ def compose_reel_export(
             },
         )
 
+
+def concat_video_clips(
+    settings: Settings,
+    *,
+    clip_bytes_list: list[bytes],
+    target_width: int = 1080,
+    target_height: int = 1920,
+) -> tuple[bytes, dict[str, object]]:
+    """Concatenate multiple video clips into a single portrait MP4.
+
+    Each clip is normalised (scaled to target_height, padded to target_width)
+    before concatenation so that clips with different resolutions merge cleanly.
+    Audio is stripped — the output is video-only.
+    """
+    runner = FFmpegRunner(settings)
+    if not runner.available():
+        return b"", {"duration_ms": 0, "width": target_width, "height": target_height}
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workdir = Path(temp_dir)
+        norm_paths: list[Path] = []
+
+        for i, clip_bytes in enumerate(clip_bytes_list):
+            in_path = workdir / f"clip_{i:04d}.mp4"
+            out_path = workdir / f"norm_{i:04d}.mp4"
+            in_path.write_bytes(clip_bytes)
+            runner.run(
+                "ffmpeg",
+                [
+                    "-y", "-i", str(in_path),
+                    "-vf",
+                    (
+                        f"scale=-2:{target_height},"
+                        f"pad={target_width}:ih:(ow-iw)/2:0:black,"
+                        f"setsar=1"
+                    ),
+                    "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+                    "-an",
+                    str(out_path),
+                ],
+                cwd=workdir,
+            )
+            norm_paths.append(out_path)
+
+        # Write concat demuxer list
+        list_file = workdir / "concat.txt"
+        list_file.write_text(
+            "\n".join(f"file '{p.name}'" for p in norm_paths),
+            encoding="utf-8",
+        )
+
+        out_path = workdir / "output.mp4"
+        runner.run(
+            "ffmpeg",
+            [
+                "-y", "-f", "concat", "-safe", "0",
+                "-i", "concat.txt",
+                "-c", "copy",
+                "output.mp4",
+            ],
+            cwd=workdir,
+        )
+
+        probe = _probe_result(settings, "output.mp4", workdir=workdir)
+        video_stream = next(
+            (s for s in probe.get("streams", []) if s.get("codec_type") == "video"),
+            {},
+        )
+        fmt = probe.get("format", {})
+        return out_path.read_bytes(), {
+            "duration_ms": int(float(fmt.get("duration") or 0) * 1000),
+            "width": int(video_stream.get("width") or target_width),
+            "height": int(video_stream.get("height") or target_height),
+            "frame_rate": _frame_rate_from_probe(video_stream),
+        }
+

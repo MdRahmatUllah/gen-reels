@@ -792,3 +792,56 @@ export interface UploadLocalFilePayload {
   local_path: string;
   project_id?: string | null;
 }
+
+/* ─── Remix ───────────────────────────────────────────────────────────────── */
+export interface RemixProject {
+  id: string;
+  workspace_id: string;
+  name: string;
+  source_project_id: string | null;
+  visual_effects: Record<string, unknown>;
+  target_duration_ms: number;
+  clip_mode: "random" | "unique";
+  output_project_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RemixAnalysis {
+  possible_videos: number;
+  total_clips: number;
+  total_duration_ms: number;
+  clips_with_duration: number;
+}
+
+export interface RemixVideo {
+  id: string;
+  job_id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  clip_ids: string[];
+  output_item_id: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface RemixJob {
+  id: string;
+  remix_project_id: string;
+  workspace_id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  total_videos: number;
+  completed_videos: number;
+  failed_videos: number;
+  videos: RemixVideo[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RemixProjectCreatePayload {
+  name: string;
+  source_project_id: string | null;
+  visual_effects: Record<string, unknown>;
+  target_duration_ms: number;
+  clip_mode: "random" | "unique";
+}
+

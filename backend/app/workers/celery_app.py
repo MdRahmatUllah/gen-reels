@@ -28,6 +28,7 @@ celery_app.conf.update(
         "planning.expire_stale_jobs": {"queue": "planning"},
         "render.expire_stale_jobs": {"queue": "maintenance"},
         "render.execute_job": {"queue": "frame"},
+        "remix.execute_job": {"queue": "frame"},
         "billing.reconcile_usage": {"queue": "maintenance"},
         "workspace.refresh_local_workers": {"queue": "maintenance"},
         "notifications.deliver_email": {"queue": "notifications"},

@@ -1213,6 +1213,49 @@ class VideoLibraryItem(Base):
     updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
+class RemixProject(Base):
+    __tablename__ = "remix_projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    source_project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("video_library_projects.id"), nullable=True)
+    visual_effects: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    target_duration_ms: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    clip_mode: Mapped[str] = mapped_column(sa.String(32), nullable=False, default="random")
+    output_project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("video_library_projects.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class RemixJob(Base):
+    __tablename__ = "remix_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    remix_project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("remix_projects.id"), nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, default="pending")
+    total_videos: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    completed_videos: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    failed_videos: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class RemixVideo(Base):
+    __tablename__ = "remix_videos"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("remix_jobs.id"), nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    output_item_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("video_library_items.id"), nullable=True)
+    clip_ids: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, default="pending")
+    error_message: Mapped[str | None] = mapped_column(sa.Text)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
 

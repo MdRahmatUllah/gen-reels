@@ -13,6 +13,7 @@ from app.services.billing_service import BillingService
 from app.services.notification_service import NotificationService
 from app.services.quick_start_service import QuickStartService
 from app.services.routing_service import RoutingService
+from app.services.remix_service import RemixService as RemixServiceClass
 from app.services.render_service import RenderService
 from app.services.workspace_service import WorkspaceService
 from app.workers.celery_app import celery_app
@@ -135,6 +136,19 @@ def execute_render_job_task(self, job_id: str) -> None:
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception("unexpected_render_task_failure job_id=%s", job_id)
         service.mark_job_failed(job_id, AdapterError("internal", "unexpected_error", str(exc)))
+        raise
+    finally:
+        session.close()
+
+
+@celery_app.task(bind=True, max_retries=1, name="remix.execute_job")
+def execute_remix_job_task(self, job_id: str) -> None:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        RemixServiceClass(session, settings).execute_job(job_id)
+    except Exception as exc:  # pragma: no cover
+        logger.exception("unexpected_remix_task_failure job_id=%s", job_id)
         raise
     finally:
         session.close()

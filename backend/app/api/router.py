@@ -12,6 +12,7 @@ from app.api.routes import (
     notifications,
     presets,
     projects,
+    remix,
     renders,
     reviews,
     scene_plans,
@@ -44,3 +45,4 @@ api_router.include_router(local_workers.router, prefix="/local-workers", tags=["
 api_router.include_router(local_workers.router, prefix="/workers", tags=["workers"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(video_library.router, prefix="/video-library", tags=["video-library"])
+api_router.include_router(remix.router, prefix="/remix", tags=["remix"])

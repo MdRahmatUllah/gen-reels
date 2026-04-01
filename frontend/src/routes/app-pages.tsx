@@ -36,6 +36,7 @@ import type {
   ProjectSummary,
   QuickCreateStatus,
   ScenePlan,
+  ScriptLine,
   SettingsSection,
 } from "../types/domain";
 
@@ -116,35 +117,97 @@ function ProjectInspector({ project }: { project: ProjectSummary }) {
 
 
 
-function ScriptTable({ bundle }: { bundle: ProjectBundle }) {
+/* ─── Script Page Icons ───────────────────────────────────────────────────── */
+function ScriptPenIcon({ size = 16 }: { size?: number }) {
   return (
-    <div className="table-shell">
-      <table className="studio-table">
-        <thead>
-          <tr>
-            <th>Artifact ID</th>
-            <th>Beat</th>
-            <th>Narration</th>
-            <th>Duration</th>
-            <th>Voice</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {bundle.script.lines.map((line) => (
-            <tr key={line.id}>
-              <td>{line.sceneId}</td>
-              <td>{line.beat}</td>
-              <td>{line.narration}</td>
-              <td>{line.durationSec}s</td>
-              <td>{line.voicePacing}</td>
-              <td>
-                <StatusBadge status={line.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function ScriptEyeIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function ScriptMicIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+      <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
+    </svg>
+  );
+}
+
+function ScriptCheckIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  );
+}
+
+function ScriptArrowIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h14M12 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function ScriptSparklesIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z" />
+    </svg>
+  );
+}
+
+function ScriptDocIcon({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+    </svg>
+  );
+}
+
+/* ─── Script Line Card ────────────────────────────────────────────────────── */
+function ScriptLineCard({ line, index }: { line: ScriptLine; index: number }) {
+  return (
+    <div className="script-line" style={{ animationDelay: `${index * 50}ms` }}>
+      <span className="script-line__number">{index + 1}</span>
+      <div className="flex-1 min-w-0 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <span className="text-[0.6875rem] tracking-widest uppercase font-bold text-muted">{line.sceneId}</span>
+            <strong className="font-heading text-[0.95rem] font-bold text-primary leading-snug">{line.beat}</strong>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="duration-badge">{line.durationSec}s</span>
+            <StatusBadge status={line.status} />
+          </div>
+        </div>
+        <p className="script-line__narration">{line.narration}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1 pt-2 border-t border-border-subtle">
+          {line.visualDirection ? (
+            <span className="script-line__direction">
+              <ScriptEyeIcon /> {line.visualDirection}
+            </span>
+          ) : null}
+          {line.voicePacing ? (
+            <span className="script-line__direction">
+              <ScriptMicIcon /> {line.voicePacing}
+            </span>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1454,7 +1517,6 @@ export function ScriptPage() {
   const { data: quickCreateStatus } = useQuickCreateStatus(projectId);
   const [queuedGeneration, setQueuedGeneration] = useState(false);
 
-  // Get fresh script data from mock-service when available
   const { data: freshScript, isLoading: isScriptLoading } = useScript(projectId);
 
   useEffect(() => {
@@ -1470,32 +1532,57 @@ export function ScriptPage() {
   const quickCreateBanner = activeQuickStart(quickCreateStatus);
   const isQuickCreateLocked = quickCreateStatus?.isActive ?? false;
 
-  // If no fresh script, show empty generation state
+  /* ── Empty state ──────────────────────────────────────────────────────── */
   if (!freshScript && !generateScript.isPending && !queuedGeneration && !isQuickCreateLocked) {
     return (
-      <div className="scene-empty-state">
-        <div className="scene-empty-state__card">
-          <div className="scene-empty-state__icon">📝</div>
-          <h2>No script generated yet</h2>
-          <p>Generate a script based on your brief and selected idea. The AI will write narration, visual direction, and pacing cues.</p>
-          <button 
-            type="button" 
-            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" 
-            onClick={() => {
-              setQueuedGeneration(true);
-              generateScript.mutate();
-            }}
-          >
-            Generate script
-          </button>
-          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/ideas`}>
-            ← Back to ideas
-          </Link>
+      <div className="flex flex-col gap-6 px-7 py-6 pb-12 w-full max-w-7xl mx-auto animate-fade-in-up">
+        <div className="script-empty">
+          <div className="script-empty__icon">
+            <ScriptDocIcon />
+          </div>
+          <div className="flex flex-col gap-2 max-w-md">
+            <h3 className="font-heading text-xl font-bold text-primary">Ready to write your script</h3>
+            <p className="text-[0.9rem] leading-relaxed text-secondary">
+              Generate an AI-powered script from your selected idea. Each scene will include narration, visual direction, and voice pacing cues.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 text-left max-w-sm w-full">
+            {[
+              { label: "Scene narration", detail: "Polished voiceover text for each beat" },
+              { label: "Visual direction", detail: "Shot framing and motion cues per scene" },
+              { label: "Voice pacing", detail: "Tempo and delivery annotations throughout" },
+            ].map((item) => (
+              <div key={item.label} className="flex items-start gap-3 rounded-xl bg-glass px-3.5 py-2.5">
+                <span className="mt-1.5 h-2 w-2 rounded-full bg-accent shrink-0" />
+                <div className="flex flex-col">
+                  <strong className="text-sm font-semibold text-primary">{item.label}</strong>
+                  <span className="text-xs text-secondary">{item.detail}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-3 mt-2">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                setQueuedGeneration(true);
+                generateScript.mutate();
+              }}
+            >
+              <ScriptSparklesIcon />
+              Generate script
+            </button>
+            <Link className="btn-ghost" to={`/app/projects/${projectId}/ideas`}>
+              Back to ideas
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
+  /* ── Generating state ─────────────────────────────────────────────────── */
   if (
     generateScript.isPending ||
     queuedGeneration ||
@@ -1504,13 +1591,50 @@ export function ScriptPage() {
   ) {
     return (
       <PageFrame
-        eyebrow="Loading"
+        eyebrow="Script workspace"
         title="Generating script..."
-        description="The AI is drafting the script from your selected idea."
-        inspector={<div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />}
+        description="The AI is drafting narration and visual direction from your selected idea."
+        inspector={
+          <div className="inspector-stack">
+            <div className="flex flex-col gap-3 p-5 rounded-xl bg-card border border-border-card shadow-card animate-rise-in">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center justify-between gap-3 rounded-xl bg-glass px-3 py-2.5">
+                  <div className="shimmer h-3 w-16 rounded-full" />
+                  <div className="shimmer h-3 w-20 rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+        }
       >
         {quickCreateBanner ? <QuickStartStatusBanner status={quickCreateBanner} /> : null}
-        <div className="flex flex-col gap-5 p-5 md:p-6 rounded-xl bg-card border border-border-card shadow-md transition-colors duration-200 hover:border-border-active backdrop-blur animate-rise-in shimmer" />
+        <SectionCard className="surface-card--hero" title="Writing your script..." subtitle="Crafting narration and visual cues for each scene">
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 border-[3px] border-border-subtle border-t-accent rounded-full animate-spin shrink-0" />
+              <span className="text-sm font-semibold text-secondary">Analyzing idea and generating scene beats...</span>
+            </div>
+            <div className="flex flex-col gap-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex gap-4 rounded-xl border border-border-subtle bg-glass p-4">
+                  <div className="shimmer h-8 w-8 rounded-lg shrink-0" />
+                  <div className="flex-1 flex flex-col gap-2.5">
+                    <div className="flex items-center gap-3">
+                      <div className="shimmer h-3 w-16 rounded-full" />
+                      <div className="shimmer h-4 w-32 rounded-full" />
+                    </div>
+                    <div className="shimmer h-3 w-full rounded-full" />
+                    <div className="shimmer h-3 w-5/6 rounded-full" />
+                    <div className="flex gap-3 mt-1 pt-2 border-t border-border-subtle">
+                      <div className="shimmer h-3 w-28 rounded-full" />
+                      <div className="shimmer h-3 w-20 rounded-full" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </SectionCard>
       </PageFrame>
     );
   }
@@ -1519,35 +1643,53 @@ export function ScriptPage() {
   if (!scriptData) return null;
 
   const isApproved = scriptData.approvalState === "approved";
+  const totalDuration = scriptData.lines.reduce((sum, l) => sum + l.durationSec, 0);
 
+  /* ── Main script view ─────────────────────────────────────────────────── */
   return (
     <PageFrame
       eyebrow="Script workspace"
       title={`${bundle.project.title} · ${scriptData.versionLabel}`}
-      description="Dense but readable script review with clear versioning, per-scene timing, and voice continuity visibility."
+      description="Review the AI-generated script with narration, visual direction, and pacing cues for every scene."
       actions={
-        <>
-          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${projectId}/ideas`}>
-            ← Ideas
+        <div className="flex items-center gap-3">
+          <Link className="btn-ghost" to={`/app/projects/${projectId}/ideas`}>
+            Back to ideas
           </Link>
           {isQuickCreateLocked ? null : !isApproved ? (
-            <button
-              type="button"
-              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
-              onClick={() => approveScript.mutate()}
-              disabled={approveScript.isPending}
-            >
-              {approveScript.isPending ? "Approving…" : "Approve script ✓"}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => {
+                  setQueuedGeneration(true);
+                  generateScript.mutate();
+                }}
+                disabled={generateScript.isPending}
+              >
+                <ScriptSparklesIcon />
+                Regenerate
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => approveScript.mutate()}
+                disabled={approveScript.isPending}
+              >
+                <ScriptCheckIcon />
+                {approveScript.isPending ? "Approving..." : "Approve script"}
+              </button>
+            </>
           ) : (
             <>
-              <span className="approval-badge approval-badge--approved">✓ Approved</span>
-              <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${projectId}/scenes`}>
-                Segment into scenes →
+              <span className="approval-badge approval-badge--approved">Approved</span>
+              <Link className="btn-primary" to={`/app/projects/${projectId}/scenes`}>
+                Segment into scenes
+                <ScriptArrowIcon />
               </Link>
             </>
           )}
-        </>
+        </div>
       }
       inspector={
         <div className="inspector-stack">
@@ -1560,11 +1702,19 @@ export function ScriptPage() {
               </div>
               <div>
                 <span>Word count</span>
-                <strong>{scriptData.totalWords}</strong>
+                <strong>{scriptData.totalWords.toLocaleString()}</strong>
               </div>
               <div>
-                <span>Timing</span>
+                <span>Reading time</span>
                 <strong>{scriptData.readingTimeLabel}</strong>
+              </div>
+              <div>
+                <span>Scene count</span>
+                <strong>{scriptData.lines.length}</strong>
+              </div>
+              <div>
+                <span>Total duration</span>
+                <strong>{formatDuration(totalDuration)}</strong>
               </div>
               <div>
                 <span>Last edited</span>
@@ -1576,32 +1726,54 @@ export function ScriptPage() {
       }
     >
       {quickCreateBanner ? <QuickStartStatusBanner status={quickCreateBanner} compact /> : null}
-      <SectionCard className="surface-card--hero" title="Narration direction" subtitle="Editorial tone with consistent voice parameters across every scene">
-        <div className="metric-row">
-          <MetricCard label="Voice preset" value={bundle.project.voicePreset} detail="Frozen per render job" tone="primary" />
-          <MetricCard label="Approval state" value={scriptData.approvalState} detail={isApproved ? "Script locked — ready for segmentation" : "Approve to proceed"} tone={isApproved ? "success" : "warning"} />
-        </div>
-      </SectionCard>
 
-      <SectionCard title="Scene-by-scene script table" subtitle="Alternate row surfaces replace table dividers to match the studio design language">
-        <ScriptTable bundle={{ ...bundle, script: scriptData }} />
-      </SectionCard>
-
-      <SectionCard title="Beat handoff cards" subtitle="Each line carries visual direction and pacing cues into the scene planner">
-        <div className="artifact-grid artifact-grid--compact">
-          {scriptData.lines.map((line) => (
-            <div className="p-4 rounded-xl bg-card border border-border-card animate-rise-in" key={line.id}>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted">{line.sceneId}</span>
-                <StatusBadge status={line.status} />
-              </div>
-              <strong>{line.beat}</strong>
-              <p>{line.visualDirection}</p>
-              <span>{line.voicePacing}</span>
+      {/* Stats ribbon */}
+      <div className="script-stats">
+        {[
+          { label: "Word count", value: scriptData.totalWords.toLocaleString(), bg: "bg-primary-bg", fg: "text-primary-fg" },
+          { label: "Reading time", value: scriptData.readingTimeLabel, bg: "bg-[rgba(14,165,233,0.12)]", fg: "text-accent-secondary" },
+          { label: "Voice preset", value: bundle.project.voicePreset, bg: "bg-[rgba(168,85,247,0.12)]", fg: "text-[#a855f7]" },
+          { label: "Approval", value: scriptData.approvalState, bg: isApproved ? "bg-success-bg" : "bg-warning-bg", fg: isApproved ? "text-success" : "text-warning" },
+        ].map((stat) => (
+          <div key={stat.label} className="stat-card animate-rise-in">
+            <div className={`stat-card__icon ${stat.bg} ${stat.fg}`}>
+              {stat.label === "Word count" ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>
+              ) : stat.label === "Reading time" ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+              ) : stat.label === "Voice preset" ? (
+                <ScriptMicIcon size={18} />
+              ) : (
+                <ScriptCheckIcon size={18} />
+              )}
             </div>
+            <div className="flex flex-col">
+              <span className="stat-card__value">{stat.value}</span>
+              <span className="stat-card__label">{stat.label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Script lines */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-0.5">
+            <h3 className="font-heading text-[1.05rem] font-bold text-primary">Script lines</h3>
+            <p className="text-[0.85rem] text-secondary">
+              {scriptData.lines.length} scenes with narration, visual direction, and pacing cues
+            </p>
+          </div>
+          <span className="text-[0.7rem] font-bold text-muted px-3 py-1.5 rounded-full bg-glass border border-border-subtle uppercase tracking-wider whitespace-nowrap">
+            {formatDuration(totalDuration)} total
+          </span>
+        </div>
+        <div className="flex flex-col gap-3">
+          {scriptData.lines.map((line, index) => (
+            <ScriptLineCard key={line.id} line={line} index={index} />
           ))}
         </div>
-      </SectionCard>
+      </div>
     </PageFrame>
   );
 }

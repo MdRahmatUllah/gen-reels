@@ -55,6 +55,10 @@ import type {
   BrowseFolderResult,
   UploadLocalFilePayload,
   LocalFolderProject,
+  RemixProject,
+  RemixProjectCreatePayload,
+  RemixAnalysis,
+  RemixJob,
 } from "../types/domain";
 import { DEFAULT_VIDEO_EFFECTS } from "../types/domain";
 import { isMockMode } from "./config";
@@ -141,6 +145,13 @@ import {
   liveGetLocalFolderProjects,
   liveCreateLocalFolderProject,
   liveDeleteLocalFolderProject,
+  liveGetRemixProjects,
+  liveCreateRemixProject,
+  liveDeleteRemixProject,
+  liveAnalyzeRemixProject,
+  liveCreateRemixJob,
+  liveGetRemixJob,
+  liveListRemixJobs,
 } from "./live-api";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -267,6 +278,8 @@ interface MockState {
   videoLibraryProjects: VideoLibraryProject[];
   videoLibraryItems: VideoLibraryItem[];
   localFolderProjects: LocalFolderProject[];
+  remixProjects: RemixProject[];
+  remixJobs: RemixJob[];
 }
 
 const seedTemplates: TemplateCard[] = [
@@ -556,6 +569,8 @@ const state: MockState = {
     { id: "lfp_1", workspace_id: "workspace_north_star", name: "Food Reels", path: String.raw`F:\Personal\Ai Reels on Food\Bangla`, created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
     { id: "lfp_2", workspace_id: "workspace_north_star", name: "Product Shots", path: String.raw`F:\Personal\Products\2024`, created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
   ],
+  remixProjects: [],
+  remixJobs: [],
 };
 
 /* ─── Idea Generation Templates ───────────────────────────────────────────── */
@@ -2897,4 +2912,117 @@ export async function mockDeleteLocalFolderProject(id: string): Promise<void> {
   await randomDelay(100, 200);
   const idx = state.localFolderProjects.findIndex((p) => p.id === id);
   if (idx !== -1) state.localFolderProjects.splice(idx, 1);
+}
+
+/* ─── Remix ───────────────────────────────────────────────────────────────── */
+
+export async function mockGetRemixProjects(): Promise<RemixProject[]> {
+  if (!isMockMode()) return liveGetRemixProjects();
+  await randomDelay(100, 200);
+  return [...state.remixProjects];
+}
+
+export async function mockCreateRemixProject(payload: RemixProjectCreatePayload): Promise<RemixProject> {
+  if (!isMockMode()) return liveCreateRemixProject(payload);
+  await randomDelay(200, 400);
+  const now = new Date().toISOString();
+  const project: RemixProject = {
+    id: nextId("rmx"),
+    workspace_id: state.activeWorkspaceId,
+    name: payload.name,
+    source_project_id: payload.source_project_id,
+    visual_effects: payload.visual_effects,
+    target_duration_ms: payload.target_duration_ms,
+    clip_mode: payload.clip_mode,
+    output_project_id: null,
+    created_at: now,
+    updated_at: now,
+  };
+  state.remixProjects.push(project);
+  return project;
+}
+
+export async function mockDeleteRemixProject(id: string): Promise<void> {
+  if (!isMockMode()) return liveDeleteRemixProject(id);
+  await randomDelay(100, 200);
+  const idx = state.remixProjects.findIndex((p) => p.id === id);
+  if (idx !== -1) state.remixProjects.splice(idx, 1);
+}
+
+export async function mockAnalyzeRemixProject(id: string): Promise<RemixAnalysis> {
+  if (!isMockMode()) return liveAnalyzeRemixProject(id);
+  await randomDelay(400, 800);
+  const project = state.remixProjects.find((p) => p.id === id);
+  if (!project) throw new Error("Remix project not found");
+  const clips = state.videoLibraryItems.filter((i) =>
+    project.source_project_id ? i.project_id === project.source_project_id : i.project_id === null
+  );
+  const clipsWithDuration = clips.filter((c) => (c.duration_ms ?? 0) > 0);
+  const totalDuration = clipsWithDuration.reduce((s, c) => s + (c.duration_ms ?? 0), 0);
+  const possible =
+    project.clip_mode === "unique"
+      ? Math.max(0, Math.floor(totalDuration / project.target_duration_ms))
+      : clipsWithDuration.length;
+  return {
+    possible_videos: possible,
+    total_clips: clips.length,
+    total_duration_ms: totalDuration,
+    clips_with_duration: clipsWithDuration.length,
+  };
+}
+
+export async function mockCreateRemixJob(projectId: string): Promise<RemixJob> {
+  if (!isMockMode()) return liveCreateRemixJob(projectId);
+  await randomDelay(300, 600);
+  const project = state.remixProjects.find((p) => p.id === projectId);
+  if (!project) throw new Error("Remix project not found");
+  const analysis = await mockAnalyzeRemixProject(projectId);
+  const now = new Date().toISOString();
+  const job: RemixJob = {
+    id: nextId("rjob"),
+    remix_project_id: projectId,
+    workspace_id: state.activeWorkspaceId,
+    status: "running",
+    total_videos: analysis.possible_videos,
+    completed_videos: 0,
+    failed_videos: 0,
+    videos: Array.from({ length: analysis.possible_videos }, (_, i) => ({
+      id: nextId("rv"),
+      job_id: "",
+      status: "pending" as const,
+      clip_ids: [],
+      output_item_id: null,
+      error_message: null,
+      created_at: now,
+    })),
+    created_at: now,
+    updated_at: now,
+  };
+  job.videos.forEach((v) => { (v as RemixJob["videos"][0]).job_id = job.id; });
+  state.remixJobs.push(job);
+  // Simulate async completion
+  setTimeout(() => {
+    const j = state.remixJobs.find((x) => x.id === job.id);
+    if (j) {
+      j.status = "completed";
+      j.completed_videos = j.total_videos;
+      j.videos.forEach((v) => { v.status = "completed"; });
+      j.updated_at = new Date().toISOString();
+    }
+  }, 3000);
+  return { ...job };
+}
+
+export async function mockGetRemixJob(jobId: string): Promise<RemixJob> {
+  if (!isMockMode()) return liveGetRemixJob(jobId);
+  await randomDelay(100, 200);
+  const job = state.remixJobs.find((j) => j.id === jobId);
+  if (!job) throw new Error("Remix job not found");
+  return { ...job };
+}
+
+export async function mockListRemixJobs(projectId: string): Promise<RemixJob[]> {
+  if (!isMockMode()) return liveListRemixJobs(projectId);
+  await randomDelay(100, 200);
+  return state.remixJobs.filter((j) => j.remix_project_id === projectId);
 }

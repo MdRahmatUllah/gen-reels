@@ -3234,6 +3234,16 @@ class RenderService(GenerationService):
         sample_bucket = int(str(render_job.id).replace("-", "")[-2:], 16) % 100
         return sample_bucket < threshold, blocked_count, "sampled_export"
 
+    @staticmethod
+    def _slugify_title(title: str) -> str:
+        """Convert a project title to a safe, readable file-name stem."""
+        import re as _re
+        slug = title.strip().lower()
+        slug = _re.sub(r"[^\w\s-]", "", slug)       # remove non-word chars except - and space
+        slug = _re.sub(r"[\s_]+", "-", slug)          # spaces/underscores → hyphens
+        slug = _re.sub(r"-{2,}", "-", slug).strip("-")
+        return slug or "reel"
+
     def _run_composition_stage(
         self,
         *,
@@ -3248,6 +3258,7 @@ class RenderService(GenerationService):
         export_profile: dict[str, object],
         audio_mix_profile: dict[str, object],
         video_effects_profile: dict[str, object] | None = None,
+        project_title: str = "",
     ) -> ExportRecord:
         step = self._get_or_create_step(
             render_job,
@@ -3268,6 +3279,8 @@ class RenderService(GenerationService):
                 return existing_export
 
         self._set_step_running(step)
+        export_slug = self._slugify_title(project_title) if project_title else "reel"
+        export_file_name = f"{export_slug}.mp4"
         subtitle_text = (
             self.storage.read_bytes(subtitle_asset.bucket_name, subtitle_asset.object_name).decode("utf-8")
             if subtitle_asset
@@ -3310,7 +3323,7 @@ class RenderService(GenerationService):
             export_bytes, effects_metadata = apply_video_effects(
                 self.settings,
                 source_bytes=export_bytes,
-                source_file_name="final-export.mp4",
+                source_file_name=export_file_name,
                 brightness=float(fx.get("brightness", 0)),
                 contrast=float(fx.get("contrast", 0)),
                 saturation=float(fx.get("saturation", 0)),
@@ -3346,9 +3359,9 @@ class RenderService(GenerationService):
             bucket_name=self.settings.minio_bucket_assets,
             object_name=(
                 f"workspace/{render_job.workspace_id}/project/{render_job.project_id}/"
-                f"render/{render_job.id}/exports/final-export.mp4"
+                f"render/{render_job.id}/exports/{export_file_name}"
             ),
-            file_name="final-export.mp4",
+            file_name=export_file_name,
             asset_type=AssetType.export,
             asset_role=AssetRole.final_export,
             has_audio_stream=True,
@@ -3608,6 +3621,7 @@ class RenderService(GenerationService):
             export_profile=export_profile,
             audio_mix_profile=audio_mix_profile,
             video_effects_profile=video_effects_profile,
+            project_title=project.title or "",
         )
         project.stage = ProjectStage.exports
         render_job.status = JobStatus.completed
