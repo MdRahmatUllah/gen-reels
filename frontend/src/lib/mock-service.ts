@@ -138,6 +138,9 @@ import {
   liveMoveVideoToProject,
   liveDeleteUploadedVideo,
   liveGetStreamUrl,
+  liveGetLocalFolderProjects,
+  liveCreateLocalFolderProject,
+  liveDeleteLocalFolderProject,
 } from "./live-api";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -550,8 +553,8 @@ const state: MockState = {
     { id: "vli_4", workspace_id: "workspace_north_star", project_id: null, file_name: "raw_footage_01.mp4", content_type: "video/mp4", size_bytes: 104857600, duration_ms: 45000, width: 3840, height: 2160, url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4", created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: new Date(Date.now() - 86400000).toISOString() },
   ],
   localFolderProjects: [
-    { id: "lfp_1", name: "Food Reels", path: String.raw`F:\Personal\Ai Reels on Food\Bangla`, created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
-    { id: "lfp_2", name: "Product Shots", path: String.raw`F:\Personal\Products\2024`, created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
+    { id: "lfp_1", workspace_id: "workspace_north_star", name: "Food Reels", path: String.raw`F:\Personal\Ai Reels on Food\Bangla`, created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
+    { id: "lfp_2", workspace_id: "workspace_north_star", name: "Product Shots", path: String.raw`F:\Personal\Products\2024`, created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
   ],
 };
 
@@ -1429,8 +1432,22 @@ export async function mockGetPresets(): Promise<PresetCard[]> {
   }
   await randomDelay();
   return [
-    { id: "vp_1", name: "Warm Cinematic", category: "visual", description: "Golden hour tones with filmic grain", tags: ["warm", "cinematic"], status: "active" },
-    { id: "vp_2", name: "Confident Narrator", category: "voice", description: "Clear, authoritative male voice at natural pace", tags: ["male", "confident"], status: "active", voice: "en-US-Guy" },
+    // ── Visual presets ──────────────────────────────────────────────────
+    { id: "vp_1", name: "Warm Cinematic", category: "visual", description: "Golden hour tones with filmic grain and directional light for lifestyle and beauty content", tags: ["warm", "cinematic", "golden-hour"], status: "active", look: "Amber highlights, lifted shadows, 35mm grain overlay", transitionMode: "crossfade" },
+    { id: "vp_3", name: "Editorial Clean", category: "visual", description: "Cool daylight palette with negative space — perfect for premium product and skincare reels", tags: ["editorial", "clean", "product"], status: "active", look: "Frosted cobalt / ivory, matte surfaces, diffused high-key lighting" },
+    { id: "vp_4", name: "Neon Streetwear", category: "visual", description: "High-contrast nighttime aesthetic with saturated neon accents for fashion and music content", tags: ["neon", "dark", "streetwear", "bold"], status: "active", look: "Deep blacks, magenta / cyan neon spill, anamorphic flares", transitionMode: "hard_cut" },
+    // ── Voice presets ───────────────────────────────────────────────────
+    { id: "vp_2", name: "Confident Narrator", category: "voice", description: "Clear, authoritative delivery at a measured pace — ideal for explainers and product launches", tags: ["male", "confident", "authoritative"], status: "active", voice: "en-US-Guy" },
+    { id: "vp_5", name: "Warm Storyteller", category: "voice", description: "Friendly, conversational female voice with natural pacing for lifestyle and wellness content", tags: ["female", "warm", "conversational"], status: "active", voice: "en-US-Jenny" },
+    { id: "vp_6", name: "Ava Editorial", category: "voice", description: "Polished, calm, and measured — the premium voice for luxury brand campaigns", tags: ["female", "polished", "luxury"], status: "active", voice: "en-US-Ava" },
+    { id: "vp_7", name: "Energetic Host", category: "voice", description: "Upbeat, fast-paced male voice that drives urgency — great for promos, drops, and hype reels", tags: ["male", "energetic", "promo"], status: "active", voice: "en-US-Davis" },
+    // ── Music presets ───────────────────────────────────────────────────
+    { id: "vp_8", name: "Lo-Fi Chill", category: "music", description: "Mellow lo-fi hip-hop bed with vinyl crackle — works under narration without competing", tags: ["lo-fi", "chill", "ambient"], status: "active", look: "-18 dB ducking, slow fade-in 2s, fade-out 3s" },
+    { id: "vp_9", name: "Upbeat Electronic", category: "music", description: "Bright, driving synth track that energizes social reels and product reveal sequences", tags: ["electronic", "upbeat", "social"], status: "active", look: "-14 dB ducking, crossfade transitions, beat-synced cuts" },
+    { id: "vp_10", name: "Corporate Ambient", category: "music", description: "Clean, minimal ambient pad for B2B, SaaS demos, and professional explainer videos", tags: ["corporate", "ambient", "minimal"], status: "active", look: "-20 dB ducking, 3s fade-in, 4s fade-out" },
+    // ── Subtitle presets ────────────────────────────────────────────────
+    { id: "vp_11", name: "Karaoke Bold", category: "subtitle", description: "Large, word-highlighted captions that pop on screen — the standard for TikTok and Reels engagement", tags: ["karaoke", "bold", "tiktok"], status: "active", look: "White with black stroke, center-bottom, word-by-word highlight in accent color" },
+    { id: "vp_12", name: "Minimal Lower Third", category: "subtitle", description: "Understated sans-serif captions pinned to the lower third — clean and professional", tags: ["minimal", "lower-third", "professional"], status: "active", look: "Semi-transparent dark bar, white text, Inter font, bottom-aligned" },
   ];
 }
 
@@ -2853,6 +2870,7 @@ export function mockGetStreamUrl(filePath: string): string {
 /* ─── Local Folder Projects ───────────────────────────────────────────────── */
 
 export async function mockGetLocalFolderProjects(): Promise<LocalFolderProject[]> {
+  if (!isMockMode()) return liveGetLocalFolderProjects();
   await randomDelay(100, 200);
   return [...state.localFolderProjects];
 }
@@ -2861,9 +2879,11 @@ export async function mockCreateLocalFolderProject(payload: {
   name: string;
   path: string;
 }): Promise<LocalFolderProject> {
+  if (!isMockMode()) return liveCreateLocalFolderProject(payload);
   await randomDelay(150, 300);
   const project: LocalFolderProject = {
     id: nextId("lfp"),
+    workspace_id: state.activeWorkspaceId,
     name: payload.name,
     path: payload.path.trim().replace(/[/\\]+$/, ""),
     created_at: new Date().toISOString(),
@@ -2873,6 +2893,7 @@ export async function mockCreateLocalFolderProject(payload: {
 }
 
 export async function mockDeleteLocalFolderProject(id: string): Promise<void> {
+  if (!isMockMode()) return liveDeleteLocalFolderProject(id);
   await randomDelay(100, 200);
   const idx = state.localFolderProjects.findIndex((p) => p.id === id);
   if (idx !== -1) state.localFolderProjects.splice(idx, 1);

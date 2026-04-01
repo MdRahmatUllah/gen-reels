@@ -18,6 +18,8 @@ from app.models.entities import (
     SceneSegment,
     ScriptVersion,
     TemplateVersion,
+    MusicPreset,
+    SubtitlePreset,
     VisualPreset,
     VoicePreset,
     ExportRecord,
@@ -211,6 +213,46 @@ def voice_preset_to_dict(preset: VoicePreset) -> dict[str, object]:
         "tone_descriptor": preset.tone_descriptor,
         "language_code": preset.language_code,
         "pace_multiplier": preset.pace_multiplier,
+        "is_archived": preset.is_archived,
+        "created_at": preset.created_at,
+        "updated_at": preset.updated_at,
+    }
+
+
+def music_preset_to_dict(preset: MusicPreset) -> dict[str, object]:
+    return {
+        "id": preset.id,
+        "workspace_id": preset.workspace_id,
+        "created_by_user_id": preset.created_by_user_id,
+        "version": preset.version,
+        "name": preset.name,
+        "description": preset.description,
+        "track_name": preset.track_name,
+        "genre": preset.genre,
+        "ducking_db": preset.ducking_db,
+        "fade_in_sec": preset.fade_in_sec,
+        "fade_out_sec": preset.fade_out_sec,
+        "reference_notes": preset.reference_notes,
+        "is_archived": preset.is_archived,
+        "created_at": preset.created_at,
+        "updated_at": preset.updated_at,
+    }
+
+
+def subtitle_preset_to_dict(preset: SubtitlePreset) -> dict[str, object]:
+    return {
+        "id": preset.id,
+        "workspace_id": preset.workspace_id,
+        "created_by_user_id": preset.created_by_user_id,
+        "version": preset.version,
+        "name": preset.name,
+        "description": preset.description,
+        "subtitle_style": preset.subtitle_style,
+        "font_family": preset.font_family,
+        "position": preset.position,
+        "color_scheme": preset.color_scheme,
+        "highlight_mode": preset.highlight_mode,
+        "reference_notes": preset.reference_notes,
         "is_archived": preset.is_archived,
         "created_at": preset.created_at,
         "updated_at": preset.updated_at,

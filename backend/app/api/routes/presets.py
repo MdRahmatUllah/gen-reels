@@ -5,6 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_db_dep, require_auth
 from app.schemas.presets import (
+    MusicPresetCreateRequest,
+    MusicPresetResponse,
+    MusicPresetUpdateRequest,
+    SubtitlePresetCreateRequest,
+    SubtitlePresetResponse,
+    SubtitlePresetUpdateRequest,
     VisualPresetCreateRequest,
     VisualPresetResponse,
     VisualPresetUpdateRequest,
@@ -69,6 +75,60 @@ def patch_voice_preset(
     db: Session = Depends(get_db_dep),
 ):
     return PresetService(db).update_voice_preset(auth, preset_id, payload)
+
+
+@router.get("/music", response_model=list[MusicPresetResponse])
+def list_music_presets(
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+):
+    return PresetService(db).list_music_presets(auth)
+
+
+@router.post("/music", response_model=MusicPresetResponse)
+def create_music_preset(
+    payload: MusicPresetCreateRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+):
+    return PresetService(db).create_music_preset(auth, payload)
+
+
+@router.patch("/music/{preset_id}", response_model=MusicPresetResponse)
+def patch_music_preset(
+    preset_id: str,
+    payload: MusicPresetUpdateRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+):
+    return PresetService(db).update_music_preset(auth, preset_id, payload)
+
+
+@router.get("/subtitle", response_model=list[SubtitlePresetResponse])
+def list_subtitle_presets(
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+):
+    return PresetService(db).list_subtitle_presets(auth)
+
+
+@router.post("/subtitle", response_model=SubtitlePresetResponse)
+def create_subtitle_preset(
+    payload: SubtitlePresetCreateRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+):
+    return PresetService(db).create_subtitle_preset(auth, payload)
+
+
+@router.patch("/subtitle/{preset_id}", response_model=SubtitlePresetResponse)
+def patch_subtitle_preset(
+    preset_id: str,
+    payload: SubtitlePresetUpdateRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+):
+    return PresetService(db).update_subtitle_preset(auth, preset_id, payload)
 
 
 BUILT_IN_RENDER_PRESETS = [

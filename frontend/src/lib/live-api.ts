@@ -303,6 +303,28 @@ type BackendVoicePreset = {
   language_code: string;
 };
 
+type BackendMusicPreset = {
+  id: string;
+  name: string;
+  description: string;
+  track_name: string;
+  genre: string;
+  ducking_db: number;
+  fade_in_sec: number;
+  fade_out_sec: number;
+};
+
+type BackendSubtitlePreset = {
+  id: string;
+  name: string;
+  description: string;
+  subtitle_style: string;
+  font_family: string;
+  position: string;
+  color_scheme: string;
+  highlight_mode: string;
+};
+
 type BackendTemplate = {
   id: string;
   name: string;
@@ -1852,10 +1874,20 @@ export async function liveGetBilling(): Promise<BillingData> {
   return liveGetBillingData();
 }
 
+export async function liveGetMusicPresets(): Promise<BackendMusicPreset[]> {
+  return api.get<BackendMusicPreset[]>("/presets/music");
+}
+
+export async function liveGetSubtitlePresets(): Promise<BackendSubtitlePreset[]> {
+  return api.get<BackendSubtitlePreset[]>("/presets/subtitle");
+}
+
 export async function liveGetPresets(): Promise<PresetCard[]> {
-  const [visualPresets, voicePresets] = await Promise.all([
+  const [visualPresets, voicePresets, musicPresets, subtitlePresets] = await Promise.all([
     liveGetVisualPresets(),
     liveGetVoicePresets(),
+    liveGetMusicPresets(),
+    liveGetSubtitlePresets(),
   ]);
   return [
     ...visualPresets.map((preset) => ({
@@ -1875,6 +1907,24 @@ export async function liveGetPresets(): Promise<PresetCard[]> {
       tags: [preset.tone, preset.accent],
       status: "active",
       voice: `${preset.pacing} · ${preset.tone}`,
+    })),
+    ...musicPresets.map((preset) => ({
+      id: preset.id,
+      name: preset.name,
+      category: "music" as const,
+      description: preset.description,
+      tags: [preset.genre, `${preset.ducking_db} dB`].filter(Boolean),
+      status: "active",
+      look: `${preset.track_name} · ${preset.genre} · ${preset.ducking_db} dB ducking`,
+    })),
+    ...subtitlePresets.map((preset) => ({
+      id: preset.id,
+      name: preset.name,
+      category: "subtitle" as const,
+      description: preset.description,
+      tags: [preset.subtitle_style, preset.font_family].filter(Boolean),
+      status: "active",
+      look: `${preset.font_family} · ${preset.position} · ${preset.highlight_mode} highlight`,
     })),
   ];
 }

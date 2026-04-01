@@ -403,6 +403,42 @@ class VoicePreset(Base, TimestampMixin):
     is_archived: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
 
 
+class MusicPreset(Base, TimestampMixin):
+    __tablename__ = "music_presets"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    version: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    description: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    track_name: Mapped[str] = mapped_column(sa.String(255), default="", nullable=False)
+    genre: Mapped[str] = mapped_column(sa.String(128), default="", nullable=False)
+    ducking_db: Mapped[int] = mapped_column(sa.Integer, default=-14, nullable=False)
+    fade_in_sec: Mapped[float] = mapped_column(sa.Float, default=0.0, nullable=False)
+    fade_out_sec: Mapped[float] = mapped_column(sa.Float, default=0.0, nullable=False)
+    reference_notes: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    is_archived: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+
+
+class SubtitlePreset(Base, TimestampMixin):
+    __tablename__ = "subtitle_presets"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    version: Mapped[int] = mapped_column(sa.Integer, default=1, nullable=False)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    description: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    subtitle_style: Mapped[str] = mapped_column(sa.String(128), default="burned_in", nullable=False)
+    font_family: Mapped[str] = mapped_column(sa.String(128), default="Inter", nullable=False)
+    position: Mapped[str] = mapped_column(sa.String(64), default="bottom", nullable=False)
+    color_scheme: Mapped[str] = mapped_column(sa.String(255), default="white_on_black_stroke", nullable=False)
+    highlight_mode: Mapped[str] = mapped_column(sa.String(64), default="word", nullable=False)
+    reference_notes: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    is_archived: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
+
+
 class ScenePlan(Base, TimestampMixin):
     __tablename__ = "scene_plans"
     __table_args__ = (UniqueConstraint("project_id", "version_number", name="uq_scene_plan_version"),)
