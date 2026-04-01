@@ -533,101 +533,313 @@ export function DashboardPage() {
   );
 }
 
+function VideoLibraryCard({ video }: { video: DashboardVideo }) {
+  return (
+    <div className="dash-video-card animate-rise-in group">
+      <div className="dash-video-card__media relative">
+        {video.downloadUrl ? (
+          <video
+            src={video.downloadUrl}
+            controls
+            playsInline
+            className="w-full"
+            style={{ maxHeight: "200px", objectFit: "cover" }}
+          />
+        ) : (
+          <div
+            className="relative flex items-end p-4"
+            style={{ background: video.gradient, minHeight: "140px" }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            <div className="relative z-10 flex items-center gap-2">
+              <svg className="text-white/70" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span className="text-xs font-semibold text-white">{video.name}</span>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="dash-video-card__body">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <strong className="text-sm text-primary leading-snug line-clamp-1 block">{video.name}</strong>
+            <p className="text-xs text-muted mt-0.5 truncate">{video.projectTitle}</p>
+          </div>
+          <StatusBadge status={video.status} />
+        </div>
+        <div className="flex items-center gap-3 text-xs text-muted">
+          <span className="inline-flex items-center gap-1">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            {formatVideoDuration(video.durationSec)}
+          </span>
+          <span>{video.format}</span>
+          <span className="ml-auto">{relativeTime(video.createdAt)}</span>
+        </div>
+      </div>
+      <div className="dash-video-card__actions">
+        <Link className="btn-ghost !min-h-[1.8rem] !px-3 !py-0.5 !text-xs flex-1 text-center" to={`/app/projects/${video.projectId}/exports`}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          Project
+        </Link>
+        {video.downloadUrl ? (
+          <a href={video.downloadUrl} download={video.name} className="btn-primary !min-h-[1.8rem] !px-3 !py-0.5 !text-xs flex-1 text-center">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </a>
+        ) : (
+          <span className="btn-ghost !min-h-[1.8rem] !px-3 !py-0.5 !text-xs flex-1 text-center opacity-50 pointer-events-none">
+            Processing...
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VideoListRow({ video }: { video: DashboardVideo }) {
+  return (
+    <div className="group flex items-center gap-4 rounded-xl border border-border-card bg-card px-5 py-3.5 transition-all duration-200 hover:border-border-active hover:shadow-md hover:-translate-y-px animate-rise-in">
+      {/* Thumbnail */}
+      <div
+        className="relative h-12 w-20 shrink-0 rounded-lg overflow-hidden flex items-center justify-center"
+        style={{ background: video.gradient }}
+      >
+        <svg className="text-white/80" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+
+      {/* Info */}
+      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+        <h4 className="text-sm font-semibold text-primary leading-snug truncate">{video.name}</h4>
+        <p className="text-xs text-muted truncate">{video.projectTitle}</p>
+      </div>
+
+      {/* Meta */}
+      <div className="hidden md:flex items-center gap-4 text-xs text-muted shrink-0">
+        <span className="inline-flex items-center gap-1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {formatVideoDuration(video.durationSec)}
+        </span>
+        <span>{video.format}</span>
+        <span>{relativeTime(video.createdAt)}</span>
+      </div>
+
+      <StatusBadge status={video.status} />
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 shrink-0">
+        <Link className="btn-ghost !min-h-[2rem] !px-3 !py-1 !text-xs" to={`/app/projects/${video.projectId}/exports`}>
+          Project
+        </Link>
+        {video.downloadUrl ? (
+          <a href={video.downloadUrl} download={video.name} className="btn-primary !min-h-[2rem] !px-3 !py-1 !text-xs">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </a>
+        ) : (
+          <span className="text-xs text-muted italic">Processing</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function VideosPage() {
   const { data: videos, isLoading } = useQuery({
     queryKey: ["all-videos"],
     queryFn: mockGetAllVideos,
   });
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+  const filteredVideos = useMemo(() => {
+    if (!videos) return [];
+    let list = [...videos];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (v) =>
+          v.name.toLowerCase().includes(q) ||
+          v.projectTitle.toLowerCase().includes(q) ||
+          v.format.toLowerCase().includes(q),
+      );
+    }
+    if (statusFilter) {
+      list = list.filter((v) => v.status === statusFilter);
+    }
+    return list;
+  }, [videos, search, statusFilter]);
 
   if (isLoading || !videos) {
     return <LoadingPage />;
   }
 
+  const readyCount = videos.filter((v) => v.status === "ready").length;
+  const processingCount = videos.filter((v) => v.status === "processing").length;
+  const totalDurationSec = videos.reduce((sum, v) => sum + v.durationSec, 0);
+  const uniqueProjects = new Set(videos.map((v) => v.projectId)).size;
+
   return (
     <PageFrame
-      eyebrow="Video library"
-      title="Generated videos"
-      description="All exported videos across your workspace projects, sorted by most recent."
+      eyebrow="Videos"
+      title="Your Videos"
+      description="Browse, search, and download all generated videos across your workspace."
       inspector={
         <div className="inspector-stack">
-          <SectionCard title="Library overview">
-            <div className="inspector-list">
-              <div>
-                <span>Total videos</span>
-                <strong>{videos.length}</strong>
+          <SectionCard title="Library Stats">
+            <div className="flex flex-col gap-3">
+              <div className="stat-card">
+                <div className="stat-card__icon" style={{ background: "rgba(99,102,241,0.12)", color: "#6366f1" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="stat-card__value">{videos.length}</span>
+                  <span className="stat-card__label">Total videos</span>
+                </div>
               </div>
-              <div>
-                <span>Ready</span>
-                <strong>{videos.filter((v) => v.status === "ready").length}</strong>
+              <div className="stat-card">
+                <div className="stat-card__icon bg-success-bg text-success">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="stat-card__value">{readyCount}</span>
+                  <span className="stat-card__label">Ready to download</span>
+                </div>
               </div>
-              <div>
-                <span>Processing</span>
-                <strong>{videos.filter((v) => v.status === "processing").length}</strong>
+              {processingCount > 0 && (
+                <div className="stat-card">
+                  <div className="stat-card__icon bg-warning-bg text-warning">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="stat-card__value">{processingCount}</span>
+                    <span className="stat-card__label">Processing</span>
+                  </div>
+                </div>
+              )}
+              <div className="stat-card">
+                <div className="stat-card__icon bg-primary-bg text-accent">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="stat-card__value">{formatVideoDuration(totalDurationSec)}</span>
+                  <span className="stat-card__label">Total duration</span>
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card__icon" style={{ background: "rgba(236,72,153,0.12)", color: "#ec4899" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="stat-card__value">{uniqueProjects}</span>
+                  <span className="stat-card__label">From projects</span>
+                </div>
               </div>
             </div>
           </SectionCard>
         </div>
       }
     >
-      {videos.length > 0 ? (
-        <div className="artifact-grid">
-          {videos.map((video) => (
-            <SectionCard key={video.id} title={video.name} subtitle={video.projectTitle}>
-              {video.downloadUrl ? (
-                <video
-                  src={video.downloadUrl}
-                  controls
-                  playsInline
-                  className="w-full rounded-lg bg-black"
-                  style={{ maxHeight: "280px" }}
-                />
-              ) : (
-                <MediaFrame
-                  label={video.name}
-                  meta={video.format}
-                  gradient={video.gradient}
-                />
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge status={video.status} />
-                <span className="text-xs text-muted">{formatVideoDuration(video.durationSec)}</span>
-                <span className="text-xs text-muted">{video.format}</span>
-                <span className="text-xs text-muted">{video.createdAt}</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px"
-                  to={`/app/projects/${video.projectId}/exports`}
-                >
-                  View project exports
-                </Link>
-                {video.downloadUrl && (
-                  <a
-                    href={video.downloadUrl}
-                    download={video.name}
-                    className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-3 py-1 rounded-md font-semibold text-xs transition-all duration-200 cursor-pointer bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
-                  >
-                    Download MP4
-                  </a>
-                )}
-              </div>
-            </SectionCard>
-          ))}
+      {/* Toolbar */}
+      <div className="projects-toolbar">
+        <div className="relative flex-1 min-w-0">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            className="projects-search !pl-10"
+            placeholder="Search by name, project, or format..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search videos"
+          />
+        </div>
+
+        <div className="stage-filters">
+          <button
+            type="button"
+            className={statusFilter === null ? "chip-button chip-button--active" : "chip-button"}
+            onClick={() => setStatusFilter(null)}
+          >
+            All ({videos.length})
+          </button>
+          {readyCount > 0 && (
+            <button
+              type="button"
+              className={statusFilter === "ready" ? "chip-button chip-button--active" : "chip-button"}
+              onClick={() => setStatusFilter(statusFilter === "ready" ? null : "ready")}
+            >
+              Ready ({readyCount})
+            </button>
+          )}
+          {processingCount > 0 && (
+            <button
+              type="button"
+              className={statusFilter === "processing" ? "chip-button chip-button--active" : "chip-button"}
+              onClick={() => setStatusFilter(statusFilter === "processing" ? null : "processing")}
+            >
+              Processing ({processingCount})
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center rounded-lg border border-border-subtle bg-glass p-0.5">
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            className={`inline-flex items-center justify-center h-8 w-8 rounded-md transition-all duration-200 ${viewMode === "grid" ? "bg-primary-bg text-primary shadow-sm" : "text-muted hover:text-primary"}`}
+            aria-label="Grid view"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            className={`inline-flex items-center justify-center h-8 w-8 rounded-md transition-all duration-200 ${viewMode === "list" ? "bg-primary-bg text-primary shadow-sm" : "text-muted hover:text-primary"}`}
+            aria-label="List view"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Video grid / list */}
+      {filteredVideos.length > 0 ? (
+        viewMode === "grid" ? (
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 animate-fade-in-up">
+            {filteredVideos.map((video) => (
+              <VideoLibraryCard key={video.id} video={video} />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 animate-fade-in-up">
+            {filteredVideos.map((video) => (
+              <VideoListRow key={video.id} video={video} />
+            ))}
+          </div>
+        )
+      ) : search || statusFilter ? (
+        <div className="projects-empty">
+          <div className="projects-empty__icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <h3 className="font-heading text-lg font-bold text-primary">No matching videos</h3>
+          <p className="text-secondary max-w-sm text-sm">Try adjusting your search or clearing the filters.</p>
+          <button type="button" className="btn-ghost" onClick={() => { setSearch(""); setStatusFilter(null); }}>
+            Clear filters
+          </button>
         </div>
       ) : (
-        <SectionCard title="No videos yet">
-          <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <p className="text-sm text-secondary">
-              No generated videos found. Complete a render pipeline in any project to see your exports here.
-            </p>
-            <Link
-              className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
-              to="/app/projects"
-            >
-              Browse projects
-            </Link>
+        <div className="projects-empty">
+          <div className="projects-empty__icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           </div>
-        </SectionCard>
+          <h3 className="font-heading text-xl font-bold text-primary">No videos yet</h3>
+          <p className="text-secondary max-w-md text-sm leading-relaxed">
+            Your generated videos will appear here. Complete a render pipeline in any project to create your first video export.
+          </p>
+          <Link className="btn-primary" to="/app/projects">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+            Browse Projects
+          </Link>
+        </div>
       )}
     </PageFrame>
   );
