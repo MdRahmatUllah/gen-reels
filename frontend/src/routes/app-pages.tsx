@@ -19,7 +19,7 @@ import { useScript, useApproveScript, useGenerateScript } from "../hooks/use-scr
 import { QuickCreateProjectModal } from "../features/projects/QuickCreateProjectModal";
 import { QuickStartStatusBanner } from "../features/projects/quick-start";
 
-import { formatDuration } from "../lib/format";
+import { formatDuration, relativeTime } from "../lib/format";
 import {
   MediaFrame,
   MetricCard,
@@ -480,86 +480,416 @@ export function VideosPage() {
   );
 }
 
+const WORKFLOW_STAGES: Array<{ key: ProjectSummary["stage"]; label: string }> = [
+  { key: "brief", label: "Brief" },
+  { key: "ideas", label: "Ideas" },
+  { key: "script", label: "Script" },
+  { key: "scenes", label: "Scenes" },
+  { key: "frames", label: "Frames" },
+  { key: "renders", label: "Renders" },
+  { key: "exports", label: "Exports" },
+];
+
+const stageGradients: Record<string, string> = {
+  brief:   "linear-gradient(135deg, #6366f1, #8b5cf6)",
+  ideas:   "linear-gradient(135deg, #f59e0b, #f97316)",
+  script:  "linear-gradient(135deg, #10b981, #059669)",
+  scenes:  "linear-gradient(135deg, #3b82f6, #2563eb)",
+  frames:  "linear-gradient(135deg, #8b5cf6, #a855f7)",
+  renders: "linear-gradient(135deg, #ec4899, #f43f5e)",
+  exports: "linear-gradient(135deg, #14b8a6, #06b6d4)",
+};
+
+function stageIndex(stage: string): number {
+  return WORKFLOW_STAGES.findIndex((s) => s.key === stage);
+}
+
+function ProjectWorkflowDots({ stage }: { stage: string }) {
+  const active = stageIndex(stage);
+  return (
+    <div className="project-card__progress" title={`Current stage: ${stage}`}>
+      {WORKFLOW_STAGES.map((s, i) => (
+        <div
+          key={s.key}
+          className={`project-card__progress-dot ${
+            i < active
+              ? "project-card__progress-dot--done"
+              : i === active
+                ? "project-card__progress-dot--active"
+                : "project-card__progress-dot--pending"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ProjectCard({ project }: { project: ProjectSummary }) {
+  const gradient = stageGradients[project.stage] ?? stageGradients.brief;
+  const currentStage = WORKFLOW_STAGES.find((s) => s.key === project.stage);
+
+  return (
+    <div className="project-card group">
+      <div className="project-card__accent" style={{ background: gradient }} />
+      <div className="project-card__body">
+        <div className="project-card__header">
+          <div className="flex flex-col gap-1 min-w-0">
+            <span className="project-card__client">{project.client}</span>
+            <h3 className="project-card__title">{project.title}</h3>
+          </div>
+          <StatusBadge status={project.renderStatus} />
+        </div>
+
+        {project.hook && (
+          <p className="project-card__hook">{project.hook}</p>
+        )}
+        {!project.hook && project.objective && (
+          <p className="project-card__hook">{project.objective}</p>
+        )}
+
+        <ProjectWorkflowDots stage={project.stage} />
+
+        <div className="project-card__stats">
+          <span className="project-card__stat">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8M12 17v4"/></svg>
+            {project.sceneCount} {project.sceneCount === 1 ? "scene" : "scenes"}
+          </span>
+          {project.durationSec > 0 && (
+            <span className="project-card__stat">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              {formatDuration(project.durationSec)}
+            </span>
+          )}
+          <span className="project-card__stat">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            {relativeTime(project.updatedAt)}
+          </span>
+        </div>
+
+        {project.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {project.tags.slice(0, 3).map((tag) => (
+              <span className="inline-flex items-center rounded-md bg-glass px-2 py-0.5 text-[0.68rem] font-medium text-muted" key={tag}>
+                {tag}
+              </span>
+            ))}
+            {project.tags.length > 3 && (
+              <span className="inline-flex items-center rounded-md bg-glass px-2 py-0.5 text-[0.68rem] font-medium text-muted">
+                +{project.tags.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="project-card__footer">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent capitalize">
+          <span className="inline-block h-2 w-2 rounded-full" style={{ background: gradient }} />
+          {currentStage?.label ?? project.stage}
+        </span>
+        <div className="project-card__actions">
+          <Link
+            className="btn-ghost !min-h-[2rem] !px-3 !py-1 !text-xs"
+            to={`/app/projects/${project.id}/${project.stage}`}
+          >
+            Continue
+          </Link>
+          <Link
+            className="btn-primary !min-h-[2rem] !px-3 !py-1 !text-xs"
+            to={`/app/projects/${project.id}/brief`}
+          >
+            Open
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ProjectsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: mockGetProjects,
   });
   const [isQuickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+  const filteredProjects = useMemo(() => {
+    if (!data) return [];
+    let list = [...data];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.client.toLowerCase().includes(q) ||
+          p.hook.toLowerCase().includes(q) ||
+          p.tags.some((t) => t.toLowerCase().includes(q)),
+      );
+    }
+    if (stageFilter) {
+      list = list.filter((p) => p.stage === stageFilter);
+    }
+    return list.sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+  }, [data, search, stageFilter]);
+
+  const stageCounts = useMemo(() => {
+    if (!data) return {};
+    const counts: Record<string, number> = {};
+    for (const p of data) {
+      counts[p.stage] = (counts[p.stage] || 0) + 1;
+    }
+    return counts;
+  }, [data]);
 
   if (isLoading || !data) {
     return <LoadingPage />;
   }
 
+  const totalProjects = data.length;
+  const inRender = data.filter((p) => p.stage === "renders").length;
+  const totalScenes = data.reduce((sum, p) => sum + p.sceneCount, 0);
+
   return (
     <PageFrame
-      eyebrow="Project library"
-      title="All active productions"
-      description="Projects keep the same shell shape from brief through exports so the information architecture can survive later phases."
+      eyebrow="Projects"
+      title="Your Projects"
+      description="Manage and track all your video productions from brief to final export."
       actions={
-        <>
-          <button
-            type="button"
-            className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px"
-            onClick={() => setQuickCreateOpen(true)}
-          >
-            Create New Project
-          </button>
-          <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${data[0]?.id ?? "project_aurora_serum"}/brief`}>
-            Open latest project
-          </Link>
-        </>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => setQuickCreateOpen(true)}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Project
+        </button>
       }
       inspector={
         <div className="inspector-stack">
-          <SectionCard title="Portfolio view">
-            <div className="inspector-list">
-              <div>
-                <span>Total projects</span>
-                <strong>{data.length}</strong>
+          <SectionCard title="Overview">
+            <div className="flex flex-col gap-3">
+              <div className="stat-card">
+                <div className="stat-card__icon bg-primary-bg text-accent">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="stat-card__value">{totalProjects}</span>
+                  <span className="stat-card__label">Total projects</span>
+                </div>
               </div>
-              <div>
-                <span>Projects in render</span>
-                <strong>{data.filter((project) => project.stage === "renders").length}</strong>
+              <div className="stat-card">
+                <div className="stat-card__icon bg-success-bg text-success">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="stat-card__value">{inRender}</span>
+                  <span className="stat-card__label">Rendering</span>
+                </div>
               </div>
-              <div>
-                <span>Projects in planning</span>
-                <strong>{data.filter((project) => project.stage !== "renders").length}</strong>
+              <div className="stat-card">
+                <div className="stat-card__icon bg-warning-bg text-warning">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8M12 17v4"/></svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="stat-card__value">{totalScenes}</span>
+                  <span className="stat-card__label">Total scenes</span>
+                </div>
               </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="By Stage">
+            <div className="flex flex-col gap-2">
+              {WORKFLOW_STAGES.map((s) => {
+                const count = stageCounts[s.key] || 0;
+                const pct = totalProjects > 0 ? (count / totalProjects) * 100 : 0;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setStageFilter(stageFilter === s.key ? null : s.key)}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs transition-all duration-200 cursor-pointer ${
+                      stageFilter === s.key
+                        ? "bg-primary-bg border border-border-active text-primary font-semibold"
+                        : "bg-transparent hover:bg-glass border border-transparent text-secondary hover:text-primary"
+                    }`}
+                  >
+                    <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ background: stageGradients[s.key] }} />
+                    <span className="flex-1 text-left">{s.label}</span>
+                    <span className="font-bold text-primary">{count}</span>
+                    <div className="w-12 h-1 rounded-full bg-border-subtle overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: stageGradients[s.key] }} />
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </SectionCard>
         </div>
       }
     >
-      <div className="artifact-grid">
-        {data.map((project) => (
-          <SectionCard key={project.id} title={project.title} subtitle={project.objective}>
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={project.renderStatus} />
-              <span>{project.stage}</span>
-              <span>{formatDuration(project.durationSec)}</span>
-            </div>
-            <p className="text-[0.95rem] leading-[1.7] text-secondary max-w-[66ch]">{project.hook}</p>
-            <div className="metric-row">
-              <MetricCard label="Palette" value={project.palette} detail="Project look system" tone="primary" />
-              <MetricCard label="Voice" value={project.voicePreset} detail="Narration preset" tone="neutral" />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active hover:-translate-y-px" to={`/app/projects/${project.id}/script`}>
-                Script
-              </Link>
-              <Link className="inline-flex items-center justify-center gap-2 min-h-[2.7rem] px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 cursor-pointer overflow-hidden relative bg-accent-gradient text-on-accent shadow-sm hover:shadow-accent hover:-translate-y-px" to={`/app/projects/${project.id}/brief`}>
-                Open project
-              </Link>
-            </div>
-          </SectionCard>
-        ))}
+      {/* Toolbar: search + filter + view toggle */}
+      <div className="projects-toolbar">
+        <div className="relative flex-1 min-w-0">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            className="projects-search !pl-10"
+            placeholder="Search by title, client, or tag..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search projects"
+          />
+        </div>
+
+        <div className="stage-filters">
+          <button
+            type="button"
+            className={stageFilter === null ? "chip-button chip-button--active" : "chip-button"}
+            onClick={() => setStageFilter(null)}
+          >
+            All ({totalProjects})
+          </button>
+          {WORKFLOW_STAGES.filter((s) => (stageCounts[s.key] || 0) > 0).map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              className={stageFilter === s.key ? "chip-button chip-button--active" : "chip-button"}
+              onClick={() => setStageFilter(stageFilter === s.key ? null : s.key)}
+            >
+              {s.label} ({stageCounts[s.key] || 0})
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center rounded-lg border border-border-subtle bg-glass p-0.5">
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            className={`inline-flex items-center justify-center h-8 w-8 rounded-md transition-all duration-200 ${viewMode === "grid" ? "bg-primary-bg text-primary shadow-sm" : "text-muted hover:text-primary"}`}
+            aria-label="Grid view"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            className={`inline-flex items-center justify-center h-8 w-8 rounded-md transition-all duration-200 ${viewMode === "list" ? "bg-primary-bg text-primary shadow-sm" : "text-muted hover:text-primary"}`}
+            aria-label="List view"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+        </div>
       </div>
+
+      {/* Project Cards */}
+      {filteredProjects.length > 0 ? (
+        viewMode === "grid" ? (
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 animate-fade-in-up">
+            {filteredProjects.map((project) => (
+              <ProjectCard key={project.id} project={project} />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 animate-fade-in-up">
+            {filteredProjects.map((project) => (
+              <ProjectListRow key={project.id} project={project} />
+            ))}
+          </div>
+        )
+      ) : (
+        search || stageFilter ? (
+          <div className="projects-empty">
+            <div className="projects-empty__icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <h3 className="font-heading text-lg font-bold text-primary">No matching projects</h3>
+            <p className="text-secondary max-w-sm text-sm">Try adjusting your search or clearing the filters to see all projects.</p>
+            <button type="button" className="btn-ghost" onClick={() => { setSearch(""); setStageFilter(null); }}>
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <div className="projects-empty">
+            <div className="projects-empty__icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            </div>
+            <h3 className="font-heading text-xl font-bold text-primary">Create your first project</h3>
+            <p className="text-secondary max-w-md text-sm leading-relaxed">
+              Start by creating a new project. Each project guides you through brief, ideas, script, scenes, and renders to produce a polished video.
+            </p>
+            <button type="button" className="btn-primary" onClick={() => setQuickCreateOpen(true)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Project
+            </button>
+          </div>
+        )
+      )}
+
       <QuickCreateProjectModal
         open={isQuickCreateOpen}
         onClose={() => setQuickCreateOpen(false)}
       />
     </PageFrame>
+  );
+}
+
+function ProjectListRow({ project }: { project: ProjectSummary }) {
+  const gradient = stageGradients[project.stage] ?? stageGradients.brief;
+  const currentStage = WORKFLOW_STAGES.find((s) => s.key === project.stage);
+
+  return (
+    <div className="group flex items-center gap-4 rounded-xl border border-border-card bg-card px-5 py-4 transition-all duration-200 hover:border-border-active hover:shadow-md hover:-translate-y-px animate-rise-in">
+      <span className="inline-block h-10 w-1 rounded-full shrink-0" style={{ background: gradient }} />
+
+      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[0.65rem] font-bold uppercase tracking-widest text-muted">{project.client}</span>
+          <span className="text-[0.5rem] text-muted">·</span>
+          <span className="inline-flex items-center gap-1 text-[0.7rem] font-semibold capitalize" style={{ color: "var(--accent)" }}>
+            <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: gradient }} />
+            {currentStage?.label ?? project.stage}
+          </span>
+        </div>
+        <h3 className="font-heading text-sm font-bold text-primary leading-snug truncate">{project.title}</h3>
+        {project.hook && <p className="text-xs text-secondary truncate">{project.hook}</p>}
+      </div>
+
+      <div className="hidden md:flex items-center gap-5 shrink-0">
+        <ProjectWorkflowDots stage={project.stage} />
+      </div>
+
+      <div className="hidden lg:flex items-center gap-4 text-xs text-muted shrink-0">
+        <span className="inline-flex items-center gap-1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8M12 17v4"/></svg>
+          {project.sceneCount}
+        </span>
+        {project.durationSec > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            {formatDuration(project.durationSec)}
+          </span>
+        )}
+        <span className="text-[0.7rem]">{relativeTime(project.updatedAt)}</span>
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        <StatusBadge status={project.renderStatus} />
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        <Link className="btn-ghost !min-h-[2rem] !px-3 !py-1 !text-xs" to={`/app/projects/${project.id}/${project.stage}`}>
+          Continue
+        </Link>
+        <Link className="btn-primary !min-h-[2rem] !px-3 !py-1 !text-xs" to={`/app/projects/${project.id}/brief`}>
+          Open
+        </Link>
+      </div>
+    </div>
   );
 }
 

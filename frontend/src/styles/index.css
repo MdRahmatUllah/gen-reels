@@ -495,6 +495,107 @@
   .event-item p {
     @apply mt-1 text-sm text-secondary;
   }
+
+  /* ─── Projects page ────────────────────────────────────────────────────── */
+  .projects-toolbar {
+    @apply flex flex-col sm:flex-row items-stretch sm:items-center gap-3;
+  }
+
+  .projects-search {
+    @apply flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-border-card bg-glass text-sm text-primary outline-none transition-all duration-200 placeholder:text-muted focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)];
+  }
+
+  .stage-filters {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .project-card {
+    @apply relative flex flex-col rounded-2xl border border-border-card bg-card shadow-card overflow-hidden transition-all duration-300 hover:border-border-active hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .project-card__accent {
+    @apply h-1 w-full;
+  }
+
+  .project-card__body {
+    @apply flex flex-col gap-4 p-5;
+  }
+
+  .project-card__header {
+    @apply flex items-start justify-between gap-3;
+  }
+
+  .project-card__title {
+    @apply font-heading text-[1.05rem] font-bold text-primary leading-snug line-clamp-1;
+  }
+
+  .project-card__client {
+    @apply text-[0.7rem] font-bold uppercase tracking-widest text-muted;
+  }
+
+  .project-card__hook {
+    @apply text-sm text-secondary leading-relaxed line-clamp-2;
+  }
+
+  .project-card__stats {
+    @apply flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted;
+  }
+
+  .project-card__stat {
+    @apply inline-flex items-center gap-1.5;
+  }
+
+  .project-card__progress {
+    @apply flex items-center gap-1;
+  }
+
+  .project-card__progress-dot {
+    @apply h-1.5 w-5 rounded-full transition-colors duration-200;
+  }
+
+  .project-card__progress-dot--done {
+    @apply bg-accent;
+  }
+
+  .project-card__progress-dot--active {
+    @apply bg-accent animate-pulse;
+  }
+
+  .project-card__progress-dot--pending {
+    @apply bg-border-subtle;
+  }
+
+  .project-card__footer {
+    @apply flex items-center justify-between gap-3 border-t border-border-subtle px-5 py-3;
+  }
+
+  .project-card__actions {
+    @apply flex items-center gap-2;
+  }
+
+  .projects-empty {
+    @apply flex flex-col items-center justify-center text-center gap-5 py-16 px-8 rounded-2xl bg-card border-2 border-dashed border-border-card;
+  }
+
+  .projects-empty__icon {
+    @apply flex h-20 w-20 items-center justify-center rounded-2xl bg-glass text-4xl;
+  }
+
+  .stat-card {
+    @apply flex items-center gap-3 rounded-xl border border-border-subtle bg-glass px-3.5 py-3 transition-colors duration-200 hover:border-border-active cursor-default;
+  }
+
+  .stat-card__icon {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg;
+  }
+
+  .stat-card__value {
+    @apply text-lg font-bold text-primary leading-none;
+  }
+
+  .stat-card__label {
+    @apply text-[0.7rem] text-muted font-medium;
+  }
 }
 
 @layer utilities {
