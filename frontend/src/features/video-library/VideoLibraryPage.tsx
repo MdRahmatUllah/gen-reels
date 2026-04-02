@@ -19,6 +19,131 @@ import {
 } from "../../lib/mock-service";
 import type { LocalFolderProject, LocalVideoFile, VideoLibraryItem, VideoLibraryProject } from "../../types/domain";
 
+/* ─── Icons ───────────────────────────────────────────────────────────────── */
+function PlayIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M5 3l14 9-14 9V3z" />
+    </svg>
+  );
+}
+
+function PlusIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function UploadIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+    </svg>
+  );
+}
+
+function TrashIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronLeftSmIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronRightSmIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function XIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+function CheckIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  );
+}
+
+function DotsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="12" cy="19" r="1.5" />
+    </svg>
+  );
+}
+
+function FolderIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
+    </svg>
+  );
+}
+
+function FilmIcon({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+      <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" />
+    </svg>
+  );
+}
+
+function MoveIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 9l7 7 7-7" />
+    </svg>
+  );
+}
+
+function WarningIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+    </svg>
+  );
+}
+
+function FolderPlusIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+      <path d="M12 11v6M9 14h6" />
+    </svg>
+  );
+}
+
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -51,18 +176,23 @@ function VideoPlayerModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl rounded-2xl overflow-hidden bg-black shadow-2xl"
+        className="relative w-full max-w-3xl rounded-2xl overflow-hidden bg-black shadow-2xl animate-rise-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 bg-surface/90 border-b border-border-subtle">
-          <p className="text-sm font-semibold text-primary truncate max-w-[80%]">{title}</p>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-bg text-primary-fg shrink-0">
+              <PlayIcon size={12} />
+            </div>
+            <p className="text-sm font-semibold text-primary truncate">{title}</p>
+          </div>
           <button
             type="button"
-            className="text-muted hover:text-primary transition-colors text-lg leading-none"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border-subtle bg-glass text-muted transition hover:border-border-active hover:text-primary hover:bg-glass-hover shrink-0 ml-3"
             onClick={onClose}
             aria-label="Close player"
           >
-            ✕
+            <XIcon />
           </button>
         </div>
         <video
@@ -109,20 +239,21 @@ function CreateProjectDialog({
             Cancel
           </button>
           <button type="submit" form="create-project-form" className="btn-primary">
+            <PlusIcon size={13} />
             Create
           </button>
         </div>
       }
     >
-      <form id="create-project-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-secondary uppercase tracking-wider" htmlFor="proj-name">
+      <form id="create-project-form" onSubmit={handleSubmit} className="form-grid">
+        <div className="form-field">
+          <label className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted" htmlFor="proj-name">
             Project name
           </label>
           <input
             id="proj-name"
             type="text"
-            className="w-full rounded-lg border border-border-card bg-card px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
+            className="field-input"
             placeholder="e.g. Brand Assets 2024"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -130,13 +261,13 @@ function CreateProjectDialog({
             required
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-secondary uppercase tracking-wider" htmlFor="proj-desc">
-            Description <span className="text-muted font-normal normal-case">(optional)</span>
+        <div className="form-field">
+          <label className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted" htmlFor="proj-desc">
+            Description <span className="text-muted font-normal normal-case tracking-normal">(optional)</span>
           </label>
           <textarea
             id="proj-desc"
-            className="w-full rounded-lg border border-border-card bg-card px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all resize-none"
+            className="field-input field-textarea"
             placeholder="What kind of videos will go here?"
             rows={3}
             value={description}
@@ -170,7 +301,6 @@ function UploadProjectDialog({
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // Reset form state each time the dialog opens
   const prevOpenRef = useRef(false);
   if (open !== prevOpenRef.current) {
     prevOpenRef.current = open;
@@ -201,7 +331,7 @@ function UploadProjectDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={`Upload ${fileCount} ${fileCount === 1 ? "file" : "files"} to…`}
+      title={`Upload ${fileCount} ${fileCount === 1 ? "file" : "files"} to...`}
       actions={
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-ghost" onClick={onClose}>
@@ -212,35 +342,36 @@ function UploadProjectDialog({
             className="btn-primary"
             onClick={() => onConfirm(selectedId)}
           >
-            Upload {fileCount > 0 ? `(${fileCount})` : ""} →
+            <UploadIcon size={13} />
+            Upload{fileCount > 0 ? ` (${fileCount})` : ""}
           </button>
         </div>
       }
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2.5">
         {/* No-project option */}
         <button
           type="button"
           className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
             selectedId === null
-              ? "border-accent bg-primary-bg/40 ring-1 ring-accent/30"
+              ? "border-border-active bg-primary-bg/40 ring-1 ring-accent/30"
               : "border-border-card bg-card hover:border-border-active"
           }`}
           onClick={() => setSelectedId(null)}
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-bg shrink-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-glass border border-border-subtle shrink-0">
             <svg viewBox="0 0 24 24" className="w-5 h-5 text-muted" fill="none" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.75h16.5M3.75 12h16.5m-16.5 2.25h16.5" />
             </svg>
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-primary">No project</p>
             <p className="text-xs text-muted">Upload without assigning to a project</p>
           </div>
           {selectedId === null && (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 text-accent ml-auto shrink-0" fill="currentColor">
-              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-            </svg>
+            <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-accent text-on-accent shrink-0">
+              <CheckIcon size={11} />
+            </span>
           )}
         </button>
 
@@ -251,15 +382,13 @@ function UploadProjectDialog({
             type="button"
             className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
               selectedId === p.id
-                ? "border-accent bg-primary-bg/40 ring-1 ring-accent/30"
+                ? "border-border-active bg-primary-bg/40 ring-1 ring-accent/30"
                 : "border-border-card bg-card hover:border-border-active"
             }`}
             onClick={() => setSelectedId(p.id)}
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-bg/50 shrink-0">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 text-accent/70" fill="currentColor">
-                <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
-              </svg>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-bg shrink-0">
+              <FolderIcon size={18} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-primary truncate">{p.name}</p>
@@ -268,9 +397,9 @@ function UploadProjectDialog({
               )}
             </div>
             {selectedId === p.id && (
-              <svg viewBox="0 0 24 24" className="w-4 h-4 text-accent ml-auto shrink-0" fill="currentColor">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-              </svg>
+              <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-accent text-on-accent shrink-0">
+                <CheckIcon size={11} />
+              </span>
             )}
           </button>
         ))}
@@ -279,12 +408,12 @@ function UploadProjectDialog({
         {showCreate ? (
           <form
             onSubmit={(e) => void handleCreateAndSelect(e)}
-            className="flex flex-col gap-3 rounded-xl border border-accent/40 bg-primary-bg/20 p-4"
+            className="flex flex-col gap-3 rounded-xl border border-border-active bg-primary-bg/20 p-4"
           >
-            <p className="text-xs font-bold uppercase tracking-wider text-accent">New project</p>
+            <p className="text-[0.6875rem] font-bold uppercase tracking-widest text-primary-fg">New project</p>
             <input
               type="text"
-              className="w-full rounded-lg border border-border-card bg-card px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
+              className="field-input"
               placeholder="Project name"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
@@ -293,7 +422,7 @@ function UploadProjectDialog({
             />
             <input
               type="text"
-              className="w-full rounded-lg border border-border-card bg-card px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
+              className="field-input"
               placeholder="Description (optional)"
               value={newDesc}
               onChange={(e) => setNewDesc(e.target.value)}
@@ -311,19 +440,17 @@ function UploadProjectDialog({
                 className="btn-primary text-sm"
                 disabled={!newName.trim() || creating}
               >
-                {creating ? "Creating…" : "Create & select"}
+                {creating ? "Creating..." : "Create & select"}
               </button>
             </div>
           </form>
         ) : (
           <button
             type="button"
-            className="flex items-center gap-2 rounded-xl border border-dashed border-border-card px-4 py-3 text-sm text-muted hover:border-accent hover:text-accent transition-all"
+            className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border-card px-4 py-3 text-sm font-semibold text-muted hover:border-border-active hover:text-primary transition-all"
             onClick={() => setShowCreate(true)}
           >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
+            <PlusIcon size={14} />
             Create new project
           </button>
         )}
@@ -365,20 +492,21 @@ function CreateLocalProjectDialog({
             Cancel
           </button>
           <button type="submit" form="create-local-project-form" className="btn-primary">
+            <FolderPlusIcon size={14} />
             Create
           </button>
         </div>
       }
     >
-      <form id="create-local-project-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-secondary uppercase tracking-wider" htmlFor="lfp-name">
+      <form id="create-local-project-form" onSubmit={handleSubmit} className="form-grid">
+        <div className="form-field">
+          <label className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted" htmlFor="lfp-name">
             Project name
           </label>
           <input
             id="lfp-name"
             type="text"
-            className="w-full rounded-lg border border-border-card bg-card px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
+            className="field-input"
             placeholder="e.g. Food Reels"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -386,20 +514,20 @@ function CreateLocalProjectDialog({
             required
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-secondary uppercase tracking-wider" htmlFor="lfp-path">
+        <div className="form-field">
+          <label className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted" htmlFor="lfp-path">
             Folder path
           </label>
           <input
             id="lfp-path"
             type="text"
-            className="w-full rounded-lg border border-border-card bg-card px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all font-mono"
+            className="field-input font-mono"
             placeholder={String.raw`F:\Personal\Ai Reels on Food\Bangla`}
             value={path}
             onChange={(e) => setPath(e.target.value)}
             required
           />
-          <p className="text-[11px] text-muted">
+          <p className="text-[0.7rem] text-muted">
             Windows (e.g. <span className="font-mono">F:\Videos</span>) or Linux paths. Spaces and special characters are supported.
           </p>
         </div>
@@ -416,8 +544,6 @@ function VideoThumbnail({ src }: { src: string }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
 
-  // Only start loading when the card scrolls into view — prevents 50 concurrent
-  // network requests on page load from overwhelming the browser connection pool.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -428,7 +554,7 @@ function VideoThumbnail({ src }: { src: string }) {
           observer.disconnect();
         }
       },
-      { rootMargin: "200px" }, // start loading slightly before fully visible
+      { rootMargin: "200px" },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -437,14 +563,12 @@ function VideoThumbnail({ src }: { src: string }) {
   const handleMetadata = () => {
     const v = videoRef.current;
     if (!v) return;
-    // Seek to 10% of duration (clamped to 1–5 s range) for a representative frame
     const target = Math.min(5, Math.max(1, v.duration * 0.1));
     v.currentTime = isFinite(target) ? target : 0;
   };
 
   const handleSeeked = () => setReady(true);
 
-  // Fallback: some browsers fire timeupdate but not seeked after a currentTime set
   const handleTimeUpdate = () => {
     if (!ready && videoRef.current && videoRef.current.currentTime > 0) {
       setReady(true);
@@ -453,7 +577,6 @@ function VideoThumbnail({ src }: { src: string }) {
 
   return (
     <div ref={containerRef} className="absolute inset-0">
-      {/* Placeholder while loading */}
       {!ready && (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-bg">
           {inView && !error && (
@@ -500,35 +623,29 @@ function LocalFileCard({
 
   return (
     <div
-      className={`relative flex flex-col rounded-xl border transition-all duration-150 overflow-hidden cursor-pointer group ${
+      className={`vlib-thumb-card group ${
         selected
-          ? "border-accent shadow-[0_0_0_2px_var(--accent-glow-sm)] bg-primary-bg"
+          ? "vlib-thumb-card--selected"
           : isDuplicate
-            ? "border-warning/50 bg-warning-bg/20 hover:border-warning"
-            : "border-border-card bg-card hover:border-border-active"
+            ? "vlib-thumb-card--warning"
+            : ""
       }`}
     >
       {/* Thumbnail / play area */}
       <div
-        className="relative h-32 bg-neutral-bg flex items-center justify-center overflow-hidden"
+        className="relative h-36 bg-neutral-bg flex items-center justify-center overflow-hidden cursor-pointer"
         onClick={onPlay}
       >
         {thumbnailSrc && <VideoThumbnail src={thumbnailSrc} />}
-        {/* Play button overlay */}
-        <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M5 3l14 9-14 9V3z" />
-          </svg>
+        <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-sm">
+          <PlayIcon size={18} />
         </div>
-        <div className="absolute bottom-2 right-2 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
+        <div className="absolute bottom-2 right-2 z-10 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono backdrop-blur-sm">
           {file.content_type.split("/")[1]?.toUpperCase() ?? "VIDEO"}
         </div>
-        {/* Duplicate overlay banner */}
         {isDuplicate && (
-          <div className="absolute top-0 inset-x-0 z-10 flex items-center justify-center gap-1 bg-warning/80 py-0.5 text-[10px] font-bold text-black">
-            <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-            </svg>
+          <div className="absolute top-0 inset-x-0 z-10 flex items-center justify-center gap-1 bg-warning/90 py-1 text-[10px] font-bold text-black">
+            <WarningIcon />
             Already uploaded
           </div>
         )}
@@ -540,7 +657,7 @@ function LocalFileCard({
           {file.name}
         </p>
         <div className="flex items-center justify-between gap-1">
-          <p className="text-[11px] text-muted">{formatBytes(file.size_bytes)}</p>
+          <p className="text-[0.68rem] text-muted">{formatBytes(file.size_bytes)}</p>
           {isDuplicate && (
             <div className="relative">
               <button
@@ -555,13 +672,13 @@ function LocalFileCard({
                   className="absolute bottom-full right-0 mb-2 w-52 rounded-xl border border-border-card bg-surface shadow-lg z-30 overflow-hidden"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <p className="px-3 py-2 text-[0.65rem] uppercase tracking-wider font-bold text-muted border-b border-border-subtle">
+                  <p className="px-3 py-2 text-[0.6875rem] uppercase tracking-widest font-bold text-muted border-b border-border-subtle">
                     Matched by file size
                   </p>
                   {duplicates.map((d) => (
                     <div key={d.id} className="px-3 py-2 border-b border-border-subtle last:border-0">
                       <p className="text-xs font-semibold text-primary truncate">{d.file_name}</p>
-                      <p className="text-[11px] text-muted">{formatBytes(d.size_bytes)}</p>
+                      <p className="text-[0.68rem] text-muted">{formatBytes(d.size_bytes)}</p>
                     </div>
                   ))}
                   <p className="px-3 py-2 text-[10px] text-muted italic">
@@ -575,10 +692,10 @@ function LocalFileCard({
       </div>
 
       {/* Select checkbox */}
-      <div className="absolute top-2 left-2">
+      <div className="absolute top-2 left-2 z-10">
         <input
           type="checkbox"
-          className="h-4 w-4 accent-accent rounded cursor-pointer"
+          className="h-4 w-4 accent-[var(--accent)] rounded cursor-pointer"
           checked={selected}
           onChange={onSelect}
           onClick={(e) => e.stopPropagation()}
@@ -614,43 +731,36 @@ function UploadedVideoCard({
 
   return (
     <div
-      className={`relative flex flex-col rounded-xl border transition-all overflow-hidden group ${
-        selected
-          ? "border-accent shadow-[0_0_0_2px_var(--accent-glow-sm)] bg-primary-bg"
-          : "border-border-card bg-card hover:border-border-active"
-      }`}
+      className={`vlib-thumb-card group ${selected ? "vlib-thumb-card--selected" : ""}`}
     >
       {/* Thumbnail / play area */}
       <div
-        className="relative h-32 bg-neutral-bg flex items-center justify-center cursor-pointer overflow-hidden"
+        className="relative h-36 bg-neutral-bg flex items-center justify-center cursor-pointer overflow-hidden"
         onClick={onPlay}
       >
         <VideoThumbnail src={item.url} />
-        {/* Play button overlay */}
-        <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M5 3l14 9-14 9V3z" />
-          </svg>
+        <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-sm">
+          <PlayIcon size={18} />
         </div>
         {item.duration_ms && (
-          <div className="absolute bottom-2 right-2 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
+          <div className="absolute bottom-2 right-2 z-10 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono backdrop-blur-sm">
             {formatDuration(item.duration_ms)}
           </div>
         )}
         {item.width && item.height && (
-          <div className="absolute bottom-2 left-2 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
-            {item.width}×{item.height}
+          <div className="absolute bottom-2 left-2 z-10 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono backdrop-blur-sm">
+            {item.width}x{item.height}
           </div>
         )}
       </div>
 
       {/* Info */}
-      <div className="flex flex-col gap-1 px-3 py-2.5">
+      <div className="flex flex-col gap-1.5 px-3 py-2.5">
         <p className="text-xs font-semibold text-primary truncate" title={item.file_name}>
           {item.file_name}
         </p>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] text-muted">{formatBytes(item.size_bytes)}</p>
+          <p className="text-[0.68rem] text-muted">{formatBytes(item.size_bytes)}</p>
           {projectName && (
             <span className="tag-chip text-[10px] truncate max-w-[8rem]">{projectName}</span>
           )}
@@ -662,7 +772,7 @@ function UploadedVideoCard({
         <div className="absolute top-2 left-2 z-10">
           <input
             type="checkbox"
-            className="h-4 w-4 accent-accent rounded cursor-pointer"
+            className="h-4 w-4 accent-[var(--accent)] rounded cursor-pointer"
             checked={selected}
             onChange={onSelect}
             onClick={(e) => e.stopPropagation()}
@@ -672,18 +782,18 @@ function UploadedVideoCard({
       )}
 
       {/* Context menu */}
-      <div className="absolute top-2 right-2" ref={menuRef}>
+      <div className="absolute top-2 right-2 z-10" ref={menuRef}>
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+          className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 backdrop-blur-sm"
           onClick={() => setShowMenu((v) => !v)}
           aria-label="Options"
         >
-          ⋯
+          <DotsIcon />
         </button>
         {showMenu && (
-          <div className="absolute right-0 top-full mt-1 w-48 rounded-xl border border-border-card bg-surface shadow-lg z-20 overflow-hidden">
-            <p className="px-3 py-2 text-[0.65rem] uppercase tracking-wider font-bold text-muted border-b border-border-subtle">
+          <div className="absolute right-0 top-full mt-1 w-48 rounded-xl border border-border-card bg-surface shadow-lg z-20 overflow-hidden animate-rise-in">
+            <p className="px-3 py-2 text-[0.6875rem] uppercase tracking-widest font-bold text-muted border-b border-border-subtle">
               Move to project
             </p>
             <button
@@ -698,7 +808,7 @@ function UploadedVideoCard({
                 key={p.id}
                 type="button"
                 className={`w-full px-3 py-2 text-left text-xs hover:bg-glass transition-colors ${
-                  item.project_id === p.id ? "text-accent font-semibold" : "text-secondary"
+                  item.project_id === p.id ? "text-primary-fg font-semibold" : "text-secondary"
                 }`}
                 onClick={() => { onMoveToProject(p.id); setShowMenu(false); }}
               >
@@ -708,9 +818,10 @@ function UploadedVideoCard({
             <div className="border-t border-border-subtle">
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-xs text-error hover:bg-error-bg transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-error hover:bg-error-bg transition-colors"
                 onClick={() => { onDelete(); setShowMenu(false); }}
               >
+                <TrashIcon size={12} />
                 Delete
               </button>
             </div>
@@ -741,7 +852,6 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
     staleTime: 60_000,
   });
 
-  // Auto-browse when a project is opened
   useEffect(() => {
     if (openProject) {
       setCommittedPath(openProject.path);
@@ -818,10 +928,8 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
   const totalPages = Math.max(1, Math.ceil(files.length / LOCAL_FILES_PAGE_SIZE));
   const pageFiles = files.slice((page - 1) * LOCAL_FILES_PAGE_SIZE, page * LOCAL_FILES_PAGE_SIZE);
   const selectedCount = selectedFiles.size;
-  // "Select all" on current page only
   const allPageSelected = pageFiles.length > 0 && pageFiles.every((f) => selectedFiles.has(f.path));
 
-  // Fetch all uploaded items to detect duplicates by file size
   const { data: allUploaded = [] } = useQuery({
     queryKey: ["video-library-uploaded", null],
     queryFn: () => mockGetUploadedVideos(null),
@@ -829,7 +937,6 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
     staleTime: 30_000,
   });
 
-  // Build size → uploaded items map for O(1) lookup
   const uploadedBySize = new Map<number, VideoLibraryItem[]>();
   for (const item of allUploaded) {
     const bucket = uploadedBySize.get(item.size_bytes) ?? [];
@@ -843,34 +950,32 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
       <>
         {/* Breadcrumb */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="vlib-breadcrumb">
             <button
               type="button"
-              className="flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors"
+              className="vlib-breadcrumb__back"
               onClick={() => setOpenProject(null)}
             >
-              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
+              <ChevronLeftIcon />
               All Folders
             </button>
-            <span className="text-muted text-sm">/</span>
-            <span className="text-sm font-semibold text-primary">{openProject.name}</span>
+            <span className="text-muted">/</span>
+            <span className="font-semibold text-primary">{openProject.name}</span>
           </div>
           <button
             type="button"
-            className="text-xs text-error hover:text-error/70 transition-colors"
+            className="btn-ghost text-xs"
+            style={{ color: "var(--error-fg)" }}
             onClick={() => deleteProjectMutation.mutate(openProject.id)}
           >
+            <TrashIcon size={12} />
             Remove folder
           </button>
         </div>
 
         {/* Path badge */}
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border-subtle">
-          <svg viewBox="0 0 24 24" className="w-4 h-4 text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
-          </svg>
+        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-glass border border-border-subtle">
+          <FolderIcon size={16} />
           <span className="text-xs font-mono text-muted truncate">{openProject.path}</span>
         </div>
 
@@ -878,32 +983,34 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
         {files.length > 0 && (() => {
           const dupCount = files.filter((f) => (uploadedBySize.get(f.size_bytes)?.length ?? 0) > 0).length;
           return (
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <div className="vlib-toolbar">
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 accent-accent rounded"
+                  className="h-4 w-4 accent-[var(--accent)] rounded"
                   checked={allPageSelected}
                   onChange={handleSelectAll}
                 />
                 {allPageSelected ? "Deselect page" : "Select page"} ({pageFiles.length})
               </label>
               {dupCount > 0 && (
-                <span className="text-xs font-semibold text-warning bg-warning/10 border border-warning/30 rounded-full px-2 py-0.5">
+                <span className="inline-flex items-center gap-1 text-[0.7rem] font-semibold text-warning bg-warning-bg border border-warning/30 rounded-full px-2.5 py-0.5">
+                  <WarningIcon />
                   {dupCount} already uploaded
                 </span>
               )}
             </div>
             {selectedCount > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-primary">{selectedCount} selected</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-primary">{selectedCount} selected</span>
                 <button
                   type="button"
                   className="btn-primary text-sm"
                   onClick={() => setShowUploadDialog(true)}
                 >
-                  Upload ({selectedCount}) →
+                  <UploadIcon size={13} />
+                  Upload ({selectedCount})
                 </button>
               </div>
             )}
@@ -913,22 +1020,31 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
 
         {/* Gallery */}
         {isBrowsing && (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-6 h-6 border-4 border-border-subtle border-t-primary rounded-full animate-spin" />
+          <div className="flex flex-col items-center justify-center gap-3 py-16">
+            <div className="w-6 h-6 border-4 border-border-subtle border-t-accent rounded-full animate-spin" />
+            <p className="text-sm text-muted">Scanning folder...</p>
           </div>
         )}
 
         {!isBrowsing && browseError && (
-          <div className="rounded-xl border border-error/30 bg-error-bg px-4 py-3 text-sm text-error">
+          <div className="rounded-xl border border-error/30 bg-error-bg px-4 py-3 text-sm text-error flex items-center gap-2">
+            <WarningIcon size={16} />
             {browseError instanceof Error ? browseError.message : "Failed to browse folder."}
           </div>
         )}
 
         {!isBrowsing && !browseError && files.length === 0 && (
-          <EmptyState
-            title="No video files found"
-            description={`No supported video files were found in: ${openProject.path}`}
-          />
+          <div className="vlib-empty">
+            <div className="vlib-empty__icon">
+              <FilmIcon />
+            </div>
+            <div className="flex flex-col gap-2 max-w-md">
+              <h3 className="font-heading text-xl font-bold text-primary">No video files found</h3>
+              <p className="text-[0.9rem] leading-relaxed text-secondary">
+                No supported video files were found in: <span className="font-mono text-muted">{openProject.path}</span>
+              </p>
+            </div>
+          </div>
         )}
 
         {!isBrowsing && files.length > 0 && (
@@ -947,18 +1063,25 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
                       duplicates={uploadedBySize.get(file.size_bytes) ?? []}
                     />
                     {status === "uploading" && (
-                      <div className="absolute inset-0 rounded-xl bg-black/60 flex items-center justify-center">
+                      <div className="absolute inset-0 rounded-2xl bg-black/60 flex flex-col items-center justify-center gap-2 backdrop-blur-sm">
                         <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        <span className="text-[10px] font-semibold text-white/80">Uploading...</span>
                       </div>
                     )}
                     {status === "done" && (
-                      <div className="absolute inset-0 rounded-xl bg-success/20 flex items-center justify-center">
-                        <span className="text-success font-bold text-xl">✓</span>
+                      <div className="absolute inset-0 rounded-2xl bg-success/20 flex flex-col items-center justify-center gap-1 backdrop-blur-sm">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-success text-white">
+                          <CheckIcon size={16} />
+                        </span>
+                        <span className="text-[10px] font-bold text-success">Uploaded</span>
                       </div>
                     )}
                     {status === "error" && (
-                      <div className="absolute inset-0 rounded-xl bg-error/20 flex items-center justify-center">
-                        <span className="text-error font-bold text-sm">Error</span>
+                      <div className="absolute inset-0 rounded-2xl bg-error/20 flex flex-col items-center justify-center gap-1 backdrop-blur-sm">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-error text-white">
+                          <XIcon size={16} />
+                        </span>
+                        <span className="text-[10px] font-bold text-error">Failed</span>
                       </div>
                     )}
                   </div>
@@ -970,7 +1093,7 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-1 pt-2">
                 <p className="text-xs text-muted">
-                  {files.length} files · showing {(page - 1) * LOCAL_FILES_PAGE_SIZE + 1}–{Math.min(page * LOCAL_FILES_PAGE_SIZE, files.length)}
+                  {files.length} files · showing {(page - 1) * LOCAL_FILES_PAGE_SIZE + 1}--{Math.min(page * LOCAL_FILES_PAGE_SIZE, files.length)}
                 </p>
                 <div className="flex items-center gap-1">
                   <button
@@ -980,22 +1103,19 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-card bg-card text-sm text-secondary transition-all hover:border-border-active hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
                     aria-label="Previous page"
                   >
-                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                    </svg>
+                    <ChevronLeftSmIcon />
                   </button>
 
-                  {/* Page number buttons — show max 7 with ellipsis */}
                   {Array.from({ length: totalPages }, (_, i) => i + 1)
                     .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
-                    .reduce<(number | "…")[]>((acc, p, i, arr) => {
-                      if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("…");
+                    .reduce<(number | "...")[]>((acc, p, i, arr) => {
+                      if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("...");
                       acc.push(p);
                       return acc;
                     }, [])
                     .map((item, i) =>
-                      item === "…" ? (
-                        <span key={`ellipsis-${i}`} className="px-1 text-muted text-sm">…</span>
+                      item === "..." ? (
+                        <span key={`ellipsis-${i}`} className="px-1 text-muted text-sm">...</span>
                       ) : (
                         <button
                           key={item}
@@ -1003,7 +1123,7 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
                           onClick={() => setPage(item as number)}
                           className={`h-8 min-w-[2rem] px-2 rounded-lg border text-sm font-semibold transition-all ${
                             page === item
-                              ? "border-accent bg-primary-bg text-accent"
+                              ? "border-border-active bg-primary-bg text-primary-fg"
                               : "border-border-card bg-card text-secondary hover:border-border-active hover:text-primary"
                           }`}
                         >
@@ -1019,9 +1139,7 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-card bg-card text-sm text-secondary transition-all hover:border-border-active hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
                     aria-label="Next page"
                   >
-                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
+                    <ChevronRightSmIcon />
                   </button>
                 </div>
               </div>
@@ -1068,15 +1186,46 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
           className="btn-ghost text-sm"
           onClick={() => setShowCreateProject(true)}
         >
-          + New folder
+          <FolderPlusIcon size={14} />
+          New folder
         </button>
       </div>
 
       {localProjects.length === 0 ? (
-        <EmptyState
-          title="No saved folders"
-          description="Save a server folder path as a project to quickly browse it again."
-        />
+        <div className="vlib-empty">
+          <div className="vlib-empty__icon">
+            <FolderIcon size={36} />
+          </div>
+          <div className="flex flex-col gap-2 max-w-md">
+            <h3 className="font-heading text-xl font-bold text-primary">No saved folders</h3>
+            <p className="text-[0.9rem] leading-relaxed text-secondary">
+              Save a server folder path as a project to quickly browse and upload videos from it.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 text-left max-w-sm w-full">
+            {[
+              { label: "Point to any folder", detail: "Save paths to server-side video directories" },
+              { label: "Browse & preview", detail: "View thumbnails and play clips before uploading" },
+              { label: "Batch upload", detail: "Select multiple files and upload them in one go" },
+            ].map((item) => (
+              <div key={item.label} className="vlib-empty__feature">
+                <span className="vlib-empty__dot" />
+                <div className="flex flex-col">
+                  <strong className="text-sm font-semibold text-primary">{item.label}</strong>
+                  <span className="text-xs text-secondary">{item.detail}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            className="btn-primary mt-2"
+            onClick={() => setShowCreateProject(true)}
+            type="button"
+          >
+            <FolderPlusIcon size={14} />
+            Add a folder
+          </button>
+        </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
           {localProjects.map((p) => (
@@ -1084,20 +1233,16 @@ function LocalFilesTab({ projects }: { projects: VideoLibraryProject[] }) {
               key={p.id}
               type="button"
               onClick={() => setOpenProject(p)}
-              className="group flex flex-col gap-2 rounded-xl bg-glass border border-border-subtle p-4 text-left transition-all hover:border-accent/50 hover:bg-primary-bg/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="vlib-folder-card text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              <svg
-                viewBox="0 0 24 24"
-                className="w-10 h-10 text-accent/70 group-hover:text-accent transition-colors"
-                fill="currentColor"
-              >
-                <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
-              </svg>
+              <div className="vlib-folder-card__icon">
+                <FolderIcon size={20} />
+              </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-semibold text-primary group-hover:text-accent transition-colors line-clamp-1">
+                <span className="text-sm font-semibold text-primary group-hover:text-primary-fg transition-colors line-clamp-1">
                   {p.name}
                 </span>
-                <span className="text-[11px] text-muted font-mono truncate">{p.path}</span>
+                <span className="text-[0.68rem] text-muted font-mono truncate">{p.path}</span>
               </div>
             </button>
           ))}
@@ -1143,7 +1288,7 @@ function MoveToProjectDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={`Move ${itemCount} ${itemCount === 1 ? "file" : "files"} to…`}
+      title={`Move ${itemCount} ${itemCount === 1 ? "file" : "files"} to...`}
       actions={
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-ghost" onClick={onClose}>
@@ -1154,24 +1299,25 @@ function MoveToProjectDialog({
             className="btn-primary"
             onClick={() => onConfirm(targetProjectId)}
           >
-            Move {itemCount > 0 ? `(${itemCount})` : ""} →
+            <MoveIcon />
+            Move{itemCount > 0 ? ` (${itemCount})` : ""}
           </button>
         </div>
       }
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2.5">
         {/* No-project option */}
         {currentProjectId !== null && (
           <button
             type="button"
             className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
               selectedId === "unassigned"
-                ? "border-accent bg-primary-bg/40 ring-1 ring-accent/30"
+                ? "border-border-active bg-primary-bg/40 ring-1 ring-accent/30"
                 : "border-border-card bg-card hover:border-border-active"
             }`}
             onClick={() => setSelectedId("unassigned")}
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-bg shrink-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-glass border border-border-subtle shrink-0">
               <svg viewBox="0 0 24 24" className="w-5 h-5 text-muted" fill="none" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.75h16.5M3.75 12h16.5m-16.5 2.25h16.5" />
               </svg>
@@ -1181,9 +1327,9 @@ function MoveToProjectDialog({
               <p className="text-xs text-muted">Remove from any project</p>
             </div>
             {selectedId === "unassigned" && (
-              <svg viewBox="0 0 24 24" className="w-4 h-4 text-accent ml-auto shrink-0" fill="currentColor">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-              </svg>
+              <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-accent text-on-accent shrink-0">
+                <CheckIcon size={11} />
+              </span>
             )}
           </button>
         )}
@@ -1197,15 +1343,13 @@ function MoveToProjectDialog({
               type="button"
               className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
                 selectedId === p.id
-                  ? "border-accent bg-primary-bg/40 ring-1 ring-accent/30"
+                  ? "border-border-active bg-primary-bg/40 ring-1 ring-accent/30"
                   : "border-border-card bg-card hover:border-border-active"
               }`}
               onClick={() => setSelectedId(p.id)}
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-bg/50 shrink-0">
-                <svg viewBox="0 0 24 24" className="w-5 h-5 text-accent/70" fill="currentColor">
-                  <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
-                </svg>
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-bg shrink-0">
+                <FolderIcon size={18} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-primary truncate">{p.name}</p>
@@ -1214,9 +1358,9 @@ function MoveToProjectDialog({
                 )}
               </div>
               {selectedId === p.id && (
-                <svg viewBox="0 0 24 24" className="w-4 h-4 text-accent ml-auto shrink-0" fill="currentColor">
-                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                </svg>
+                <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-accent text-on-accent shrink-0">
+                  <CheckIcon size={11} />
+                </span>
               )}
             </button>
           ))}
@@ -1244,43 +1388,36 @@ function ProjectFolderCard({
   onDelete?: () => void;
 }) {
   return (
-    <div className="group relative flex flex-col gap-2 rounded-xl bg-glass border border-border-subtle p-4 transition-all hover:border-accent/50 hover:bg-primary-bg/30">
+    <div className="vlib-folder-card group">
       {/* Delete button */}
       {onDelete && (
         <button
           type="button"
-          className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md text-muted hover:text-error hover:bg-error/10"
+          className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex h-7 w-7 items-center justify-center rounded-lg bg-glass border border-border-subtle text-muted hover:text-error hover:border-error/40 hover:bg-error-bg"
           title="Delete project"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
         >
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
+          <TrashIcon size={13} />
         </button>
       )}
       <button
         type="button"
         onClick={onClick}
-        className="flex flex-col gap-2 text-left focus:outline-none"
+        className="flex flex-col gap-2.5 text-left focus:outline-none w-full"
       >
-        {/* Folder icon */}
         <div className="flex items-center justify-between w-full">
-          <svg
-            viewBox="0 0 24 24"
-            className="w-10 h-10 text-accent/70 group-hover:text-accent transition-colors"
-            fill="currentColor"
-          >
-            <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
-          </svg>
-          <span className="text-xs font-semibold text-muted bg-primary-bg/50 rounded-full px-2 py-0.5">
+          <div className="vlib-folder-card__icon">
+            <FolderIcon size={20} />
+          </div>
+          <span className="tag-chip text-[10px]">
             {count} {count === 1 ? "video" : "videos"}
           </span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-sm font-semibold text-primary group-hover:text-accent transition-colors line-clamp-1">
+          <span className="text-sm font-semibold text-primary group-hover:text-primary-fg transition-colors line-clamp-1">
             {name}
           </span>
           {description && (
@@ -1309,14 +1446,12 @@ function UploadedFilesTab({
   const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Fetch all items to compute per-folder counts at root level
   const { data: allItems = [], isLoading: allLoading } = useQuery({
     queryKey: ["video-library-uploaded", null],
     queryFn: () => mockGetUploadedVideos(null),
     staleTime: 30_000,
   });
 
-  // When inside a project folder, fetch only that project's items
   const apiProjectId = openFolderId === "unassigned" ? null : openFolderId;
   const { data: folderItems = [], isLoading: folderLoading } = useQuery({
     queryKey: ["video-library-uploaded", openFolderId],
@@ -1375,7 +1510,6 @@ function UploadedFilesTab({
     openFolderId === "unassigned" ? "No Project" : (openProject?.name ?? "");
   const currentProjectId = openFolderId === "unassigned" ? null : openFolderId;
 
-  // Bulk selection helpers
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -1404,7 +1538,6 @@ function UploadedFilesTab({
     void queryClient.invalidateQueries({ queryKey: ["video-library-uploaded"] });
   };
 
-  // Count helpers
   const countForProject = (id: string) =>
     allItems.filter((i) => i.project_id === id).length;
   const unassignedCount = allItems.filter((i) => i.project_id === null).length;
@@ -1415,31 +1548,47 @@ function UploadedFilesTab({
   if (openFolderId !== null) {
     return (
       <>
-        {/* Breadcrumb / back */}
+        {/* Breadcrumb */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="vlib-breadcrumb">
             <button
               type="button"
-              className="flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors"
+              className="vlib-breadcrumb__back"
               onClick={() => { setOpenFolderId(null); setSelectedIds(new Set()); }}
             >
-              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
+              <ChevronLeftIcon />
               All Projects
             </button>
-            <span className="text-muted text-sm">/</span>
-            <span className="text-sm font-semibold text-primary">{folderName}</span>
+            <span className="text-muted">/</span>
+            <span className="font-semibold text-primary">{folderName}</span>
           </div>
+          {openFolderId !== "unassigned" && openProject && (
+            <button
+              type="button"
+              className="btn-ghost text-xs"
+              style={{ color: "var(--error-fg)" }}
+              disabled={deleteProjectMutation.isPending}
+              onClick={() => {
+                if (confirm(`Delete project "${openProject.name}" and all its videos? This cannot be undone.`)) {
+                  deleteProjectMutation.mutate(openProject.id, {
+                    onSuccess: () => { setOpenFolderId(null); setSelectedIds(new Set()); },
+                  });
+                }
+              }}
+            >
+              <TrashIcon size={12} />
+              {deleteProjectMutation.isPending ? "Deleting…" : "Delete project"}
+            </button>
+          )}
         </div>
 
         {/* Bulk-selection toolbar */}
         {!folderLoading && displayItems.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <div className="vlib-toolbar">
             <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary">
               <input
                 type="checkbox"
-                className="h-4 w-4 accent-accent rounded"
+                className="h-4 w-4 accent-[var(--accent)] rounded"
                 checked={allSelected}
                 onChange={handleSelectAll}
               />
@@ -1447,19 +1596,22 @@ function UploadedFilesTab({
             </label>
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-primary">{selectedIds.size} selected</span>
+                <span className="text-sm font-bold text-primary">{selectedIds.size} selected</span>
                 <button
                   type="button"
                   className="btn-ghost text-sm"
                   onClick={() => setShowMoveDialog(true)}
                 >
-                  Move to project
+                  <MoveIcon />
+                  Move
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg border border-error/40 bg-error-bg px-3 py-1.5 text-sm font-semibold text-error hover:bg-error/20 transition-colors"
+                  className="btn-ghost text-sm"
+                  style={{ color: "var(--error-fg)" }}
                   onClick={() => setConfirmDelete(true)}
                 >
+                  <TrashIcon size={13} />
                   Delete ({selectedIds.size})
                 </button>
               </div>
@@ -1469,12 +1621,22 @@ function UploadedFilesTab({
 
         {/* Folder content */}
         {folderLoading ? (
-          <LoadingPage />
+          <div className="flex flex-col items-center justify-center gap-3 py-16">
+            <div className="w-6 h-6 border-4 border-border-subtle border-t-accent rounded-full animate-spin" />
+            <p className="text-sm text-muted">Loading videos...</p>
+          </div>
         ) : displayItems.length === 0 ? (
-          <EmptyState
-            title="No videos in this project"
-            description="Upload videos from the Local Files tab and assign them to this project."
-          />
+          <div className="vlib-empty">
+            <div className="vlib-empty__icon">
+              <FilmIcon />
+            </div>
+            <div className="flex flex-col gap-2 max-w-md">
+              <h3 className="font-heading text-xl font-bold text-primary">No videos in this project</h3>
+              <p className="text-[0.9rem] leading-relaxed text-secondary">
+                Upload videos from the Local Files tab and assign them to this project.
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
             {displayItems.map((item) => (
@@ -1520,12 +1682,17 @@ function UploadedFilesTab({
             onClick={() => setConfirmDelete(false)}
           >
             <div
-              className="flex flex-col gap-5 w-full max-w-sm rounded-2xl bg-surface border border-border-card p-6 shadow-2xl"
+              className="flex flex-col gap-5 w-full max-w-sm rounded-2xl bg-surface border border-border-card p-6 shadow-2xl animate-rise-in"
               onClick={(e) => e.stopPropagation()}
             >
-              <div>
-                <p className="text-base font-bold text-primary">Delete {selectedIds.size} {selectedIds.size === 1 ? "video" : "videos"}?</p>
-                <p className="text-sm text-muted mt-1">This will permanently remove the selected files from storage. This cannot be undone.</p>
+              <div className="flex gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-error-bg text-error shrink-0">
+                  <TrashIcon size={22} />
+                </div>
+                <div>
+                  <p className="text-base font-heading font-bold text-primary">Delete {selectedIds.size} {selectedIds.size === 1 ? "video" : "videos"}?</p>
+                  <p className="text-sm text-secondary mt-1">This will permanently remove the selected files from storage. This cannot be undone.</p>
+                </div>
               </div>
               <div className="flex gap-3 justify-end">
                 <button type="button" className="btn-ghost" onClick={() => setConfirmDelete(false)}>
@@ -1533,9 +1700,10 @@ function UploadedFilesTab({
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white hover:bg-error/80 transition-colors"
+                  className="inline-flex items-center justify-center gap-2 min-h-[2.2rem] px-4 py-1.5 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer bg-error text-white hover:bg-error/80 shadow-sm"
                   onClick={() => void handleBulkDelete()}
                 >
+                  <TrashIcon size={13} />
                   Delete
                 </button>
               </div>
@@ -1560,15 +1728,38 @@ function UploadedFilesTab({
           className="btn-ghost text-sm"
           onClick={() => setShowCreateProject(true)}
         >
-          + New project
+          <PlusIcon size={13} />
+          New project
         </button>
       </div>
 
       {projects.length === 0 && unassignedCount === 0 ? (
-        <EmptyState
-          title="No uploaded videos"
-          description="Upload videos from the Local Files tab to see them here."
-        />
+        <div className="vlib-empty">
+          <div className="vlib-empty__icon">
+            <UploadIcon size={36} />
+          </div>
+          <div className="flex flex-col gap-2 max-w-md">
+            <h3 className="font-heading text-xl font-bold text-primary">No uploaded videos</h3>
+            <p className="text-[0.9rem] leading-relaxed text-secondary">
+              Upload videos from the Local Files tab and organize them into projects here.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 text-left max-w-sm w-full">
+            {[
+              { label: "Create projects", detail: "Group videos by topic, brand, or campaign" },
+              { label: "Organize clips", detail: "Drag videos between projects or leave unassigned" },
+              { label: "Preview & manage", detail: "Play, move, or delete uploaded videos" },
+            ].map((item) => (
+              <div key={item.label} className="vlib-empty__feature">
+                <span className="vlib-empty__dot" />
+                <div className="flex flex-col">
+                  <strong className="text-sm font-semibold text-primary">{item.label}</strong>
+                  <span className="text-xs text-secondary">{item.detail}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
           {projects.map((p) => (
@@ -1605,7 +1796,6 @@ function UploadedFilesTab({
 /* ─── VideoLibraryPage ────────────────────────────────────────────────────── */
 export function VideoLibraryPage() {
   const [activeTab, setActiveTab] = useState<"local" | "uploaded">("local");
-  // Lifted from UploadedFilesTab so the inspector can navigate into a project
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
@@ -1620,24 +1810,32 @@ export function VideoLibraryPage() {
     staleTime: 60_000,
   });
 
+  const totalUploadedCount = totalUploaded.data?.length ?? 0;
+  const totalSizeBytes = totalUploaded.data?.reduce((sum, i) => sum + i.size_bytes, 0) ?? 0;
+
   return (
     <PageFrame
       eyebrow="Media management"
       title="Video Library"
-      description="Browse server-side video folders, upload clips to MinIO storage, and organize them into projects."
+      description="Browse server-side video folders, upload clips to storage, and organize them into projects for remix and generation."
       inspector={
         <div className="inspector-stack">
-          <SectionCard title="Library stats">
-            <div className="inspector-list">
-              <div>
-                <span>Projects</span>
-                <strong>{projects.length}</strong>
+          <SectionCard title="Library overview">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="vlib-page-stat">
+                <span className="vlib-page-stat__value text-primary-fg">{projects.length}</span>
+                <span className="vlib-page-stat__label">Projects</span>
               </div>
-              <div>
-                <span>Uploaded videos</span>
-                <strong>{totalUploaded.data?.length ?? "--"}</strong>
+              <div className="vlib-page-stat">
+                <span className="vlib-page-stat__value">{totalUploadedCount}</span>
+                <span className="vlib-page-stat__label">Uploaded</span>
               </div>
             </div>
+            {totalSizeBytes > 0 && (
+              <p className="text-xs text-muted mt-2 text-center">
+                {formatBytes(totalSizeBytes)} total storage
+              </p>
+            )}
           </SectionCard>
 
           {projects.length > 0 && (
@@ -1647,21 +1845,23 @@ export function VideoLibraryPage() {
                   <button
                     key={p.id}
                     type="button"
-                    className="group flex flex-col gap-0.5 px-3 py-2.5 rounded-lg bg-glass border border-border-subtle text-left transition-all hover:border-accent/50 hover:bg-primary-bg/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-glass border border-border-subtle text-left transition-all hover:border-border-active hover:bg-glass-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     onClick={() => {
                       setOpenFolderId(p.id);
                       setActiveTab("uploaded");
                     }}
                   >
-                    <strong className="text-xs font-semibold text-primary group-hover:text-accent transition-colors">
-                      {p.name}
-                    </strong>
-                    {p.description && (
-                      <p className="text-[11px] text-muted line-clamp-2">{p.description}</p>
-                    )}
-                    <p className="text-[11px] text-muted mt-0.5">
-                      {new Date(p.created_at).toLocaleDateString()}
-                    </p>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-bg text-primary-fg shrink-0">
+                      <FolderIcon size={14} />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <strong className="text-xs font-semibold text-primary group-hover:text-primary-fg transition-colors truncate">
+                        {p.name}
+                      </strong>
+                      {p.description && (
+                        <p className="text-[0.68rem] text-muted line-clamp-1">{p.description}</p>
+                      )}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -1671,33 +1871,31 @@ export function VideoLibraryPage() {
       }
     >
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-border-subtle pb-0 -mb-2">
+      <div className="flex gap-1 rounded-xl bg-glass border border-border-subtle p-1 w-fit">
         <button
           type="button"
-          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px ${
-            activeTab === "local"
-              ? "border-accent text-primary"
-              : "border-transparent text-muted hover:text-secondary"
-          }`}
+          className={`vlib-tab ${activeTab === "local" ? "vlib-tab--active" : "vlib-tab--inactive"}`}
           onClick={() => setActiveTab("local")}
         >
-          Local Files
+          <span className="flex items-center gap-2">
+            <FolderIcon size={14} />
+            Local Files
+          </span>
         </button>
         <button
           type="button"
-          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px ${
-            activeTab === "uploaded"
-              ? "border-accent text-primary"
-              : "border-transparent text-muted hover:text-secondary"
-          }`}
+          className={`vlib-tab ${activeTab === "uploaded" ? "vlib-tab--active" : "vlib-tab--inactive"}`}
           onClick={() => setActiveTab("uploaded")}
         >
-          Uploaded Files
-          {(totalUploaded.data?.length ?? 0) > 0 && (
-            <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-primary-bg text-primary text-[10px] font-bold px-1.5 py-px min-w-[1.25rem]">
-              {totalUploaded.data?.length}
-            </span>
-          )}
+          <span className="flex items-center gap-2">
+            <UploadIcon size={14} />
+            Uploaded Files
+            {totalUploadedCount > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full bg-primary-bg text-primary-fg text-[10px] font-bold px-1.5 py-px min-w-[1.25rem]">
+                {totalUploadedCount}
+              </span>
+            )}
+          </span>
         </button>
       </div>
 

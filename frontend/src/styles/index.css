@@ -497,6 +497,85 @@
   }
 
   /* ─── Projects page ────────────────────────────────────────────────────── */
+  /* ─── Video Library page ─────────────────────────────────────────────── */
+  .vlib-tab {
+    @apply relative px-5 py-2.5 text-sm font-semibold transition-all duration-200 rounded-lg cursor-pointer;
+  }
+
+  .vlib-tab--active {
+    @apply bg-glass text-primary shadow-card;
+    box-shadow: var(--shadow-card), inset 0 0 0 1px var(--border-active);
+  }
+
+  .vlib-tab--inactive {
+    @apply text-muted hover:text-secondary hover:bg-glass;
+  }
+
+  .vlib-thumb-card {
+    @apply relative flex flex-col rounded-2xl border border-border-card bg-card shadow-sm transition-all duration-200 overflow-hidden animate-rise-in hover:border-border-active hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .vlib-thumb-card--selected {
+    @apply border-border-active;
+    box-shadow: var(--shadow-accent), inset 0 0 0 2px var(--accent);
+  }
+
+  .vlib-thumb-card--warning {
+    border-color: color-mix(in srgb, var(--warning) 50%, transparent);
+  }
+
+  .vlib-thumb-card--warning:hover {
+    border-color: var(--warning);
+  }
+
+  .vlib-folder-card {
+    @apply relative flex flex-col gap-2.5 rounded-2xl border border-border-card bg-card p-4 shadow-sm transition-all duration-200 cursor-pointer animate-rise-in hover:border-border-active hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .vlib-folder-card__icon {
+    @apply flex h-10 w-10 items-center justify-center rounded-xl bg-primary-bg text-primary-fg;
+  }
+
+  .vlib-toolbar {
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-xl bg-glass border border-border-subtle px-4 py-2.5;
+  }
+
+  .vlib-breadcrumb {
+    @apply flex items-center gap-2 text-sm;
+  }
+
+  .vlib-breadcrumb__back {
+    @apply flex items-center gap-1.5 text-muted hover:text-primary transition-colors;
+  }
+
+  .vlib-empty {
+    @apply flex flex-col items-center justify-center text-center gap-6 py-16 px-8 rounded-2xl bg-card border-2 border-dashed border-border-card;
+  }
+
+  .vlib-empty__icon {
+    @apply flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-bg text-primary-fg;
+  }
+
+  .vlib-empty__feature {
+    @apply flex items-start gap-3 rounded-xl bg-glass px-3.5 py-2.5;
+  }
+
+  .vlib-empty__dot {
+    @apply mt-1.5 h-2 w-2 rounded-full bg-accent shrink-0;
+  }
+
+  .vlib-page-stat {
+    @apply flex flex-col items-center gap-1 rounded-xl bg-glass p-3.5 border border-border-subtle;
+  }
+
+  .vlib-page-stat__value {
+    @apply text-xl font-heading font-bold text-primary;
+  }
+
+  .vlib-page-stat__label {
+    @apply text-[0.7rem] text-muted font-medium;
+  }
+
   /* ─── Remix page ─────────────────────────────────────────────────────── */
   .remix-card {
     @apply relative flex flex-col gap-3 rounded-2xl border border-border-card bg-card p-4 shadow-sm transition-all duration-200 cursor-pointer animate-rise-in hover:border-border-active hover:shadow-md hover:-translate-y-0.5;

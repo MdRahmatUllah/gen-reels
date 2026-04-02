@@ -223,6 +223,19 @@ class RemixService:
 
     def delete_project(self, auth: AuthContext, project_id: str) -> None:
         project = self._get_project(auth, project_id)
+
+        # Delete jobs and their videos first (no CASCADE on FKs)
+        jobs = self.db.scalars(
+            select(RemixJob).where(RemixJob.remix_project_id == project.id)
+        ).all()
+        for job in jobs:
+            videos = self.db.scalars(
+                select(RemixVideo).where(RemixVideo.job_id == job.id)
+            ).all()
+            for video in videos:
+                self.db.delete(video)
+            self.db.delete(job)
+
         self.db.delete(project)
         self.db.commit()
 
