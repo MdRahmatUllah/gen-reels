@@ -25,6 +25,7 @@ celery_app.conf.update(
         "planning.generate_script": {"queue": "planning"},
         "planning.generate_scene_plan": {"queue": "planning"},
         "planning.generate_prompt_pairs": {"queue": "planning"},
+        "planning.generate_series_run": {"queue": "planning"},
         "planning.expire_stale_jobs": {"queue": "planning"},
         "render.expire_stale_jobs": {"queue": "maintenance"},
         "render.execute_job": {"queue": "frame"},
