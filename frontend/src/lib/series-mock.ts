@@ -4,9 +4,14 @@ import type {
   SeriesCatalog,
   SeriesDetail,
   SeriesInput,
+  SeriesPublishedVideo,
+  SeriesRevisionSummary,
   SeriesRun,
   SeriesScript,
+  SeriesScriptDetail,
+  SeriesScenePreview,
   SeriesSummary,
+  SeriesVideoRun,
 } from "../types/domain";
 
 let mockCounter = 4000;
@@ -79,352 +84,325 @@ const SERIES_CATALOG: SeriesCatalog = {
     { key: "clarity", label: "Clarity", description: "High legibility with calm contrast." },
   ],
   effects: [
-    { key: "shake_effect", label: "Shake effect", description: "Subjects pop out with eerie motion — great for horror, thriller, and suspenseful stories.", badge: "New" },
-    { key: "film_grain", label: "Film grain", description: "Add an old film look with scanlines, dust particles, noise, and a subtle vignette.", badge: "New" },
-    { key: "animated_hook", label: "Animated hook", description: "Generate a 5-second motion video for the first scene to hook viewers instantly.", badge: "Premium" },
+    { key: "shake_effect", label: "Shake effect", description: "Subjects pop out with eerie motion for suspenseful stories.", badge: "New" },
+    { key: "film_grain", label: "Film grain", description: "Add an old film look with scanlines and dust.", badge: "New" },
+    { key: "animated_hook", label: "Animated hook", description: "Generate a 5-second hook scene.", badge: "Premium" },
   ],
 };
 
-type InternalState = {
-  series: SeriesDetail[];
-  scriptsBySeriesId: Map<string, SeriesScript[]>;
-  runsBySeriesId: Map<string, SeriesRun[]>;
-  timeoutsByRunId: Map<string, ReturnType<typeof setTimeout>>;
+type Slot = {
+  id: string;
+  seriesId: string;
+  seriesRunId: string;
+  sequenceNumber: number;
+  revisions: SeriesRevisionSummary[];
+  currentRevisionId: string;
+  approvedRevisionId: string | null;
+  publishedRevisionId: string | null;
+  publishedVideo: SeriesPublishedVideo | null;
+  scenes: SeriesScenePreview[];
+  createdAt: string;
+  updatedAt: string;
 };
 
-const seedSeriesId = "series_seed_history";
-const seedRunId = "series_run_seed_history";
-const seedNow = nowIso();
+const seriesStore: SeriesDetail[] = [];
+const slotStore = new Map<string, Slot[]>();
+const runStore = new Map<string, SeriesRun[]>();
+const videoRunStore = new Map<string, SeriesVideoRun[]>();
 
-const state: InternalState = {
-  series: [
+function buildLines(series: SeriesDetail, sequenceNumber: number): ScriptLine[] {
+  return [
     {
-      id: seedSeriesId,
-      workspaceId: "workspace_north_star",
-      ownerUserId: "user_1",
-      title: "History In One Breath",
-      description: "Fast-moving history stories built for short-form reels.",
-      contentMode: "preset",
-      presetKey: "important_events",
-      customTopic: "",
-      customExampleScript: "",
-      languageKey: "en",
-      voiceKey: "john",
-      musicMode: "preset",
-      musicKeys: ["brilliant_symphony"],
-      artStyleKey: "realism",
-      captionStyleKey: "clarity",
-      effectKeys: [],
-      totalScriptCount: 1,
-      latestRunId: seedRunId,
-      latestRunStatus: "completed",
-      activeRunId: null,
-      activeRunStatus: null,
-      canEdit: true,
-      lastActivityAt: seedNow,
-      createdAt: seedNow,
-      updatedAt: seedNow,
+      id: `${sequenceNumber}-1`,
+      sceneId: `${sequenceNumber}-scene-1`,
+      beat: "Hook",
+      narration: `${series.title} episode ${sequenceNumber} opens with a strong scroll-stopping hook.`,
+      caption: "Hook",
+      durationSec: 10,
+      status: "draft",
+      visualDirection: `${series.artStyleKey} dramatic opener`,
+      voicePacing: series.voiceKey,
     },
-  ],
-  scriptsBySeriesId: new Map([
-    [
-      seedSeriesId,
-      [
-        {
-          id: "series_script_seed_1",
-          seriesId: seedSeriesId,
-          seriesRunId: seedRunId,
-          createdByUserId: "user_1",
-          sequenceNumber: 1,
-          title: "How Pompeii Froze In Time",
-          summary: "A quick dramatic retelling of the eruption of Mount Vesuvius and the city it preserved.",
-          estimatedDurationSeconds: 62,
-          readingTimeLabel: "62s narration",
-          totalWords: 116,
-          lines: [
-            {
-              id: "line_01",
-              sceneId: "scene_01",
-              beat: "Hook",
-              narration: "Imagine waking up to ash falling from the sky before breakfast.",
-              caption: "Pompeii had no warning",
-              durationSec: 10,
-              status: "draft",
-              visualDirection: "A sunlit Roman street darkening under volcanic ash.",
-              voicePacing: "Urgent",
-            },
-            {
-              id: "line_02",
-              sceneId: "scene_02",
-              beat: "Setup",
-              narration: "In 79 AD, Mount Vesuvius erupted and buried Pompeii in hours.",
-              caption: "79 AD",
-              durationSec: 12,
-              status: "draft",
-              visualDirection: "Wide view of the volcano looming behind the city.",
-              voicePacing: "Measured",
-            },
-          ],
-          createdAt: seedNow,
-          updatedAt: seedNow,
-        },
-      ],
-    ],
-  ]),
-  runsBySeriesId: new Map([
-    [
-      seedSeriesId,
-      [
-        {
-          id: seedRunId,
-          seriesId: seedSeriesId,
-          workspaceId: "workspace_north_star",
-          createdByUserId: "user_1",
-          status: "completed",
-          requestedScriptCount: 1,
-          completedScriptCount: 1,
-          failedScriptCount: 0,
-          idempotencyKey: "seed-run",
-          requestHash: "seed-run",
-          payload: {},
-          errorCode: null,
-          errorMessage: null,
-          retryCount: 0,
-          startedAt: seedNow,
-          completedAt: seedNow,
-          cancelledAt: null,
-          createdAt: seedNow,
-          updatedAt: seedNow,
-          steps: [
-            {
-              id: "series_step_seed_1",
-              seriesRunId: seedRunId,
-              seriesId: seedSeriesId,
-              seriesScriptId: "series_script_seed_1",
-              stepIndex: 1,
-              sequenceNumber: 1,
-              status: "completed",
-              inputPayload: { sequenceNumber: 1 },
-              outputPayload: { title: "How Pompeii Froze In Time" },
-              errorCode: null,
-              errorMessage: null,
-              startedAt: seedNow,
-              completedAt: seedNow,
-              createdAt: seedNow,
-              updatedAt: seedNow,
-            },
-          ],
-          currentStep: null,
-        },
-      ],
-    ],
-  ]),
-  timeoutsByRunId: new Map(),
-};
+    {
+      id: `${sequenceNumber}-2`,
+      sceneId: `${sequenceNumber}-scene-2`,
+      beat: "Payoff",
+      narration: "The middle delivers context fast and lands with a memorable payoff.",
+      caption: "Payoff",
+      durationSec: 14,
+      status: "draft",
+      visualDirection: `${series.artStyleKey} cinematic payoff`,
+      voicePacing: series.voiceKey,
+    },
+  ];
+}
+
+function createRevision(series: SeriesDetail, slotId: string, sequenceNumber: number, revisionNumber: number): SeriesRevisionSummary {
+  const lines = buildLines(series, sequenceNumber);
+  return {
+    id: nextId("series_revision"),
+    seriesScriptId: slotId,
+    revisionNumber,
+    approvalState: "needs_review",
+    title: `${series.title} Episode ${sequenceNumber}${revisionNumber > 1 ? ` Rev ${revisionNumber}` : ""}`,
+    summary: `A one-minute ${series.title.toLowerCase()} episode designed for strong short-form retention.`,
+    estimatedDurationSeconds: 24,
+    readingTimeLabel: "24s narration",
+    totalWords: lines.reduce((sum, line) => sum + line.narration.split(/\s+/).filter(Boolean).length, 0),
+    lines,
+    videoTitle: "",
+    videoDescription: "",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+}
 
 function getSeries(seriesId: string): SeriesDetail {
-  const series = state.series.find((item) => item.id === seriesId);
+  const series = seriesStore.find((item) => item.id === seriesId);
   if (!series) {
     throw new ApiError(404, "series_not_found", "Series not found.");
   }
   return series;
 }
 
-function getRuns(seriesId: string): SeriesRun[] {
-  return state.runsBySeriesId.get(seriesId) ?? [];
+function getSlots(seriesId: string): Slot[] {
+  return slotStore.get(seriesId) ?? [];
 }
 
-function getScripts(seriesId: string): SeriesScript[] {
-  return state.scriptsBySeriesId.get(seriesId) ?? [];
+function currentRevision(slot: Slot) {
+  return slot.revisions.find((item) => item.id === slot.currentRevisionId) ?? slot.revisions[slot.revisions.length - 1];
 }
 
-function activeRun(seriesId: string): SeriesRun | null {
-  return getRuns(seriesId).find((run) => run.status === "queued" || run.status === "running") ?? null;
+function approvedRevision(slot: Slot) {
+  return slot.revisions.find((item) => item.id === slot.approvedRevisionId) ?? null;
 }
 
-function latestRun(seriesId: string): SeriesRun | null {
-  return getRuns(seriesId).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+function publishedRevision(slot: Slot) {
+  return slot.revisions.find((item) => item.id === slot.publishedRevisionId) ?? null;
 }
 
-function summarize(series: SeriesDetail): SeriesSummary {
-  const scripts = getScripts(series.id);
-  const latest = latestRun(series.id);
-  const active = activeRun(series.id);
-  const lastActivityAt = [
-    series.updatedAt,
-    latest?.updatedAt ?? "",
-    scripts[scripts.length - 1]?.createdAt ?? "",
-  ]
-    .filter(Boolean)
-    .sort()
-    .at(-1) ?? series.updatedAt;
+function toScript(slot: Slot): SeriesScript {
+  const current = currentRevision(slot);
+  const approved = approvedRevision(slot);
+  const published = publishedRevision(slot);
   return {
-    ...series,
-    totalScriptCount: scripts.length,
-    latestRunId: latest?.id ?? null,
-    latestRunStatus: latest?.status ?? null,
-    activeRunId: active?.id ?? null,
-    activeRunStatus: active?.status ?? null,
-    canEdit: active === null,
-    lastActivityAt,
-  };
-}
-
-function syncSeriesSummary(seriesId: string): void {
-  const current = getSeries(seriesId);
-  const summary = summarize(current);
-  const index = state.series.findIndex((item) => item.id === seriesId);
-  state.series[index] = summary;
-}
-
-function buildScriptLines(series: SeriesDetail, sequenceNumber: number): ScriptLine[] {
-  const topic =
-    SERIES_CATALOG.contentPresets.find((item) => item.key === series.presetKey)?.label ??
-    series.customTopic ??
-    series.title;
-  const voice =
-    SERIES_CATALOG.voices.find((item) => item.key === series.voiceKey)?.label ?? series.voiceKey;
-  const art =
-    SERIES_CATALOG.artStyles.find((item) => item.key === series.artStyleKey)?.label ?? series.artStyleKey;
-  return [
-    {
-      id: `${sequenceNumber}_line_01`,
-      sceneId: `${sequenceNumber}_scene_01`,
-      beat: "Hook",
-      narration: `Here is episode ${sequenceNumber} of ${series.title}: a fresh ${topic.toLowerCase()} angle designed to stop the scroll instantly.`,
-      caption: `${series.title} episode ${sequenceNumber}`,
-      durationSec: 10,
-      status: "draft",
-      visualDirection: `${art} hook frame with a bold opening caption.`,
-      voicePacing: voice,
-    },
-    {
-      id: `${sequenceNumber}_line_02`,
-      sceneId: `${sequenceNumber}_scene_02`,
-      beat: "Context",
-      narration: `Set the scene fast, explain why this moment matters, and keep the tone tight and social-first.`,
-      caption: "Why this matters",
-      durationSec: 12,
-      status: "draft",
-      visualDirection: `${art} mid-shot that anchors the setting and the stakes.`,
-      voicePacing: voice,
-    },
-    {
-      id: `${sequenceNumber}_line_03`,
-      sceneId: `${sequenceNumber}_scene_03`,
-      beat: "Twist",
-      narration: `Add the surprising turn that makes this episode feel different from the rest of the series.`,
-      caption: "The twist",
-      durationSec: 12,
-      status: "draft",
-      visualDirection: `${art} reveal frame with heightened drama and movement.`,
-      voicePacing: voice,
-    },
-    {
-      id: `${sequenceNumber}_line_04`,
-      sceneId: `${sequenceNumber}_scene_04`,
-      beat: "Payoff",
-      narration: `Land the payoff clearly, then close with a memorable final line viewers will want to repeat.`,
-      caption: "Final payoff",
-      durationSec: 14,
-      status: "draft",
-      visualDirection: `${art} closing composition with the main subject centered and cinematic detail.`,
-      voicePacing: voice,
-    },
-  ];
-}
-
-function buildGeneratedScript(series: SeriesDetail, sequenceNumber: number): SeriesScript {
-  const topic =
-    SERIES_CATALOG.contentPresets.find((item) => item.key === series.presetKey)?.label ??
-    "Custom series";
-  const lines = buildScriptLines(series, sequenceNumber);
-  return {
-    id: nextId("series_script"),
-    seriesId: series.id,
-    seriesRunId: "",
+    id: slot.id,
+    seriesId: slot.seriesId,
+    seriesRunId: slot.seriesRunId,
     createdByUserId: "user_1",
-    sequenceNumber,
-    title: `${series.title} Episode ${sequenceNumber}`,
-    summary: `A ${topic.toLowerCase()} script generated for episode ${sequenceNumber}, designed for one-minute short-form storytelling.`,
-    estimatedDurationSeconds: lines.reduce((sum, line) => sum + line.durationSec, 0),
-    readingTimeLabel: "48s narration",
-    totalWords: lines.reduce((sum, line) => sum + line.narration.split(/\s+/).filter(Boolean).length, 0),
-    lines,
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
+    sequenceNumber: slot.sequenceNumber,
+    title: current.title,
+    summary: current.summary,
+    estimatedDurationSeconds: current.estimatedDurationSeconds,
+    readingTimeLabel: current.readingTimeLabel,
+    totalWords: current.totalWords,
+    lines: current.lines,
+    approvalState: current.approvalState,
+    videoStatus: slot.publishedVideo ? "completed" : null,
+    videoPhase: slot.publishedVideo ? "completed" : null,
+    videoCurrentSceneIndex: null,
+    videoCurrentSceneCount: slot.scenes.length || null,
+    videoRenderJobId: slot.publishedVideo?.renderJobId ?? null,
+    videoHiddenProjectId: slot.publishedVideo?.projectId ?? null,
+    currentRevision: current,
+    approvedRevision: approved,
+    publishedRevision: published,
+    publishedVideo: slot.publishedVideo,
+    canApprove: current.approvalState !== "approved",
+    canReject: current.approvalState !== "rejected",
+    canRegenerate: true,
+    canCreateVideo: Boolean(slot.approvedRevisionId && slot.approvedRevisionId !== slot.publishedRevisionId),
+    createdAt: slot.createdAt,
+    updatedAt: slot.updatedAt,
   };
 }
 
-function queueNextStep(seriesId: string, runId: string, stepIndex: number): void {
-  const timeoutId = setTimeout(() => {
-    const run = getRuns(seriesId).find((item) => item.id === runId);
-    if (!run || run.status === "failed" || run.status === "cancelled") {
-      return;
-    }
-    const step = run.steps[stepIndex];
-    if (!step) {
-      run.status = "completed";
-      run.currentStep = null;
-      run.completedAt = nowIso();
-      run.updatedAt = nowIso();
-      syncSeriesSummary(seriesId);
-      return;
-    }
-
-    run.status = "running";
-    run.currentStep = step.stepIndex;
-    step.status = "running";
-    step.startedAt = nowIso();
-    run.updatedAt = nowIso();
-    syncSeriesSummary(seriesId);
-
-    const completeTimeoutId = setTimeout(() => {
-      const currentRun = getRuns(seriesId).find((item) => item.id === runId);
-      if (!currentRun) {
-        return;
-      }
-      const currentSeries = getSeries(seriesId);
-      const currentStepState = currentRun.steps[stepIndex];
-      const script = buildGeneratedScript(currentSeries, currentStepState.sequenceNumber);
-      script.seriesRunId = currentRun.id;
-      const scripts = getScripts(seriesId);
-      scripts.push(script);
-      state.scriptsBySeriesId.set(seriesId, scripts);
-
-      currentStepState.seriesScriptId = script.id;
-      currentStepState.status = "completed";
-      currentStepState.outputPayload = { title: script.title, seriesScriptId: script.id };
-      currentStepState.completedAt = nowIso();
-      currentStepState.updatedAt = nowIso();
-      currentRun.completedScriptCount += 1;
-      currentRun.updatedAt = nowIso();
-
-      if (stepIndex === currentRun.steps.length - 1) {
-        currentRun.status = "completed";
-        currentRun.currentStep = null;
-        currentRun.completedAt = nowIso();
-      } else {
-        const nextStep = currentRun.steps[stepIndex + 1];
-        currentRun.currentStep = nextStep.stepIndex;
-        nextStep.status = "queued";
-      }
-      syncSeriesSummary(seriesId);
-      if (stepIndex < currentRun.steps.length - 1) {
-        queueNextStep(seriesId, runId, stepIndex + 1);
-      }
-    }, 550 + stepIndex * 180);
-
-    state.timeoutsByRunId.set(runId, completeTimeoutId);
-  }, stepIndex === 0 ? 300 : 250);
-
-  state.timeoutsByRunId.set(runId, timeoutId);
+function updateSeriesCounts(seriesId: string) {
+  const series = getSeries(seriesId);
+  const slots = getSlots(seriesId);
+  series.totalScriptCount = slots.length;
+  series.scriptsAwaitingReviewCount = slots.filter((slot) => currentRevision(slot).approvalState === "needs_review").length;
+  series.approvedScriptCount = slots.filter((slot) => Boolean(slot.approvedRevisionId)).length;
+  series.completedVideoCount = slots.filter((slot) => Boolean(slot.publishedVideo)).length;
+  series.primaryCta = slots.length > 0 ? "create_video" : "start_series";
+  series.lastActivityAt = nowIso();
+  series.updatedAt = nowIso();
+  series.latestRunId = runStore.get(seriesId)?.[0]?.id ?? null;
+  series.latestRunStatus = runStore.get(seriesId)?.[0]?.status ?? null;
+  series.activeRunId = null;
+  series.activeRunStatus = null;
+  series.activeVideoRunId = null;
+  series.activeVideoRunStatus = null;
 }
 
-function ensureEditable(seriesId: string): void {
-  if (activeRun(seriesId)) {
-    throw new ApiError(409, "series_locked", "Series cannot be edited while a run is queued or running.");
+function createSeriesRun(seriesId: string, count: number, idempotencyKey: string): SeriesRun {
+  const series = getSeries(seriesId);
+  const createdAt = nowIso();
+  const startingCount = getSlots(seriesId).length;
+  const run: SeriesRun = {
+    id: nextId("series_run"),
+    seriesId,
+    workspaceId: series.workspaceId,
+    createdByUserId: series.ownerUserId,
+    status: "completed",
+    requestedScriptCount: count,
+    completedScriptCount: count,
+    failedScriptCount: 0,
+    idempotencyKey,
+    requestHash: idempotencyKey,
+    payload: {},
+    errorCode: null,
+    errorMessage: null,
+    retryCount: 0,
+    startedAt: createdAt,
+    completedAt: createdAt,
+    cancelledAt: null,
+    createdAt,
+    updatedAt: createdAt,
+    steps: [],
+    currentStep: null,
+  };
+  const slots = getSlots(seriesId);
+  for (let index = 0; index < count; index += 1) {
+    const sequenceNumber = startingCount + index + 1;
+    const slotId = nextId("series_script");
+    const revision = createRevision(series, slotId, sequenceNumber, 1);
+    slots.push({
+      id: slotId,
+      seriesId,
+      seriesRunId: run.id,
+      sequenceNumber,
+      revisions: [revision],
+      currentRevisionId: revision.id,
+      approvedRevisionId: null,
+      publishedRevisionId: null,
+      publishedVideo: null,
+      scenes: [],
+      createdAt,
+      updatedAt: createdAt,
+    });
+    run.steps.push({
+      id: nextId("series_step"),
+      seriesRunId: run.id,
+      seriesId,
+      seriesScriptId: slotId,
+      stepIndex: index + 1,
+      sequenceNumber,
+      status: "completed",
+      inputPayload: { sequenceNumber },
+      outputPayload: { seriesScriptId: slotId },
+      errorCode: null,
+      errorMessage: null,
+      startedAt: createdAt,
+      completedAt: createdAt,
+      createdAt,
+      updatedAt: createdAt,
+    });
   }
+  slotStore.set(seriesId, slots.sort((a, b) => a.sequenceNumber - b.sequenceNumber));
+  runStore.set(seriesId, [run, ...(runStore.get(seriesId) ?? [])]);
+  updateSeriesCounts(seriesId);
+  return run;
+}
+
+function createVideoRun(seriesId: string, seriesScriptIds: string[], idempotencyKey: string): SeriesVideoRun {
+  const series = getSeries(seriesId);
+  const createdAt = nowIso();
+  const eligible = getSlots(seriesId).filter((slot) => {
+    const selected = seriesScriptIds.length === 0 || seriesScriptIds.includes(slot.id);
+    return selected && Boolean(slot.approvedRevisionId) && slot.approvedRevisionId !== slot.publishedRevisionId;
+  });
+  if (eligible.length === 0) {
+    throw new ApiError(400, "no_series_videos_eligible", "No approved scripts are eligible for video creation.");
+  }
+  const run: SeriesVideoRun = {
+    id: nextId("series_video_run"),
+    seriesId,
+    workspaceId: series.workspaceId,
+    createdByUserId: series.ownerUserId,
+    status: "completed",
+    requestedVideoCount: eligible.length,
+    completedVideoCount: eligible.length,
+    failedVideoCount: 0,
+    idempotencyKey,
+    requestHash: idempotencyKey,
+    payload: { seriesScriptIds },
+    errorCode: null,
+    errorMessage: null,
+    retryCount: 0,
+    startedAt: createdAt,
+    completedAt: createdAt,
+    cancelledAt: null,
+    createdAt,
+    updatedAt: createdAt,
+    steps: eligible.map((slot, index) => ({
+      id: nextId("series_video_step"),
+      seriesVideoRunId: "",
+      seriesId,
+      seriesScriptId: slot.id,
+      seriesScriptRevisionId: slot.approvedRevisionId ?? slot.currentRevisionId,
+      stepIndex: index + 1,
+      sequenceNumber: slot.sequenceNumber,
+      status: "completed",
+      phase: "completed",
+      hiddenProjectId: nextId("project_internal"),
+      renderJobId: nextId("render"),
+      lastRenderEventSequence: 6,
+      currentSceneIndex: 2,
+      currentSceneCount: 2,
+      inputPayload: {},
+      outputPayload: {},
+      errorCode: null,
+      errorMessage: null,
+      startedAt: createdAt,
+      completedAt: createdAt,
+      createdAt,
+      updatedAt: createdAt,
+    })),
+    currentStep: null,
+  };
+  run.steps.forEach((step) => {
+    step.seriesVideoRunId = run.id;
+    const slot = eligible.find((item) => item.id === step.seriesScriptId);
+    if (!slot) {
+      return;
+    }
+    const approved = approvedRevision(slot);
+    if (!approved) {
+      return;
+    }
+    approved.videoTitle = `${approved.title} | Viral Short`;
+    approved.videoDescription = `${approved.summary}\n#Series #Shorts #Viral`;
+    slot.publishedRevisionId = approved.id;
+    slot.publishedVideo = {
+      projectId: step.hiddenProjectId,
+      renderJobId: step.renderJobId,
+      exportId: nextId("export"),
+      downloadUrl: `/mock/video/${slot.id}.mp4`,
+      title: approved.videoTitle,
+      description: approved.videoDescription,
+      completedAt: createdAt,
+    };
+    slot.scenes = approved.lines.map((line, index) => ({
+      sceneSegmentId: nextId("scene_segment"),
+      sceneIndex: index + 1,
+      title: `${approved.title} Scene ${index + 1}`,
+      beat: line.beat,
+      narrationText: line.narration,
+      captionText: line.caption,
+      targetDurationSeconds: line.durationSec,
+      visualPrompt: `${series.artStyleKey} ${line.beat}`,
+      startImagePrompt: `Start ${line.beat}`,
+      endImagePrompt: `End ${line.beat}`,
+      startFrameAsset: { assetId: nextId("asset"), downloadUrl: null },
+      endFrameAsset: { assetId: nextId("asset"), downloadUrl: null },
+      narrationAsset: { assetId: nextId("asset"), downloadUrl: "/mock/audio/narration.mp3" },
+      slideAsset: { assetId: nextId("asset"), downloadUrl: "/mock/video/scene.mp4" },
+    }));
+  });
+  videoRunStore.set(seriesId, [run, ...(videoRunStore.get(seriesId) ?? [])]);
+  updateSeriesCounts(seriesId);
+  return run;
 }
 
 export async function mockGetSeriesCatalog(): Promise<SeriesCatalog> {
@@ -432,19 +410,18 @@ export async function mockGetSeriesCatalog(): Promise<SeriesCatalog> {
 }
 
 export async function mockGetSeriesList(): Promise<SeriesSummary[]> {
-  return state.series
-    .map((series) => summarize(series))
-    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
-    .map(clone);
+  seriesStore.forEach((series) => updateSeriesCounts(series.id));
+  return clone(seriesStore);
 }
 
 export async function mockGetSeriesDetail(seriesId: string): Promise<SeriesDetail> {
-  return clone(summarize(getSeries(seriesId)));
+  updateSeriesCounts(seriesId);
+  return clone(getSeries(seriesId));
 }
 
 export async function mockCreateSeries(input: SeriesInput): Promise<SeriesDetail> {
   const createdAt = nowIso();
-  const created: SeriesDetail = {
+  const series: SeriesDetail = {
     id: nextId("series"),
     workspaceId: "workspace_north_star",
     ownerUserId: "user_1",
@@ -462,23 +439,29 @@ export async function mockCreateSeries(input: SeriesInput): Promise<SeriesDetail
     captionStyleKey: input.captionStyleKey,
     effectKeys: [...input.effectKeys],
     totalScriptCount: 0,
+    scriptsAwaitingReviewCount: 0,
+    approvedScriptCount: 0,
+    completedVideoCount: 0,
     latestRunId: null,
     latestRunStatus: null,
     activeRunId: null,
     activeRunStatus: null,
+    activeVideoRunId: null,
+    activeVideoRunStatus: null,
+    primaryCta: "start_series",
     canEdit: true,
     lastActivityAt: createdAt,
     createdAt,
     updatedAt: createdAt,
   };
-  state.series.unshift(created);
-  state.scriptsBySeriesId.set(created.id, []);
-  state.runsBySeriesId.set(created.id, []);
-  return clone(created);
+  seriesStore.unshift(series);
+  slotStore.set(series.id, []);
+  runStore.set(series.id, []);
+  videoRunStore.set(series.id, []);
+  return clone(series);
 }
 
 export async function mockUpdateSeries(seriesId: string, input: SeriesInput): Promise<SeriesDetail> {
-  ensureEditable(seriesId);
   const series = getSeries(seriesId);
   Object.assign(series, {
     title: input.title,
@@ -496,86 +479,126 @@ export async function mockUpdateSeries(seriesId: string, input: SeriesInput): Pr
     effectKeys: [...input.effectKeys],
     updatedAt: nowIso(),
   });
-  syncSeriesSummary(seriesId);
-  return clone(getSeries(seriesId));
+  updateSeriesCounts(seriesId);
+  return clone(series);
 }
 
 export async function mockGetSeriesScripts(seriesId: string): Promise<SeriesScript[]> {
-  return getScripts(seriesId)
-    .slice()
-    .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
-    .map(clone);
+  updateSeriesCounts(seriesId);
+  return clone(getSlots(seriesId).map(toScript));
 }
 
-export async function mockStartSeriesRun(
-  seriesId: string,
-  requestedScriptCount: number,
-  idempotencyKey: string,
-): Promise<SeriesRun> {
-  const existing = getRuns(seriesId).find((run) => run.idempotencyKey === idempotencyKey);
+export async function mockGetSeriesScriptDetail(seriesId: string, scriptId: string): Promise<SeriesScriptDetail> {
+  const slot = getSlots(seriesId).find((item) => item.id === scriptId);
+  if (!slot) {
+    throw new ApiError(404, "series_script_not_found", "Series script not found.");
+  }
+  return clone({
+    script: toScript(slot),
+    revisions: slot.revisions.slice().sort((a, b) => b.revisionNumber - a.revisionNumber),
+    scenes: slot.scenes,
+    latestRenderJobId: slot.publishedVideo?.renderJobId ?? null,
+    latestRenderStatus: slot.publishedVideo ? "completed" : null,
+    latestScenePlanId: slot.scenes[0]?.sceneSegmentId ?? null,
+  });
+}
+
+export async function mockApproveSeriesScript(seriesId: string, scriptId: string): Promise<SeriesScript> {
+  const slot = getSlots(seriesId).find((item) => item.id === scriptId);
+  if (!slot) {
+    throw new ApiError(404, "series_script_not_found", "Series script not found.");
+  }
+  const revision = currentRevision(slot);
+  revision.approvalState = "approved";
+  slot.approvedRevisionId = revision.id;
+  slot.updatedAt = nowIso();
+  updateSeriesCounts(seriesId);
+  return clone(toScript(slot));
+}
+
+export async function mockRejectSeriesScript(seriesId: string, scriptId: string): Promise<SeriesScript> {
+  const slot = getSlots(seriesId).find((item) => item.id === scriptId);
+  if (!slot) {
+    throw new ApiError(404, "series_script_not_found", "Series script not found.");
+  }
+  const revision = currentRevision(slot);
+  revision.approvalState = "rejected";
+  if (slot.approvedRevisionId === revision.id) {
+    slot.approvedRevisionId = null;
+  }
+  slot.updatedAt = nowIso();
+  updateSeriesCounts(seriesId);
+  return clone(toScript(slot));
+}
+
+export async function mockRegenerateSeriesScript(seriesId: string, scriptId: string, idempotencyKey: string): Promise<SeriesRun> {
+  const existing = runStore.get(seriesId)?.find((item) => item.idempotencyKey === idempotencyKey);
   if (existing) {
     return clone(existing);
   }
-  if (activeRun(seriesId)) {
-    throw new ApiError(409, "series_run_active", "This series already has a queued or running generation run.");
+  const slot = getSlots(seriesId).find((item) => item.id === scriptId);
+  if (!slot) {
+    throw new ApiError(404, "series_script_not_found", "Series script not found.");
   }
   const series = getSeries(seriesId);
-  const startSequence = getScripts(seriesId).length;
-  const createdAt = nowIso();
-  const run: SeriesRun = {
-    id: nextId("series_run"),
-    seriesId,
-    workspaceId: series.workspaceId,
-    createdByUserId: series.ownerUserId,
-    status: "queued",
-    requestedScriptCount,
-    completedScriptCount: 0,
-    failedScriptCount: 0,
-    idempotencyKey,
-    requestHash: idempotencyKey,
-    payload: {},
-    errorCode: null,
-    errorMessage: null,
-    retryCount: 0,
-    startedAt: null,
-    completedAt: null,
-    cancelledAt: null,
-    createdAt,
-    updatedAt: createdAt,
-    steps: Array.from({ length: requestedScriptCount }, (_, index) => ({
+  const revision = createRevision(series, slot.id, slot.sequenceNumber, slot.revisions.length + 1);
+  slot.revisions.push(revision);
+  slot.currentRevisionId = revision.id;
+  slot.updatedAt = nowIso();
+  const run = createSeriesRun(seriesId, 0, idempotencyKey);
+  run.requestedScriptCount = 1;
+  run.completedScriptCount = 1;
+  run.steps = [
+    {
       id: nextId("series_step"),
-      seriesRunId: "",
+      seriesRunId: run.id,
       seriesId,
-      seriesScriptId: null,
-      stepIndex: index + 1,
-      sequenceNumber: startSequence + index + 1,
-      status: "queued",
-      inputPayload: { sequenceNumber: startSequence + index + 1 },
-      outputPayload: null,
+      seriesScriptId: scriptId,
+      stepIndex: 1,
+      sequenceNumber: slot.sequenceNumber,
+      status: "completed",
+      inputPayload: { mode: "regenerate" },
+      outputPayload: { seriesScriptId: scriptId },
       errorCode: null,
       errorMessage: null,
-      startedAt: null,
-      completedAt: null,
-      createdAt,
-      updatedAt: createdAt,
-    })),
-    currentStep: 1,
-  };
-  run.steps.forEach((step) => {
-    step.seriesRunId = run.id;
-  });
-  const runs = getRuns(seriesId);
-  runs.unshift(run);
-  state.runsBySeriesId.set(seriesId, runs);
-  syncSeriesSummary(seriesId);
-  queueNextStep(seriesId, run.id, 0);
+      startedAt: run.createdAt,
+      completedAt: run.createdAt,
+      createdAt: run.createdAt,
+      updatedAt: run.createdAt,
+    },
+  ];
+  updateSeriesCounts(seriesId);
   return clone(run);
 }
 
+export async function mockStartSeriesRun(seriesId: string, requestedScriptCount: number, idempotencyKey: string): Promise<SeriesRun> {
+  const existing = runStore.get(seriesId)?.find((item) => item.idempotencyKey === idempotencyKey);
+  if (existing) {
+    return clone(existing);
+  }
+  return clone(createSeriesRun(seriesId, requestedScriptCount, idempotencyKey));
+}
+
 export async function mockGetSeriesRun(seriesId: string, runId: string): Promise<SeriesRun> {
-  const run = getRuns(seriesId).find((item) => item.id === runId);
+  const run = runStore.get(seriesId)?.find((item) => item.id === runId);
   if (!run) {
     throw new ApiError(404, "series_run_not_found", "Series run not found.");
+  }
+  return clone(run);
+}
+
+export async function mockStartSeriesVideoRun(seriesId: string, seriesScriptIds: string[], idempotencyKey: string): Promise<SeriesVideoRun> {
+  const existing = videoRunStore.get(seriesId)?.find((item) => item.idempotencyKey === idempotencyKey);
+  if (existing) {
+    return clone(existing);
+  }
+  return clone(createVideoRun(seriesId, seriesScriptIds, idempotencyKey));
+}
+
+export async function mockGetSeriesVideoRun(seriesId: string, runId: string): Promise<SeriesVideoRun> {
+  const run = videoRunStore.get(seriesId)?.find((item) => item.id === runId);
+  if (!run) {
+    throw new ApiError(404, "series_video_run_not_found", "Series video run not found.");
   }
   return clone(run);
 }

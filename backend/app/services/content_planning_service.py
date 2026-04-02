@@ -255,8 +255,10 @@ class ContentPlanningService(GenerationService):
         auth: AuthContext,
         project_id: str,
         script_version_id: str,
+        *,
+        include_internal: bool = False,
     ) -> dict[str, object]:
-        project = self._get_project(project_id, auth.workspace_id)
+        project = self._get_project(project_id, auth.workspace_id, include_internal=include_internal)
         require_workspace_review(
             auth,
             message="Only reviewers, members, or admins can approve scripts.",
@@ -316,11 +318,12 @@ class ContentPlanningService(GenerationService):
         project_id: str,
         *,
         idempotency_key: str,
+        include_internal: bool = False,
     ) -> dict[str, object]:
         if not idempotency_key:
             raise ApiError(400, "missing_idempotency_key", "Idempotency-Key header is required.")
 
-        project = self._get_project(project_id, auth.workspace_id)
+        project = self._get_project(project_id, auth.workspace_id, include_internal=include_internal)
         self._assert_mutation_rights(project, auth)
         if not project.active_brief_id:
             raise ApiError(400, "missing_brief", "A saved brief is required before scene planning.")
@@ -404,11 +407,12 @@ class ContentPlanningService(GenerationService):
         scene_plan_id: str,
         *,
         idempotency_key: str,
+        include_internal: bool = False,
     ) -> dict[str, object]:
         if not idempotency_key:
             raise ApiError(400, "missing_idempotency_key", "Idempotency-Key header is required.")
 
-        project = self._get_project(project_id, auth.workspace_id)
+        project = self._get_project(project_id, auth.workspace_id, include_internal=include_internal)
         self._assert_mutation_rights(project, auth)
         scene_plan = self._get_scene_plan(project, scene_plan_id)
         if scene_plan.approval_state == "approved":
@@ -613,8 +617,10 @@ class ContentPlanningService(GenerationService):
         auth: AuthContext,
         project_id: str,
         scene_plan_id: str,
+        *,
+        include_internal: bool = False,
     ) -> dict[str, object]:
-        project = self._get_project(project_id, auth.workspace_id)
+        project = self._get_project(project_id, auth.workspace_id, include_internal=include_internal)
         require_workspace_review(
             auth,
             message="Only reviewers, members, or admins can approve scene plans.",

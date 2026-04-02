@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, true, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext
@@ -51,12 +51,13 @@ class GenerationService:
         self.db = db
         self.settings = settings
 
-    def _get_project(self, project_id: str, workspace_id: str) -> Project:
+    def _get_project(self, project_id: str, workspace_id: str, *, include_internal: bool = False) -> Project:
         project = self.db.scalar(
             select(Project).where(
                 Project.id == UUID(project_id),
                 Project.workspace_id == UUID(workspace_id),
                 Project.deleted_at.is_(None),
+                (true() if include_internal else Project.is_internal.is_(False)),
             )
         )
         if not project:

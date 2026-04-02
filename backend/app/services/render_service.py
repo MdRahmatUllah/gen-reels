@@ -833,10 +833,123 @@ class RenderService(GenerationService):
             return build_speech_provider(self.settings), self._fallback_hosted_decision("speech")
         return RoutingService(self.db, self.settings).build_speech_provider_for_workspace(workspace_id)
 
+    def _synthesize_narration_with_fallback(
+        self,
+        *,
+        speech_provider: SpeechProvider,
+        text: str,
+        scene_index: int,
+        voice_preset: dict[str, object] | None,
+        provider_name: str,
+        provider_model: str,
+    ) -> tuple[GeneratedMedia, AdapterError | None]:
+        try:
+            return (
+                speech_provider.synthesize(
+                    text=text,
+                    scene_index=scene_index,
+                    voice_preset=voice_preset,
+                ),
+                None,
+            )
+        except AdapterError as error:
+            if error.category not in {"configuration", "deterministic_input"}:
+                raise
+            generated = StubSpeechProvider(
+                provider_name=f"{provider_name}_fallback",
+                provider_model="stub-speech-v1",
+            ).synthesize(
+                text=text,
+                scene_index=scene_index,
+                voice_preset=voice_preset,
+            )
+            generated.metadata = {
+                **generated.metadata,
+                "fallback_mode": "stub_speech_due_to_provider_error",
+                "fallback_error_code": error.code,
+                "fallback_error_message": error.message,
+                "fallback_provider_name": provider_name,
+                "fallback_provider_model": provider_model,
+            }
+            return generated, error
+
     def _queue_render_resume(self, render_job_id: UUID) -> None:
         from app.workers.tasks import execute_render_job_task
 
         execute_render_job_task.delay(str(render_job_id))
+
+    def _recover_orphaned_render_job_if_needed(self, render_job: RenderJob) -> bool:
+        if render_job.status not in {JobStatus.review, JobStatus.running}:
+            return False
+
+        review_steps = self.db.scalars(
+            select(RenderStep).where(
+                RenderStep.render_job_id == render_job.id,
+                RenderStep.step_kind == StepKind.frame_pair_generation,
+                RenderStep.status == JobStatus.review,
+                RenderStep.is_stale.is_(False),
+            )
+        ).all()
+        if render_job.status == JobStatus.review and review_steps:
+            return False
+
+        active_step = self.db.scalar(
+            select(RenderStep)
+            .where(
+                RenderStep.render_job_id == render_job.id,
+                RenderStep.status.in_([JobStatus.running, JobStatus.queued]),
+            )
+            .order_by(RenderStep.step_index.asc())
+        )
+        if not active_step:
+            return False
+
+        recovery_grace = timedelta(seconds=30) if render_job.status == JobStatus.review else timedelta(minutes=5)
+        recovery_grace_threshold = datetime.now(timezone.utc) - recovery_grace
+        last_touch = active_step.last_checkpoint_at or active_step.started_at or active_step.updated_at
+        if last_touch and last_touch.tzinfo is None:
+            last_touch = last_touch.replace(tzinfo=timezone.utc)
+        if last_touch and last_touch > recovery_grace_threshold:
+            return False
+
+        pending_provider_run = self._latest_provider_run_for_step(active_step.id)
+        if pending_provider_run and pending_provider_run.status in {
+            ProviderRunStatus.queued,
+            ProviderRunStatus.running,
+        }:
+            if render_job.status != JobStatus.running:
+                render_job.status = JobStatus.running
+                render_job.error_code = None
+                render_job.error_message = None
+                self.db.commit()
+            return False
+
+        if active_step.status == JobStatus.running:
+            active_step.status = JobStatus.queued
+            active_step.started_at = None
+            active_step.completed_at = None
+            active_step.error_code = None
+            active_step.error_message = None
+            self._set_step_checkpoint(
+                active_step,
+                {"status": "queued", "reason": "orphaned_render_recovery"},
+            )
+
+        render_job.status = JobStatus.queued
+        render_job.completed_at = None
+        render_job.error_code = None
+        render_job.error_message = None
+        self._append_render_event(
+            render_job=render_job,
+            event_type="render.recovery_scheduled",
+            target_type="render_step",
+            target_id=str(active_step.id),
+            render_step_id=active_step.id,
+            payload={"reason": "orphaned_render_recovery"},
+        )
+        self.db.commit()
+        self._queue_render_resume(render_job.id)
+        return True
 
     def _complete_local_provider_run(
         self,
@@ -1353,10 +1466,11 @@ class RenderService(GenerationService):
         payload: RenderCreateRequest,
         *,
         idempotency_key: str,
+        include_internal: bool = False,
     ) -> dict[str, object]:
         if not idempotency_key:
             raise ApiError(400, "missing_idempotency_key", "Idempotency-Key header is required.")
-        project = self._get_project(project_id, auth.workspace_id)
+        project = self._get_project(project_id, auth.workspace_id, include_internal=include_internal)
         self._assert_mutation_rights(project, auth)
         scene_plan = self._get_scene_plan_for_render(project, payload.scene_plan_id)
         script = self.db.get(ScriptVersion, scene_plan.based_on_script_version_id)
@@ -1476,9 +1590,25 @@ class RenderService(GenerationService):
         execute_render_job_task.delay(str(render_job.id))
         return {"job_id": render_job.id, "job_status": render_job.status.value, "project_id": project.id}
 
+    def auto_approve_frame_pairs(self, auth: AuthContext, render_job_id: str) -> dict[str, object]:
+        render_job = self._get_render_job_for_auth(auth, render_job_id)
+        self._recover_orphaned_render_job_if_needed(render_job)
+        render_job = self._fresh_render_job(str(render_job.id))
+        review_steps = self.db.scalars(
+            select(RenderStep).where(
+                RenderStep.render_job_id == render_job.id,
+                RenderStep.step_kind == StepKind.frame_pair_generation,
+                RenderStep.status == JobStatus.review,
+            )
+        ).all()
+        for step in review_steps:
+            self.approve_frame_pair(auth, str(render_job.id), str(step.id))
+        return self._render_detail_dict(self._fresh_render_job(str(render_job.id)))
+
     def get_render_detail(self, auth: AuthContext, render_job_id: str) -> dict[str, object]:
         render_job = self._get_render_job_for_auth(auth, render_job_id)
-        return self._render_detail_dict(render_job)
+        self._recover_orphaned_render_job_if_needed(render_job)
+        return self._render_detail_dict(self._fresh_render_job(str(render_job.id)))
 
     def list_renders(self, auth: AuthContext, project_id: str) -> list[dict[str, object]]:
         project = self._get_project(project_id, auth.workspace_id)
@@ -1592,10 +1722,13 @@ class RenderService(GenerationService):
         )
         started = time.perf_counter()
         try:
-            generated = speech_provider.synthesize(
+            generated, _fallback_error = self._synthesize_narration_with_fallback(
+                speech_provider=speech_provider,
                 text=segment.narration_text,
                 scene_index=segment.scene_index,
                 voice_preset=voice_preset or None,
+                provider_name=routing_decision.provider_name,
+                provider_model=routing_decision.provider_model,
             )
             narration_probe = probe_media_bytes(
                 self.settings,
@@ -1638,7 +1771,11 @@ class RenderService(GenerationService):
         self._finish_provider_run(
             provider_run,
             started_at=started,
-            response_payload={"asset_id": str(narration_asset.id)},
+            response_payload={
+                "asset_id": str(narration_asset.id),
+                "fallback_mode": generated.metadata.get("fallback_mode"),
+                "fallback_error_code": generated.metadata.get("fallback_error_code"),
+            },
         )
         self._record_prompt_history(
             render_job=render_job,
@@ -1650,7 +1787,14 @@ class RenderService(GenerationService):
             prompt_text=segment.narration_text,
             metadata_payload={"scene_index": segment.scene_index},
         )
-        self._complete_step(step, output_payload={"asset_id": str(narration_asset.id)})
+        self._complete_step(
+            step,
+            output_payload={
+                "asset_id": str(narration_asset.id),
+                "fallback_mode": generated.metadata.get("fallback_mode"),
+                "fallback_error_code": generated.metadata.get("fallback_error_code"),
+            },
+        )
         segment.actual_voice_duration_seconds = max(1, int((narration_asset.duration_ms or 0) / 1000))
         self.db.commit()
         return {
@@ -1658,6 +1802,7 @@ class RenderService(GenerationService):
             "download_url": self._asset_download_url(narration_asset),
             "duration_ms": narration_asset.duration_ms,
             "voice": voice or "",
+            "fallback_mode": generated.metadata.get("fallback_mode"),
         }
 
     def list_render_events(
@@ -1668,6 +1813,8 @@ class RenderService(GenerationService):
         after_sequence: int | None = None,
     ) -> list[dict[str, object]]:
         render_job = self._get_render_job_for_auth(auth, render_job_id)
+        self._recover_orphaned_render_job_if_needed(render_job)
+        render_job = self._fresh_render_job(str(render_job.id))
         query = (
             select(RenderEvent)
             .where(RenderEvent.render_job_id == render_job.id)
@@ -2748,10 +2895,13 @@ class RenderService(GenerationService):
         started = time.perf_counter()
         try:
             assert resolved_speech_provider is not None
-            generated = resolved_speech_provider.synthesize(
+            generated, _fallback_error = self._synthesize_narration_with_fallback(
+                speech_provider=resolved_speech_provider,
                 text=segment.narration_text,
                 scene_index=segment.scene_index,
                 voice_preset=voice_preset_snapshot,
+                provider_name=routing_decision.provider_name,
+                provider_model=routing_decision.provider_model,
             )
             narration_probe = probe_media_bytes(
                 self.settings,
@@ -2798,7 +2948,11 @@ class RenderService(GenerationService):
         self._finish_provider_run(
             provider_run,
             started_at=started,
-            response_payload={"asset_id": str(narration_asset.id)},
+            response_payload={
+                "asset_id": str(narration_asset.id),
+                "fallback_mode": generated.metadata.get("fallback_mode"),
+                "fallback_error_code": generated.metadata.get("fallback_error_code"),
+            },
         )
         self._record_prompt_history(
             render_job=render_job,
@@ -2810,7 +2964,14 @@ class RenderService(GenerationService):
             prompt_text=segment.narration_text,
             metadata_payload={"scene_index": segment.scene_index},
         )
-        self._complete_step(step, output_payload={"asset_id": str(narration_asset.id)})
+        self._complete_step(
+            step,
+            output_payload={
+                "asset_id": str(narration_asset.id),
+                "fallback_mode": generated.metadata.get("fallback_mode"),
+                "fallback_error_code": generated.metadata.get("fallback_error_code"),
+            },
+        )
         segment.actual_voice_duration_seconds = max(1, int((narration_asset.duration_ms or 0) / 1000))
         return narration_asset
 

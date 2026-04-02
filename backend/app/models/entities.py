@@ -281,6 +281,7 @@ class Project(Base, TimestampMixin):
     active_scene_plan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scene_plans.id"))
     default_visual_preset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("visual_presets.id"))
     default_voice_preset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("voice_presets.id"))
+    series_script_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("series_scripts.id"), unique=True)
     title: Mapped[str] = mapped_column(sa.String(255))
     client: Mapped[str | None] = mapped_column(sa.String(255))
     aspect_ratio: Mapped[str] = mapped_column(sa.String(20), default="9:16", nullable=False)
@@ -290,6 +291,7 @@ class Project(Base, TimestampMixin):
     )
     export_profile: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     audio_mix_profile: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    is_internal: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
     stage: Mapped[ProjectStage] = mapped_column(
         sa.Enum(ProjectStage), default=ProjectStage.brief, nullable=False
     )
@@ -499,12 +501,42 @@ class SeriesScript(Base, TimestampMixin):
     series_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series_runs.id"), nullable=False, index=True)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     sequence_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    current_revision_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("series_script_revisions.id"))
+    approved_revision_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("series_script_revisions.id"))
+    published_revision_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("series_script_revisions.id"))
+    published_project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
+    published_render_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_jobs.id"))
+    published_export_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("exports.id"))
     title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     summary: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
     estimated_duration_seconds: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
     reading_time_label: Mapped[str] = mapped_column(sa.String(64), default="0s draft narration", nullable=False)
     total_words: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
     lines: Mapped[list[dict[str, object]]] = mapped_column(json_type(), default=list, nullable=False)
+
+
+class SeriesScriptRevision(Base, TimestampMixin):
+    __tablename__ = "series_script_revisions"
+    __table_args__ = (
+        UniqueConstraint("series_script_id", "revision_number", name="uq_series_script_revision_number"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    series_script_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series_scripts.id"), nullable=False, index=True)
+    series_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    source_series_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("series_runs.id"), index=True)
+    revision_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    approval_state: Mapped[str] = mapped_column(sa.String(32), default="needs_review", nullable=False)
+    moderation_summary: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    estimated_duration_seconds: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    reading_time_label: Mapped[str] = mapped_column(sa.String(64), default="0s draft narration", nullable=False)
+    total_words: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    lines: Mapped[list[dict[str, object]]] = mapped_column(json_type(), default=list, nullable=False)
+    video_title: Mapped[str] = mapped_column(sa.String(255), default="", nullable=False)
+    video_description: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
 
 
 class SeriesRunStep(Base, TimestampMixin):
@@ -518,6 +550,68 @@ class SeriesRunStep(Base, TimestampMixin):
     step_index: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     sequence_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     status: Mapped[JobStatus] = mapped_column(sa.Enum(JobStatus), default=JobStatus.queued, nullable=False)
+    input_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    output_payload: Mapped[dict[str, object] | None] = mapped_column(json_type())
+    error_code: Mapped[str | None] = mapped_column(sa.String(64))
+    error_message: Mapped[str | None] = mapped_column(sa.Text)
+    started_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class SeriesVideoRun(Base, TimestampMixin):
+    __tablename__ = "series_video_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "created_by_user_id",
+            "series_id",
+            "idempotency_key",
+            name="uq_series_video_run_idempotency",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    series_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series.id"), nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[JobStatus] = mapped_column(sa.Enum(JobStatus), default=JobStatus.queued, nullable=False)
+    requested_video_count: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    completed_video_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    failed_video_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(sa.String(64))
+    error_message: Mapped[str | None] = mapped_column(sa.Text)
+    retry_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class SeriesVideoRunStep(Base, TimestampMixin):
+    __tablename__ = "series_video_run_steps"
+    __table_args__ = (
+        UniqueConstraint("series_video_run_id", "step_index", name="uq_series_video_run_step_index"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    series_video_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("series_video_runs.id"), nullable=False, index=True
+    )
+    series_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series.id"), nullable=False, index=True)
+    series_script_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series_scripts.id"), nullable=False, index=True)
+    series_script_revision_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("series_script_revisions.id"), nullable=False, index=True
+    )
+    step_index: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    sequence_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    status: Mapped[JobStatus] = mapped_column(sa.Enum(JobStatus), default=JobStatus.queued, nullable=False)
+    phase: Mapped[str] = mapped_column(sa.String(64), default="queued", nullable=False)
+    hidden_project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
+    render_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("render_jobs.id"))
+    last_render_event_sequence: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    current_scene_index: Mapped[int | None] = mapped_column(sa.Integer)
+    current_scene_count: Mapped[int | None] = mapped_column(sa.Integer)
     input_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     output_payload: Mapped[dict[str, object] | None] = mapped_column(json_type())
     error_code: Mapped[str | None] = mapped_column(sa.String(64))

@@ -4,12 +4,18 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { EmptyState, MetricCard, PageFrame, ProgressBar, SectionCard, StatusBadge } from "../../components/ui";
 import { relativeTime, titleFromStatus } from "../../lib/format";
 import {
+  useApproveSeriesScript,
   useCreateSeries,
+  useRegenerateSeriesScript,
+  useRejectSeriesScript,
   useSeriesCatalog,
   useSeriesDetail,
   useSeriesList,
   useSeriesRun,
+  useSeriesScriptDetail,
   useSeriesScripts,
+  useSeriesVideoRun,
+  useStartSeriesVideoRun,
   useStartSeriesRun,
   useUpdateSeries,
 } from "../../hooks/use-series";
@@ -20,6 +26,8 @@ import type {
   SeriesInput,
   SeriesRun,
   SeriesScript,
+  SeriesScriptDetail,
+  SeriesVideoRun,
 } from "../../types/domain";
 
 const SERIES_STEPS = [
@@ -32,6 +40,16 @@ const SERIES_STEPS = [
 ];
 
 type SeriesTab = "scripts" | "videos";
+
+function humanizeKey(value: string | null | undefined): string {
+  if (!value) {
+    return "Unknown";
+  }
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 function buildDefaultInput(catalog: SeriesCatalog): SeriesInput {
   return {
@@ -182,15 +200,153 @@ function SeriesRunPanel({ run }: { run: SeriesRun }) {
   );
 }
 
+function SeriesVideoRunPanel({ run }: { run: SeriesVideoRun }) {
+  const progress = run.requestedVideoCount ? (run.completedVideoCount / run.requestedVideoCount) * 100 : 0;
+  return (
+    <SectionCard title="Video Batch" subtitle="Approved scripts move through scene generation, voiceover, and render automatically.">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <StatusBadge status={run.status} />
+          {run.errorMessage ? <span className="text-sm text-error">{run.errorMessage}</span> : null}
+        </div>
+        <p className="text-sm font-semibold text-primary">
+          {run.completedVideoCount} / {run.requestedVideoCount} completed
+        </p>
+      </div>
+      <ProgressBar
+        value={progress}
+        label="Videos completed"
+        detail={run.currentStep ? `Currently processing video ${run.currentStep}.` : "Waiting for the next update."}
+      />
+      <div className="grid gap-3">
+        {run.steps.map((step) => (
+          <div key={step.id} className="rounded-xl border border-border-card bg-card px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-muted">Script {step.sequenceNumber}</p>
+                <strong className="text-sm text-primary">{humanizeKey(step.phase)}</strong>
+              </div>
+              <StatusBadge status={step.status} />
+            </div>
+            {step.currentSceneCount ? (
+              <p className="mt-2 text-sm text-secondary">
+                Scene {step.currentSceneIndex ?? 0} / {step.currentSceneCount}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+function SeriesOutlinePreview({
+  detail,
+  loading,
+}: {
+  detail: SeriesScriptDetail | undefined;
+  loading: boolean;
+}) {
+  if (loading) {
+    return <div className="rounded-xl border border-border-card bg-glass p-4 text-sm text-secondary">Loading outline…</div>;
+  }
+  if (!detail) {
+    return null;
+  }
+  return (
+    <div className="mt-5 grid gap-4">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-border-card bg-glass p-4">
+          <p className="text-xs uppercase tracking-widest text-muted">Current revision</p>
+          <strong className="mt-1 block text-sm text-primary">
+            Rev {detail.script.currentRevision?.revisionNumber ?? detail.script.approvedRevision?.revisionNumber ?? 1}
+          </strong>
+        </div>
+        <div className="rounded-xl border border-border-card bg-glass p-4">
+          <p className="text-xs uppercase tracking-widest text-muted">Render status</p>
+          <strong className="mt-1 block text-sm text-primary">
+            {detail.latestRenderStatus ? humanizeKey(detail.latestRenderStatus) : "Not started"}
+          </strong>
+        </div>
+        <div className="rounded-xl border border-border-card bg-glass p-4">
+          <p className="text-xs uppercase tracking-widest text-muted">Video metadata</p>
+          <strong className="mt-1 block text-sm text-primary">
+            {detail.script.publishedRevision?.videoTitle || detail.script.approvedRevision?.videoTitle || "Pending"}
+          </strong>
+        </div>
+      </div>
+      {detail.script.publishedVideo ? (
+        <div className="rounded-xl border border-border-card bg-glass p-4">
+          <p className="text-xs uppercase tracking-widest text-muted">Completed video</p>
+          <strong className="mt-1 block text-sm text-primary">{detail.script.publishedVideo.title}</strong>
+          <p className="mt-2 text-sm leading-6 text-secondary whitespace-pre-line">{detail.script.publishedVideo.description}</p>
+          {detail.script.publishedVideo.downloadUrl ? (
+            <video className="mt-4 w-full rounded-xl border border-border-card" controls src={detail.script.publishedVideo.downloadUrl} />
+          ) : null}
+        </div>
+      ) : null}
+      {detail.scenes.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border-card bg-glass p-4 text-sm text-secondary">
+          Scene outline will appear here once the video pipeline starts generating scenes.
+        </div>
+      ) : (
+        detail.scenes.map((scene) => (
+          <div key={scene.sceneSegmentId} className="rounded-xl border border-border-card bg-glass p-4">
+            <div className="flex items-center justify-between gap-3">
+              <strong className="text-sm text-primary">
+                Scene {scene.sceneIndex}. {scene.title}
+              </strong>
+              <span className="text-xs text-muted">{scene.targetDurationSeconds}s</span>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-secondary">{scene.narrationText}</p>
+            <p className="mt-2 text-xs uppercase tracking-widest text-muted">{scene.captionText}</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
+              {scene.startFrameAsset ? <span className="rounded-full bg-card px-3 py-1">Start frame ready</span> : null}
+              {scene.endFrameAsset ? <span className="rounded-full bg-card px-3 py-1">End frame ready</span> : null}
+              {scene.narrationAsset ? <span className="rounded-full bg-card px-3 py-1">Voiceover ready</span> : null}
+              {scene.slideAsset ? <span className="rounded-full bg-card px-3 py-1">Scene clip ready</span> : null}
+            </div>
+          </div>
+        ))
+      )}
+      {detail.revisions.length > 0 ? (
+        <div className="rounded-xl border border-border-card bg-glass p-4">
+          <p className="text-xs uppercase tracking-widest text-muted">Revision history</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {detail.revisions.map((revision) => (
+              <span key={revision.id} className="rounded-full bg-card px-3 py-1 text-xs text-secondary">
+                Rev {revision.revisionNumber} • {humanizeKey(revision.approvalState)}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SeriesScriptCard({
+  seriesId,
   script,
   expanded,
+  actionsDisabled,
   onToggle,
+  onApprove,
+  onReject,
+  onRegenerate,
+  onCreateVideo,
 }: {
+  seriesId: string;
   script: SeriesScript;
   expanded: boolean;
+  actionsDisabled: boolean;
   onToggle: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+  onRegenerate: () => void;
+  onCreateVideo: () => void;
 }) {
+  const detailQuery = useSeriesScriptDetail(seriesId, script.id, expanded);
   return (
     <section className="rounded-2xl border border-border-card bg-card p-5 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -199,10 +355,10 @@ function SeriesScriptCard({
           <h3 className="mt-1 font-heading text-xl font-bold text-primary">{script.title}</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">{script.summary}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-glass px-3 py-1 text-xs font-medium text-muted">
-            {script.readingTimeLabel}
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-glass px-3 py-1 text-xs font-medium text-muted">{script.readingTimeLabel}</span>
+          <StatusBadge status={script.approvalState === "needs_review" ? "review" : script.approvalState === "approved" ? "approved" : script.approvalState === "rejected" ? "failed" : "completed"} />
+          {script.videoStatus ? <StatusBadge status={script.videoStatus} /> : null}
           <button type="button" className="btn-ghost !min-h-[2.2rem]" onClick={onToggle}>
             {expanded ? "Hide outline" : "Preview outline"}
           </button>
@@ -212,23 +368,40 @@ function SeriesScriptCard({
         <span className="rounded-full bg-glass px-3 py-1">{script.totalWords} words</span>
         <span className="rounded-full bg-glass px-3 py-1">{script.estimatedDurationSeconds}s estimated</span>
         <span className="rounded-full bg-glass px-3 py-1">{relativeTime(script.createdAt)}</span>
+        <span className="rounded-full bg-glass px-3 py-1">Rev {script.currentRevision?.revisionNumber ?? 1}</span>
+        {script.videoPhase ? <span className="rounded-full bg-glass px-3 py-1">{humanizeKey(script.videoPhase)}</span> : null}
       </div>
-      {expanded ? (
-        <div className="mt-5 grid gap-3">
-          {script.lines.map((line, index) => (
-            <div key={line.id} className="rounded-xl border border-border-card bg-glass p-4">
-              <div className="flex items-center justify-between gap-3">
-                <strong className="text-sm text-primary">
-                  {index + 1}. {line.beat}
-                </strong>
-                <span className="text-xs text-muted">{line.durationSec}s</span>
-              </div>
-              <p className="mt-2 text-sm leading-6 text-secondary">{line.narration}</p>
-              <p className="mt-2 text-xs uppercase tracking-widest text-muted">{line.caption}</p>
-            </div>
-          ))}
+      {script.videoCurrentSceneCount ? (
+        <div className="mt-4">
+          <ProgressBar
+            value={((script.videoCurrentSceneIndex ?? 0) / script.videoCurrentSceneCount) * 100}
+            label="Video generation"
+            detail={`Scene ${script.videoCurrentSceneIndex ?? 0} of ${script.videoCurrentSceneCount}`}
+          />
         </div>
       ) : null}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" className="btn-ghost" disabled={!script.canApprove || actionsDisabled} onClick={onApprove}>
+          Approve
+        </button>
+        <button type="button" className="btn-ghost" disabled={!script.canReject || actionsDisabled} onClick={onReject}>
+          Reject
+        </button>
+        <button type="button" className="btn-ghost" disabled={!script.canRegenerate || actionsDisabled} onClick={onRegenerate}>
+          Re-generate
+        </button>
+        <button type="button" className="btn-primary" disabled={!script.canCreateVideo || actionsDisabled} onClick={onCreateVideo}>
+          Create video
+        </button>
+      </div>
+      {script.publishedRevision?.videoTitle ? (
+        <div className="mt-4 rounded-xl border border-border-card bg-glass p-4">
+          <p className="text-xs uppercase tracking-widest text-muted">Viral metadata</p>
+          <strong className="mt-1 block text-sm text-primary">{script.publishedRevision.videoTitle}</strong>
+          <p className="mt-2 text-sm leading-6 text-secondary whitespace-pre-line">{script.publishedRevision.videoDescription}</p>
+        </div>
+      ) : null}
+      {expanded ? <SeriesOutlinePreview detail={detailQuery.data} loading={detailQuery.isLoading} /> : null}
     </section>
   );
 }
@@ -293,6 +466,66 @@ function SeriesStartDialog({
   );
 }
 
+function SeriesCreateVideoDialog({
+  open,
+  scripts,
+  selectedScriptIds,
+  onSelectionChange,
+  pending,
+  onClose,
+  onStart,
+}: {
+  open: boolean;
+  scripts: SeriesScript[];
+  selectedScriptIds: string[];
+  onSelectionChange: (scriptId: string) => void;
+  pending: boolean;
+  onClose: () => void;
+  onStart: () => void;
+}) {
+  if (!open) {
+    return null;
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-8 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-2xl border border-border-card bg-surface p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-muted">Create Video</p>
+            <h3 className="mt-1 font-heading text-2xl font-bold text-primary">Choose approved scripts to render</h3>
+          </div>
+          <button type="button" className="btn-ghost !min-h-[2rem]" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="mt-6 grid gap-3">
+          {scripts.map((script) => (
+            <label key={script.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-border-card bg-card p-4">
+              <input
+                type="checkbox"
+                checked={selectedScriptIds.includes(script.id)}
+                onChange={() => onSelectionChange(script.id)}
+              />
+              <div>
+                <strong className="text-sm text-primary">{script.title}</strong>
+                <p className="mt-1 text-sm leading-6 text-secondary">{script.summary}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={pending}>
+            Cancel
+          </button>
+          <button type="button" className="btn-primary" onClick={onStart} disabled={pending || selectedScriptIds.length === 0}>
+            {pending ? "Starting..." : "Create selected videos"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SeriesListPage() {
   const { data: series = [], isLoading } = useSeriesList();
 
@@ -319,10 +552,15 @@ export function SeriesListPage() {
       inspector={
         <div className="inspector-stack">
           <MetricCard label="Total series" value={String(series.length)} detail="Saved content systems in this workspace." tone="primary" />
-          <MetricCard label="Active runs" value={String(series.filter((item) => item.activeRunStatus).length)} detail="Series currently generating scripts." tone="neutral" />
+          <MetricCard
+            label="Active runs"
+            value={String(series.filter((item) => item.activeRunStatus || item.activeVideoRunStatus).length)}
+            detail="Series currently generating scripts or videos."
+            tone="neutral"
+          />
           <SectionCard title="How it works">
             <p className="text-sm leading-6 text-secondary">
-              Each series stores one repeatable storytelling setup. Starting a series creates a run that generates scripts one by one and appends them to the Scripts tab.
+              Each series stores one repeatable storytelling setup. Generate scripts, review them, then create videos in batch without leaving the series page.
             </p>
           </SectionCard>
         </div>
@@ -344,11 +582,20 @@ export function SeriesListPage() {
                   </p>
                   <h3 className="mt-1 font-heading text-xl font-bold text-primary">{item.title}</h3>
                 </div>
-                {item.latestRunStatus ? <StatusBadge status={item.latestRunStatus} /> : null}
+                {item.activeVideoRunStatus ? (
+                  <StatusBadge status={item.activeVideoRunStatus} />
+                ) : item.activeRunStatus ? (
+                  <StatusBadge status={item.activeRunStatus} />
+                ) : item.latestRunStatus ? (
+                  <StatusBadge status={item.latestRunStatus} />
+                ) : null}
               </div>
               <p className="mt-3 line-clamp-3 text-sm leading-6 text-secondary">{item.description || "No short description yet."}</p>
               <div className="mt-5 flex flex-wrap gap-2 text-xs text-muted">
                 <span className="rounded-full bg-glass px-3 py-1">{item.totalScriptCount} scripts</span>
+                <span className="rounded-full bg-glass px-3 py-1">{item.scriptsAwaitingReviewCount} awaiting review</span>
+                <span className="rounded-full bg-glass px-3 py-1">{item.approvedScriptCount} approved</span>
+                <span className="rounded-full bg-glass px-3 py-1">{item.completedVideoCount} videos</span>
                 <span className="rounded-full bg-glass px-3 py-1">{relativeTime(item.lastActivityAt)}</span>
                 <span className="rounded-full bg-glass px-3 py-1">{titleFromStatus(item.voiceKey)}</span>
               </div>
@@ -445,9 +692,49 @@ export function SeriesEditorPage() {
       setStep(0);
       return;
     }
+    if (currentForm.contentMode === "preset" && !currentForm.presetKey) {
+      setErrorMessage("Choose a preset before saving the series.");
+      setStep(0);
+      return;
+    }
+    if (!currentForm.languageKey.trim() || !currentForm.voiceKey.trim()) {
+      setErrorMessage("Choose both a language and a voice style.");
+      setStep(1);
+      return;
+    }
     if (currentForm.musicMode === "preset" && currentForm.musicKeys.length === 0) {
       setErrorMessage("Pick at least one music option or switch to None.");
       setStep(2);
+      return;
+    }
+    if (!currentForm.artStyleKey.trim()) {
+      setErrorMessage("Choose an art style before saving the series.");
+      setStep(3);
+      return;
+    }
+    if (!currentForm.captionStyleKey.trim()) {
+      setErrorMessage("Choose a caption style before saving the series.");
+      setStep(4);
+      return;
+    }
+    if (currentForm.title.trim().length > 255) {
+      setErrorMessage("Series title must be 255 characters or fewer.");
+      setStep(0);
+      return;
+    }
+    if (currentForm.description.trim().length > 500) {
+      setErrorMessage("Short details must be 500 characters or fewer.");
+      setStep(0);
+      return;
+    }
+    if (currentForm.customTopic.trim().length > 5000) {
+      setErrorMessage("Custom topic must be 5000 characters or fewer.");
+      setStep(0);
+      return;
+    }
+    if (currentForm.customExampleScript.trim().length > 2000) {
+      setErrorMessage("Example script must be 2000 characters or fewer.");
+      setStep(0);
       return;
     }
     setErrorMessage(null);
@@ -644,19 +931,34 @@ export function SeriesDetailPage() {
   const scriptsQuery = useSeriesScripts(seriesId);
   const [activeTab, setActiveTab] = useState<SeriesTab>("scripts");
   const [expandedScripts, setExpandedScripts] = useState<Record<string, boolean>>({});
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [scriptDialogOpen, setScriptDialogOpen] = useState(false);
+  const [videoDialogOpen, setVideoDialogOpen] = useState(false);
   const [requestedScriptCount, setRequestedScriptCount] = useState(5);
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [scriptRunKey, setScriptRunKey] = useState(() => crypto.randomUUID());
+  const [selectedVideoScriptIds, setSelectedVideoScriptIds] = useState<string[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedVideoRunId, setSelectedVideoRunId] = useState<string | null>(null);
   const startRunMutation = useStartSeriesRun(seriesId);
+  const startVideoRunMutation = useStartSeriesVideoRun(seriesId);
+  const approveScriptMutation = useApproveSeriesScript(seriesId);
+  const rejectScriptMutation = useRejectSeriesScript(seriesId);
+  const regenerateScriptMutation = useRegenerateSeriesScript(seriesId);
   const runId = selectedRunId ?? detailQuery.data?.activeRunId ?? detailQuery.data?.latestRunId ?? null;
+  const videoRunId = selectedVideoRunId ?? detailQuery.data?.activeVideoRunId ?? null;
   const runQuery = useSeriesRun(seriesId, runId);
+  const videoRunQuery = useSeriesVideoRun(seriesId, videoRunId);
 
   useEffect(() => {
     if (detailQuery.data?.activeRunId) {
       setSelectedRunId(detailQuery.data.activeRunId);
     }
   }, [detailQuery.data?.activeRunId]);
+
+  useEffect(() => {
+    if (detailQuery.data?.activeVideoRunId) {
+      setSelectedVideoRunId(detailQuery.data.activeVideoRunId);
+    }
+  }, [detailQuery.data?.activeVideoRunId]);
 
   if (catalogLoading || detailQuery.isLoading || !detailQuery.data || !catalog) {
     return (
@@ -670,44 +972,121 @@ export function SeriesDetailPage() {
 
   const series = detailQuery.data;
   const scripts = scriptsQuery.data ?? [];
+  const eligibleVideoScripts = scripts.filter((script) => script.canCreateVideo);
+  const publishedScripts = scripts.filter((script) => script.publishedVideo);
   const contentOption = series.contentMode === "preset" ? lookupOption(catalog.contentPresets, series.presetKey) : null;
+  const actionsDisabled =
+    startRunMutation.isPending ||
+    startVideoRunMutation.isPending ||
+    approveScriptMutation.isPending ||
+    rejectScriptMutation.isPending ||
+    regenerateScriptMutation.isPending;
 
-  async function handleStart() {
+  async function handleStartScripts() {
     const safeCount = Math.max(1, Math.min(50, requestedScriptCount));
-    const run = await startRunMutation.mutateAsync({ requestedScriptCount: safeCount, idempotencyKey });
+    const run = await startRunMutation.mutateAsync({ requestedScriptCount: safeCount, idempotencyKey: scriptRunKey });
     setSelectedRunId(run.id);
-    setDialogOpen(false);
+    setScriptDialogOpen(false);
+  }
+
+  async function handleStartVideo(seriesScriptIds: string[]) {
+    const run = await startVideoRunMutation.mutateAsync({
+      seriesScriptIds,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    setSelectedVideoRunId(run.id);
+    setVideoDialogOpen(false);
+  }
+
+  function toggleVideoSelection(scriptId: string) {
+    setSelectedVideoScriptIds((current) =>
+      current.includes(scriptId) ? current.filter((item) => item !== scriptId) : [...current, scriptId],
+    );
   }
 
   return (
     <>
-      <SeriesStartDialog open={dialogOpen} count={requestedScriptCount} onCountChange={setRequestedScriptCount} pending={startRunMutation.isPending} onClose={() => setDialogOpen(false)} onStart={() => void handleStart()} />
+      <SeriesStartDialog
+        open={scriptDialogOpen}
+        count={requestedScriptCount}
+        onCountChange={setRequestedScriptCount}
+        pending={startRunMutation.isPending}
+        onClose={() => setScriptDialogOpen(false)}
+        onStart={() => void handleStartScripts()}
+      />
+      <SeriesCreateVideoDialog
+        open={videoDialogOpen}
+        scripts={eligibleVideoScripts}
+        selectedScriptIds={selectedVideoScriptIds}
+        onSelectionChange={toggleVideoSelection}
+        pending={startVideoRunMutation.isPending}
+        onClose={() => setVideoDialogOpen(false)}
+        onStart={() => void handleStartVideo(selectedVideoScriptIds)}
+      />
       <PageFrame
         eyebrow="Series"
         title={series.title}
-        description={series.description || "A saved content series ready for repeatable script generation."}
+        description={series.description || "Review scripts, approve the ones you like, then create videos in batch."}
         actions={
           <>
             <Link className="btn-ghost" to="/app/series">Back to series</Link>
             <Link className={series.canEdit ? "btn-ghost" : "btn-ghost opacity-50 pointer-events-none"} to={`/app/series/${series.id}/edit`}>Edit</Link>
             <button
               type="button"
-              className="btn-primary"
+              className="btn-ghost"
               onClick={() => {
                 setRequestedScriptCount(5);
-                setIdempotencyKey(crypto.randomUUID());
-                setDialogOpen(true);
+                setScriptRunKey(crypto.randomUUID());
+                setScriptDialogOpen(true);
               }}
-              disabled={Boolean(series.activeRunId)}
+              disabled={Boolean(series.activeRunId) || Boolean(series.activeVideoRunId)}
             >
-              {series.activeRunId ? "Run in progress" : "Start series"}
+              Generate more scripts
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                if (series.primaryCta === "start_series") {
+                  setRequestedScriptCount(5);
+                  setScriptRunKey(crypto.randomUUID());
+                  setScriptDialogOpen(true);
+                  return;
+                }
+                setSelectedVideoScriptIds(eligibleVideoScripts.map((script) => script.id));
+                setVideoDialogOpen(true);
+              }}
+              disabled={
+                Boolean(series.activeRunId) ||
+                Boolean(series.activeVideoRunId) ||
+                (series.primaryCta === "create_video" && eligibleVideoScripts.length === 0)
+              }
+            >
+              {series.activeVideoRunId
+                ? "Video batch in progress"
+                : series.primaryCta === "create_video"
+                  ? "Create video"
+                  : "Start series"}
             </button>
           </>
         }
         inspector={
           <div className="inspector-stack">
-            <MetricCard label="Scripts" value={String(series.totalScriptCount)} detail="Generated scripts stored in this series." tone="primary" />
-            <MetricCard label="Last activity" value={relativeTime(series.lastActivityAt)} detail={series.latestRunStatus ? `Latest run ${titleFromStatus(series.latestRunStatus)}` : "No runs yet"} tone="neutral" />
+            <MetricCard label="Scripts" value={String(series.totalScriptCount)} detail="Generated script slots in this series." tone="primary" />
+            <MetricCard label="Awaiting review" value={String(series.scriptsAwaitingReviewCount)} detail="Scripts that still need approval or rejection." tone="warning" />
+            <MetricCard label="Videos complete" value={String(series.completedVideoCount)} detail={`${series.approvedScriptCount} scripts are approved overall.`} tone="success" />
+            <MetricCard
+              label="Last activity"
+              value={relativeTime(series.lastActivityAt)}
+              detail={
+                series.activeVideoRunStatus
+                  ? `Video batch ${titleFromStatus(series.activeVideoRunStatus)}`
+                  : series.latestRunStatus
+                    ? `Latest script run ${titleFromStatus(series.latestRunStatus)}`
+                    : "No runs yet"
+              }
+              tone="neutral"
+            />
             <SectionCard title="Configuration">
               <div className="inspector-list">
                 <div><span>Topic</span><strong>{contentOption?.label ?? "Custom niche"}</strong></div>
@@ -733,6 +1112,7 @@ export function SeriesDetailPage() {
         )}
 
         {runQuery.data ? <SeriesRunPanel run={runQuery.data} /> : null}
+        {videoRunQuery.data ? <SeriesVideoRunPanel run={videoRunQuery.data} /> : null}
 
         <div className="flex flex-wrap gap-2">
           <button type="button" className={activeTab === "scripts" ? "chip-button chip-button--active" : "chip-button"} onClick={() => setActiveTab("scripts")}>Scripts</button>
@@ -745,12 +1125,47 @@ export function SeriesDetailPage() {
           ) : (
             <div className="grid gap-5">
               {scripts.map((script) => (
-                <SeriesScriptCard key={script.id} script={script} expanded={Boolean(expandedScripts[script.id])} onToggle={() => setExpandedScripts((current) => ({ ...current, [script.id]: !current[script.id] }))} />
+                <SeriesScriptCard
+                  key={script.id}
+                  seriesId={series.id}
+                  script={script}
+                  expanded={Boolean(expandedScripts[script.id])}
+                  actionsDisabled={actionsDisabled}
+                  onToggle={() => setExpandedScripts((current) => ({ ...current, [script.id]: !current[script.id] }))}
+                  onApprove={() => void approveScriptMutation.mutateAsync(script.id)}
+                  onReject={() => void rejectScriptMutation.mutateAsync(script.id)}
+                  onRegenerate={() => void regenerateScriptMutation.mutateAsync({ scriptId: script.id, idempotencyKey: crypto.randomUUID() })}
+                  onCreateVideo={() => void handleStartVideo([script.id])}
+                />
               ))}
             </div>
           )
         ) : (
-          <EmptyState title="Videos are coming next" description="Series videos will appear here in the next phase. For now, this version stops after generating scripts." />
+          publishedScripts.length === 0 ? (
+            <EmptyState title="No videos yet" description="Approve one or more scripts, then create videos to see completed renders here as soon as they finish." />
+          ) : (
+            <div className="grid gap-5">
+              {publishedScripts.map((script) => (
+                <section key={script.id} className="rounded-2xl border border-border-card bg-card p-5 shadow-card">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-widest text-muted">Script {script.sequenceNumber}</p>
+                      <h3 className="mt-1 font-heading text-xl font-bold text-primary">
+                        {script.publishedVideo?.title || script.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-secondary whitespace-pre-line">
+                        {script.publishedVideo?.description || script.summary}
+                      </p>
+                    </div>
+                    <StatusBadge status="completed" />
+                  </div>
+                  {script.publishedVideo?.downloadUrl ? (
+                    <video className="mt-4 w-full rounded-xl border border-border-card" controls src={script.publishedVideo.downloadUrl} />
+                  ) : null}
+                </section>
+              ))}
+            </div>
+          )
         )}
       </PageFrame>
     </>

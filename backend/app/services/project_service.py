@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -60,12 +60,13 @@ class ProjectService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _get_project(self, project_id: str, workspace_id: str) -> Project:
+    def _get_project(self, project_id: str, workspace_id: str, *, include_internal: bool = False) -> Project:
         project = self.db.scalar(
             select(Project).where(
                 Project.id == UUID(project_id),
                 Project.workspace_id == UUID(workspace_id),
                 Project.deleted_at.is_(None),
+                (true() if include_internal else Project.is_internal.is_(False)),
             )
         )
         if not project:
@@ -81,7 +82,11 @@ class ProjectService:
     def list_projects(self, auth: AuthContext) -> list[dict[str, object]]:
         projects = self.db.scalars(
             select(Project)
-            .where(Project.workspace_id == UUID(auth.workspace_id), Project.deleted_at.is_(None))
+            .where(
+                Project.workspace_id == UUID(auth.workspace_id),
+                Project.deleted_at.is_(None),
+                Project.is_internal.is_(False),
+            )
             .order_by(Project.updated_at.desc())
         ).all()
         return [project_to_dict(project) for project in projects]

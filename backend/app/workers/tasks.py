@@ -13,6 +13,7 @@ from app.services.billing_service import BillingService
 from app.services.notification_service import NotificationService
 from app.services.quick_start_service import QuickStartService
 from app.services.series_generation_service import SeriesGenerationService
+from app.services.series_video_service import SeriesVideoService
 from app.services.routing_service import RoutingService
 from app.services.remix_service import RemixService as RemixServiceClass
 from app.services.render_service import RenderService
@@ -137,6 +138,26 @@ def generate_series_run_task(self, run_id: str) -> None:
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception("unexpected_series_run_task_failure run_id=%s", run_id)
         service.mark_series_run_failed(run_id, AdapterError("internal", "unexpected_error", str(exc)))
+        raise
+    finally:
+        session.close()
+
+
+@celery_app.task(bind=True, max_retries=3, name="planning.generate_series_video_run")
+def generate_series_video_run_task(self, run_id: str) -> None:
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    service = SeriesVideoService(session, settings)
+    try:
+        service.execute_video_run(run_id)
+    except AdapterError as error:
+        if error.category == "transient" and self.request.retries < self.max_retries:
+            service.mark_video_run_retry(run_id, error)
+            raise self.retry(exc=error, countdown=30 * (2**self.request.retries))
+        service.mark_video_run_failed(run_id, error)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.exception("unexpected_series_video_run_task_failure run_id=%s", run_id)
+        service.mark_video_run_failed(run_id, AdapterError("internal", "unexpected_error", str(exc)))
         raise
     finally:
         session.close()

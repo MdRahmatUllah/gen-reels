@@ -18,6 +18,9 @@ from app.models.entities import (
     SeriesRun,
     SeriesRunStep,
     SeriesScript,
+    SeriesScriptRevision,
+    SeriesVideoRun,
+    SeriesVideoRunStep,
     ScenePlan,
     SceneSegment,
     ScriptVersion,
@@ -267,8 +270,13 @@ def series_to_dict(
     series: Series,
     *,
     total_script_count: int = 0,
+    scripts_awaiting_review_count: int = 0,
+    approved_script_count: int = 0,
+    completed_video_count: int = 0,
     latest_run: SeriesRun | None = None,
     active_run: SeriesRun | None = None,
+    active_video_run: SeriesVideoRun | None = None,
+    primary_cta: str = "start_series",
     last_activity_at=None,
     can_edit: bool = True,
 ) -> dict[str, object]:
@@ -290,6 +298,9 @@ def series_to_dict(
         "caption_style_key": series.caption_style_key,
         "effect_keys": list(series.effect_keys or []),
         "total_script_count": total_script_count,
+        "scripts_awaiting_review_count": scripts_awaiting_review_count,
+        "approved_script_count": approved_script_count,
+        "completed_video_count": completed_video_count,
         "latest_run_id": latest_run.id if latest_run else None,
         "latest_run_status": (
             latest_run.status.value if latest_run and isinstance(latest_run.status, JobStatus) else None
@@ -298,6 +309,13 @@ def series_to_dict(
         "active_run_status": (
             active_run.status.value if active_run and isinstance(active_run.status, JobStatus) else None
         ),
+        "active_video_run_id": active_video_run.id if active_video_run else None,
+        "active_video_run_status": (
+            active_video_run.status.value
+            if active_video_run and isinstance(active_video_run.status, JobStatus)
+            else None
+        ),
+        "primary_cta": primary_cta,
         "can_edit": can_edit,
         "last_activity_at": last_activity_at or series.updated_at,
         "created_at": series.created_at,
@@ -305,19 +323,101 @@ def series_to_dict(
     }
 
 
-def series_script_to_dict(script: SeriesScript) -> dict[str, object]:
+def series_revision_to_dict(revision: SeriesScriptRevision) -> dict[str, object]:
+    return {
+        "id": revision.id,
+        "series_script_id": revision.series_script_id,
+        "revision_number": revision.revision_number,
+        "approval_state": revision.approval_state,
+        "title": revision.title,
+        "summary": revision.summary,
+        "estimated_duration_seconds": revision.estimated_duration_seconds,
+        "reading_time_label": revision.reading_time_label,
+        "total_words": revision.total_words,
+        "lines": revision.lines,
+        "video_title": revision.video_title,
+        "video_description": revision.video_description,
+        "created_at": revision.created_at,
+        "updated_at": revision.updated_at,
+    }
+
+
+def series_published_video_to_dict(
+    *,
+    project_id,
+    render_job_id,
+    export_id,
+    download_url: str | None,
+    title: str,
+    description: str,
+    completed_at,
+) -> dict[str, object]:
+    return {
+        "project_id": project_id,
+        "render_job_id": render_job_id,
+        "export_id": export_id,
+        "download_url": download_url,
+        "title": title,
+        "description": description,
+        "completed_at": completed_at,
+    }
+
+
+def series_script_to_dict(
+    script: SeriesScript,
+    *,
+    current_revision: SeriesScriptRevision | None = None,
+    approved_revision: SeriesScriptRevision | None = None,
+    published_revision: SeriesScriptRevision | None = None,
+    published_video: dict[str, object] | None = None,
+    active_video_step: SeriesVideoRunStep | None = None,
+    can_approve: bool = False,
+    can_reject: bool = False,
+    can_regenerate: bool = False,
+    can_create_video: bool = False,
+) -> dict[str, object]:
+    resolved_revision = current_revision or approved_revision or published_revision
     return {
         "id": script.id,
         "series_id": script.series_id,
         "series_run_id": script.series_run_id,
         "created_by_user_id": script.created_by_user_id,
         "sequence_number": script.sequence_number,
-        "title": script.title,
-        "summary": script.summary,
-        "estimated_duration_seconds": script.estimated_duration_seconds,
-        "reading_time_label": script.reading_time_label,
-        "total_words": script.total_words,
-        "lines": script.lines,
+        "title": resolved_revision.title if resolved_revision else script.title,
+        "summary": resolved_revision.summary if resolved_revision else script.summary,
+        "estimated_duration_seconds": (
+            resolved_revision.estimated_duration_seconds
+            if resolved_revision
+            else script.estimated_duration_seconds
+        ),
+        "reading_time_label": (
+            resolved_revision.reading_time_label if resolved_revision else script.reading_time_label
+        ),
+        "total_words": resolved_revision.total_words if resolved_revision else script.total_words,
+        "lines": list((resolved_revision.lines if resolved_revision else script.lines) or []),
+        "approval_state": (
+            current_revision.approval_state
+            if current_revision
+            else (approved_revision.approval_state if approved_revision else "needs_review")
+        ),
+        "video_status": (
+            active_video_step.status.value
+            if active_video_step and isinstance(active_video_step.status, JobStatus)
+            else ("completed" if published_video else None)
+        ),
+        "video_phase": active_video_step.phase if active_video_step else ("completed" if published_video else None),
+        "video_current_scene_index": active_video_step.current_scene_index if active_video_step else None,
+        "video_current_scene_count": active_video_step.current_scene_count if active_video_step else None,
+        "video_render_job_id": active_video_step.render_job_id if active_video_step else script.published_render_job_id,
+        "video_hidden_project_id": active_video_step.hidden_project_id if active_video_step else script.published_project_id,
+        "current_revision": series_revision_to_dict(current_revision) if current_revision else None,
+        "approved_revision": series_revision_to_dict(approved_revision) if approved_revision else None,
+        "published_revision": series_revision_to_dict(published_revision) if published_revision else None,
+        "published_video": published_video,
+        "can_approve": can_approve,
+        "can_reject": can_reject,
+        "can_regenerate": can_regenerate,
+        "can_create_video": can_create_video,
         "created_at": script.created_at,
         "updated_at": script.updated_at,
     }
@@ -373,6 +473,70 @@ def series_run_to_dict(run: SeriesRun, steps: list[SeriesRunStep] | None = None)
         "created_at": run.created_at,
         "updated_at": run.updated_at,
         "steps": [series_run_step_to_dict(step) for step in (steps or [])],
+        "current_step": current_step,
+    }
+
+
+def series_video_run_step_to_dict(step: SeriesVideoRunStep) -> dict[str, object]:
+    return {
+        "id": step.id,
+        "series_video_run_id": step.series_video_run_id,
+        "series_id": step.series_id,
+        "series_script_id": step.series_script_id,
+        "series_script_revision_id": step.series_script_revision_id,
+        "step_index": step.step_index,
+        "sequence_number": step.sequence_number,
+        "status": step.status.value if isinstance(step.status, JobStatus) else str(step.status),
+        "phase": step.phase,
+        "hidden_project_id": step.hidden_project_id,
+        "render_job_id": step.render_job_id,
+        "last_render_event_sequence": step.last_render_event_sequence,
+        "current_scene_index": step.current_scene_index,
+        "current_scene_count": step.current_scene_count,
+        "input_payload": step.input_payload,
+        "output_payload": step.output_payload,
+        "error_code": step.error_code,
+        "error_message": step.error_message,
+        "started_at": step.started_at,
+        "completed_at": step.completed_at,
+        "created_at": step.created_at,
+        "updated_at": step.updated_at,
+    }
+
+
+def series_video_run_to_dict(
+    run: SeriesVideoRun,
+    steps: list[SeriesVideoRunStep] | None = None,
+) -> dict[str, object]:
+    current_step = next(
+        (
+            step.step_index
+            for step in (steps or [])
+            if step.status in {JobStatus.queued, JobStatus.running, JobStatus.review, JobStatus.failed}
+        ),
+        None,
+    )
+    return {
+        "id": run.id,
+        "series_id": run.series_id,
+        "workspace_id": run.workspace_id,
+        "created_by_user_id": run.created_by_user_id,
+        "status": run.status.value if isinstance(run.status, JobStatus) else str(run.status),
+        "requested_video_count": run.requested_video_count,
+        "completed_video_count": run.completed_video_count,
+        "failed_video_count": run.failed_video_count,
+        "idempotency_key": run.idempotency_key,
+        "request_hash": run.request_hash,
+        "payload": run.payload,
+        "error_code": run.error_code,
+        "error_message": run.error_message,
+        "retry_count": run.retry_count,
+        "started_at": run.started_at,
+        "completed_at": run.completed_at,
+        "cancelled_at": run.cancelled_at,
+        "created_at": run.created_at,
+        "updated_at": run.updated_at,
+        "steps": [series_video_run_step_to_dict(step) for step in (steps or [])],
         "current_step": current_step,
     }
 

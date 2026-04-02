@@ -23,6 +23,18 @@ from app.integrations.ffmpeg import FFmpegError, FFmpegRunner
 
 logger = logging.getLogger(__name__)
 
+AZURE_OPENAI_PORTRAIT_IMAGE_SIZE = "1024x1536"
+AZURE_OPENAI_PORTRAIT_IMAGE_WIDTH = 1024
+AZURE_OPENAI_PORTRAIT_IMAGE_HEIGHT = 1536
+AZURE_OPENAI_SPEECH_VOICE_ALIASES = {
+    "adam": "alloy",
+    "john": "echo",
+    "confident_narrator": "cedar",
+    "warm_storyteller": "shimmer",
+    "ava_editorial": "ash",
+    "energetic_host": "verse",
+}
+
 
 def _normalize_azure_endpoint(raw_endpoint: str) -> str:
     """Normalize an Azure endpoint to just scheme://host.
@@ -73,6 +85,14 @@ def _azure_cognitive_services_image_host(endpoint: str) -> bool:
 def _azure_openai_host_supports_image_edits(endpoint: str) -> bool:
     """Cognitive Services often 404 on ``/images/edits`` while generations works."""
     return not _azure_cognitive_services_image_host(endpoint)
+
+
+def _normalize_azure_speech_voice(raw_voice: str | None, default_voice: str | None) -> str:
+    voice = str(raw_voice or "").strip().lower()
+    fallback = str(default_voice or "alloy").strip().lower() or "alloy"
+    if not voice:
+        return fallback
+    return AZURE_OPENAI_SPEECH_VOICE_ALIASES.get(voice, voice)
 
 
 def _str_field(payload: dict[str, Any] | None, key: str) -> str:
@@ -506,7 +526,8 @@ class AzureOpenAIImageProvider(ImageProvider):
             headers_base = {"api-key": self.api_key, "Authorization": f"Bearer {self.api_key}"}
         generations_json: dict[str, Any] = {
             "prompt": prompt,
-            "size": "1024x1792",
+            # Azure GPT Image supports 2:3 portrait output, so we normalize 9:16 later in the render pipeline.
+            "size": AZURE_OPENAI_PORTRAIT_IMAGE_SIZE,
             "n": 1,
             "quality": "medium",
         }
@@ -588,8 +609,8 @@ class AzureOpenAIImageProvider(ImageProvider):
                 "prompt": prompt,
                 "reference_asset_ids": [reference.asset_id for reference in reference_images],
                 "consistency_pack_state": consistency_pack_state or {},
-                "width": 1024,
-                "height": 1792,
+                "width": AZURE_OPENAI_PORTRAIT_IMAGE_WIDTH,
+                "height": AZURE_OPENAI_PORTRAIT_IMAGE_HEIGHT,
             }
             if edit_fallback:
                 meta["azure_image_edit_fallback"] = edit_fallback
@@ -758,6 +779,25 @@ class AzureOpenAISpeechProvider(SpeechProvider):
         self.model = model or settings.azure_openai_speech_model
         self.default_voice = default_voice or settings.azure_openai_speech_voice
 
+    def _deployment_identity(self) -> str:
+        return " ".join(part for part in [self.deployment, self.model] if part).lower()
+
+    def _prefers_chat_audio_api(self) -> bool:
+        identity = self._deployment_identity()
+        return any(
+            marker in identity
+            for marker in (
+                "gpt-audio",
+                "gpt-4o-audio",
+                "audio-preview",
+                "realtime",
+            )
+        )
+
+    def _prefers_legacy_tts_api(self) -> bool:
+        identity = self._deployment_identity()
+        return any(marker in identity for marker in ("tts-1", "gpt-4o-mini-tts"))
+
     def synthesize(
         self,
         *,
@@ -773,11 +813,29 @@ class AzureOpenAISpeechProvider(SpeechProvider):
             generated.metadata["fallback_mode"] = "local_placeholder"
             return generated
 
-        voice = str((voice_preset or {}).get("provider_voice") or self.default_voice)
-
-        result = self._try_chat_completions_audio(text, voice)
-        if result is None:
+        requested_voice = str((voice_preset or {}).get("provider_voice") or self.default_voice)
+        voice = _normalize_azure_speech_voice(requested_voice, self.default_voice)
+        if voice != requested_voice.strip().lower():
+            logger.info(
+                "azure_speech_voice_normalized requested=%s normalized=%s deployment=%s",
+                requested_voice,
+                voice,
+                self.deployment,
+            )
+        if self._prefers_chat_audio_api():
+            result = self._try_chat_completions_audio(text, voice)
+            if result is None:
+                raise AdapterError(
+                    "configuration",
+                    "azure_speech_chat_audio_unavailable",
+                    "The configured Azure speech deployment did not return chat-audio output.",
+                )
+        elif self._prefers_legacy_tts_api():
             result = self._try_legacy_tts(text, voice)
+        else:
+            result = self._try_chat_completions_audio(text, voice)
+            if result is None:
+                result = self._try_legacy_tts(text, voice)
 
         return GeneratedMedia(
             provider_name="azure_openai_speech",
@@ -807,21 +865,31 @@ class AzureOpenAISpeechProvider(SpeechProvider):
                     "Content-Type": "application/json",
                 },
                 json={
+                    "model": self.deployment,
                     "messages": [
                         {
                             "role": "system",
-                            "content": (
-                                "You are a professional voice-over narrator. "
-                                "Read the user's text aloud exactly as written, word for word. "
-                                "Do not add, remove, or rephrase anything. "
-                                "Do not add any commentary or introduction. "
-                                "Just read the text naturally and clearly."
-                            ),
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        "You are a professional voice-over narrator. "
+                                        "Read the user's text aloud exactly as written, word for word. "
+                                        "Do not add, remove, or rephrase anything. "
+                                        "Do not add any commentary or introduction. "
+                                        "Just read the text naturally and clearly."
+                                    ),
+                                }
+                            ],
                         },
-                        {"role": "user", "content": text},
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "text": text}],
+                        },
                     ],
-                    "modalities": ["text", "audio"],
+                    "modalities": ["audio", "text"],
                     "audio": {"voice": voice, "format": "wav"},
+                    "max_completion_tokens": 512,
                 },
                 timeout=120.0,
             )

@@ -40,6 +40,26 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+type ValidationErrorDetail = {
+  loc?: Array<string | number>;
+  msg?: string;
+};
+
+function formatValidationMessage(details: unknown): string | null {
+  if (!Array.isArray(details) || details.length === 0) {
+    return null;
+  }
+  const first = details[0] as ValidationErrorDetail | undefined;
+  if (!first?.msg) {
+    return null;
+  }
+  const location = (first.loc ?? [])
+    .map((part) => String(part))
+    .filter((part) => part && part !== "body")
+    .join(".");
+  return location ? `${location}: ${first.msg}` : first.msg;
+}
+
 async function rawFetch(
   method: string,
   url: string,
@@ -82,10 +102,12 @@ async function request<T>(
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
     const normalizedError = errorBody.error ?? errorBody;
+    const validationMessage =
+      normalizedError.code === "validation_error" ? formatValidationMessage(errorBody.details) : null;
     throw new ApiError(
       response.status,
       normalizedError.code ?? "unknown_error",
-      normalizedError.message ?? response.statusText,
+      validationMessage ?? normalizedError.message ?? response.statusText,
       errorBody.details,
     );
   }

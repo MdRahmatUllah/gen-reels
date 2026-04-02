@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import base64
+
+import httpx
+
+from app.core.config import Settings
+from app.integrations.media import AzureOpenAIImageProvider, AzureOpenAISpeechProvider
+
 
 def _save_brief(client, project_id: str):
     brief_payload = {
@@ -81,3 +88,157 @@ def test_idea_generation_selection_and_script_generation(authenticated_client, s
     assert detail.status_code == 200
     assert len(detail.json()["recent_jobs"]) >= 2
     assert detail.json()["active_script_version"]["version_number"] == 2
+
+
+def test_azure_image_provider_uses_supported_portrait_size(monkeypatch):
+    captured_json: dict[str, object] = {}
+
+    class _FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, list[dict[str, str]]]:
+            return {"data": [{"b64_json": base64.b64encode(b"png-bytes").decode("ascii")}]}
+
+    def _fake_post(
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, object] | None = None,
+        timeout: float,
+    ) -> _FakeResponse:
+        del url, headers, timeout
+        captured_json.update(json or {})
+        return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", _fake_post)
+
+    provider = AzureOpenAIImageProvider(
+        Settings(environment="test"),
+        endpoint="https://example.cognitiveservices.azure.com",
+        api_key="test-key",
+        deployment="gpt-image-1",
+    )
+
+    generated = provider.generate_frame(
+        prompt="A dramatic portrait frame",
+        scene_index=1,
+        frame_kind="start",
+        reference_images=[],
+        consistency_pack_state=None,
+    )
+
+    assert captured_json["size"] == "1024x1536"
+    assert generated.metadata["width"] == 1024
+    assert generated.metadata["height"] == 1536
+
+
+def test_azure_speech_provider_keeps_gpt_audio_on_chat_completions(monkeypatch):
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class _FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, list[dict[str, dict[str, dict[str, str]]]]]:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "audio": {
+                                "data": base64.b64encode(b"wav-bytes").decode("ascii"),
+                            }
+                        }
+                    }
+                ]
+            }
+
+    def _fake_post(
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, object] | None = None,
+        timeout: float,
+    ) -> _FakeResponse:
+        del headers, timeout
+        calls.append((url, dict(json or {})))
+        return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", _fake_post)
+
+    provider = AzureOpenAISpeechProvider(
+        Settings(environment="test"),
+        endpoint="https://example.cognitiveservices.azure.com",
+        api_key="test-key",
+        deployment="gpt-audio-1.5-2",
+        api_version="2025-04-01-preview",
+        model="gpt-audio-1.5",
+        default_voice="alloy",
+    )
+
+    generated = provider.synthesize(
+        text="Narrate this exactly.",
+        scene_index=1,
+        voice_preset={"provider_voice": "alloy"},
+    )
+
+    assert len(calls) == 1
+    assert "/chat/completions" in calls[0][0]
+    assert "/audio/speech" not in calls[0][0]
+    assert calls[0][1]["model"] == "gpt-audio-1.5-2"
+    messages = calls[0][1]["messages"]
+    assert isinstance(messages, list)
+    assert messages[1]["content"][0]["text"] == "Narrate this exactly."
+    assert generated.content_type == "audio/wav"
+
+
+def test_azure_speech_provider_normalizes_series_voice_aliases(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class _FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, list[dict[str, dict[str, dict[str, str]]]]]:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "audio": {
+                                "data": base64.b64encode(b"wav-bytes").decode("ascii"),
+                            }
+                        }
+                    }
+                ]
+            }
+
+    def _fake_post(
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, object] | None = None,
+        timeout: float,
+    ) -> _FakeResponse:
+        del url, headers, timeout
+        calls.append(dict(json or {}))
+        return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", _fake_post)
+
+    provider = AzureOpenAISpeechProvider(
+        Settings(environment="test"),
+        endpoint="https://example.cognitiveservices.azure.com",
+        api_key="test-key",
+        deployment="gpt-audio-1.5-2",
+        api_version="2025-04-01-preview",
+        model="gpt-audio-1.5",
+        default_voice="alloy",
+    )
+
+    provider.synthesize(
+        text="Narrate this exactly.",
+        scene_index=1,
+        voice_preset={"provider_voice": "adam"},
+    )
+
+    assert calls[0]["audio"]["voice"] == "alloy"

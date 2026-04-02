@@ -8,7 +8,14 @@ from sqlalchemy.orm import Session
 from app.api.deps import AuthContext
 from app.core.errors import ApiError
 from app.integrations.azure import ModerationProvider
-from app.models.entities import JobStatus, Series, SeriesRun, SeriesScript
+from app.models.entities import (
+    JobStatus,
+    Series,
+    SeriesRun,
+    SeriesScript,
+    SeriesScriptRevision,
+    SeriesVideoRun,
+)
 from app.schemas.series import SeriesCreateRequest, SeriesUpdateRequest
 from app.services.audit_service import record_audit_event
 from app.services.moderation_service import moderate_text_or_raise
@@ -79,16 +86,49 @@ class SeriesService:
             .order_by(SeriesRun.created_at.desc())
         )
 
+    def _active_video_run(self, series_id: UUID) -> SeriesVideoRun | None:
+        return self.db.scalar(
+            select(SeriesVideoRun)
+            .where(
+                SeriesVideoRun.series_id == series_id,
+                SeriesVideoRun.status.in_([JobStatus.queued, JobStatus.running]),
+            )
+            .order_by(SeriesVideoRun.created_at.desc())
+        )
+
     def _latest_run(self, series_id: UUID) -> SeriesRun | None:
         return self.db.scalar(
             select(SeriesRun).where(SeriesRun.series_id == series_id).order_by(SeriesRun.created_at.desc())
         )
 
-    def _script_count(self, series_id: UUID) -> int:
-        return int(
-            self.db.scalar(select(func.count()).select_from(SeriesScript).where(SeriesScript.series_id == series_id))
-            or 0
+    def _latest_video_activity_at(self, series_id: UUID):
+        return self.db.scalar(
+            select(func.max(SeriesVideoRun.updated_at)).where(SeriesVideoRun.series_id == series_id)
         )
+
+    def _script_stats(self, series_id: UUID) -> dict[str, int]:
+        scripts = self.db.scalars(
+            select(SeriesScript).where(SeriesScript.series_id == series_id)
+        ).all()
+        awaiting_review = 0
+        approved = 0
+        completed_video = 0
+        for script in scripts:
+            current_revision = (
+                self.db.get(SeriesScriptRevision, script.current_revision_id) if script.current_revision_id else None
+            )
+            if current_revision and current_revision.approval_state == "needs_review":
+                awaiting_review += 1
+            if script.approved_revision_id:
+                approved += 1
+            if script.published_export_id:
+                completed_video += 1
+        return {
+            "total_script_count": len(scripts),
+            "scripts_awaiting_review_count": awaiting_review,
+            "approved_script_count": approved,
+            "completed_video_count": completed_video,
+        }
 
     def _last_activity_at(self, series: Series, latest_run: SeriesRun | None) -> object:
         latest_script_created_at = self.db.scalar(
@@ -97,6 +137,9 @@ class SeriesService:
         timestamps = [series.updated_at]
         if latest_run and latest_run.updated_at:
             timestamps.append(latest_run.updated_at)
+        latest_video_activity = self._latest_video_activity_at(series.id)
+        if latest_video_activity:
+            timestamps.append(latest_video_activity)
         if latest_script_created_at:
             timestamps.append(latest_script_created_at)
         return max(timestamps)
@@ -107,16 +150,23 @@ class SeriesService:
         ).all()
         response: list[dict[str, object]] = []
         for row in rows:
+            stats = self._script_stats(row.id)
             latest_run = self._latest_run(row.id)
             active_run = self._active_run(row.id)
+            active_video_run = self._active_video_run(row.id)
             response.append(
                 series_to_dict(
                     row,
-                    total_script_count=self._script_count(row.id),
+                    total_script_count=stats["total_script_count"],
+                    scripts_awaiting_review_count=stats["scripts_awaiting_review_count"],
+                    approved_script_count=stats["approved_script_count"],
+                    completed_video_count=stats["completed_video_count"],
                     latest_run=latest_run,
                     active_run=active_run,
+                    active_video_run=active_video_run,
+                    primary_cta="create_video" if stats["total_script_count"] > 0 else "start_series",
                     last_activity_at=self._last_activity_at(row, latest_run),
-                    can_edit=active_run is None,
+                    can_edit=active_run is None and active_video_run is None,
                 )
             )
         return response
@@ -173,23 +223,35 @@ class SeriesService:
         return series_to_dict(
             record,
             total_script_count=0,
+            scripts_awaiting_review_count=0,
+            approved_script_count=0,
+            completed_video_count=0,
             latest_run=None,
             active_run=None,
+            active_video_run=None,
+            primary_cta="start_series",
             last_activity_at=record.updated_at,
             can_edit=True,
         )
 
     def get_series_detail(self, auth: AuthContext, series_id: str) -> dict[str, object]:
         record = self._get_series(series_id, auth.workspace_id)
+        stats = self._script_stats(record.id)
         latest_run = self._latest_run(record.id)
         active_run = self._active_run(record.id)
+        active_video_run = self._active_video_run(record.id)
         return series_to_dict(
             record,
-            total_script_count=self._script_count(record.id),
+            total_script_count=stats["total_script_count"],
+            scripts_awaiting_review_count=stats["scripts_awaiting_review_count"],
+            approved_script_count=stats["approved_script_count"],
+            completed_video_count=stats["completed_video_count"],
             latest_run=latest_run,
             active_run=active_run,
+            active_video_run=active_video_run,
+            primary_cta="create_video" if stats["total_script_count"] > 0 else "start_series",
             last_activity_at=self._last_activity_at(record, latest_run),
-            can_edit=active_run is None,
+            can_edit=active_run is None and active_video_run is None,
         )
 
     def update_series(
@@ -202,7 +264,8 @@ class SeriesService:
         self._assert_mutation_rights(auth)
         record = self._get_series(series_id, auth.workspace_id)
         active_run = self._active_run(record.id)
-        if active_run:
+        active_video_run = self._active_video_run(record.id)
+        if active_run or active_video_run:
             raise ApiError(
                 409,
                 "series_locked",
@@ -245,11 +308,17 @@ class SeriesService:
         self.db.commit()
         self.db.refresh(record)
         latest_run = self._latest_run(record.id)
+        stats = self._script_stats(record.id)
         return series_to_dict(
             record,
-            total_script_count=self._script_count(record.id),
+            total_script_count=stats["total_script_count"],
+            scripts_awaiting_review_count=stats["scripts_awaiting_review_count"],
+            approved_script_count=stats["approved_script_count"],
+            completed_video_count=stats["completed_video_count"],
             latest_run=latest_run,
             active_run=None,
+            active_video_run=None,
+            primary_cta="create_video" if stats["total_script_count"] > 0 else "start_series",
             last_activity_at=self._last_activity_at(record, latest_run),
             can_edit=True,
         )

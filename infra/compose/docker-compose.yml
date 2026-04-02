@@ -32,6 +32,20 @@ x-backend-service: &backend-service
       condition: service_completed_successfully
 
 services:
+  migrate:
+    <<: *backend-service
+    command: uv run alembic upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    restart: "no"
+
   frontend:
     build:
       context: ../..
@@ -68,6 +82,8 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -88,34 +104,58 @@ services:
   worker-planning:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app worker -Q planning --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   worker-frame:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app worker -Q frame --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   worker-video:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app worker -Q video --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   worker-audio:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   worker-composition:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app worker -Q composition --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   worker-notifications:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app worker -Q notifications --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   worker-maintenance:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app worker -Q maintenance --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   beat:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app beat --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   postgres:
     image: postgres:16-alpine

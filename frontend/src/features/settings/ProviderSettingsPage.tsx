@@ -16,13 +16,13 @@ import {
   getProviderOptionsByGenerationType,
   providerCatalog,
   providerGenerationLabels,
-  supportedExecutionModes,
 } from "../../lib/provider-catalog";
 import { liveGetOllamaModels } from "../../lib/live-api";
 import type {
   ProviderCatalogOption,
   ProviderCredentialInput,
   ProviderCredentialRecord,
+  ProviderExecutionRoute,
   ProviderGenerationType,
   ProviderModality,
 } from "../../types/domain";
@@ -148,11 +148,6 @@ function toCredentialInput(form: ProviderFormState): ProviderCredentialInput {
   };
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "Never";
-  return new Date(value).toLocaleString();
-}
-
 function formatDateShort(value: string | null): string {
   if (!value) return "Never";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -185,7 +180,7 @@ function RouteCard({
   onUseHosted,
 }: {
   modality: ProviderModality;
-  route: any;
+  route: ProviderExecutionRoute;
   credential: ProviderCredentialRecord | undefined;
   isSaving: boolean;
   onUseHosted: () => void;

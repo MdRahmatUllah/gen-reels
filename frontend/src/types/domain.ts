@@ -163,6 +163,17 @@ export interface IdeaSet {
 /* Series */
 export type SeriesContentMode = "preset" | "custom";
 export type SeriesMusicMode = "none" | "preset";
+export type SeriesPrimaryCta = "start_series" | "create_video";
+export type SeriesApprovalState = "needs_review" | "approved" | "rejected" | "superseded";
+export type SeriesVideoPhase =
+  | "queued"
+  | "preparing_project"
+  | "generating_scenes"
+  | "generating_frames"
+  | "generating_voiceover"
+  | "rendering"
+  | "completed"
+  | "failed";
 
 export interface SeriesCatalogOption {
   key: string;
@@ -203,10 +214,16 @@ export interface SeriesSummary extends SeriesInput {
   workspaceId: string;
   ownerUserId: string;
   totalScriptCount: number;
+  scriptsAwaitingReviewCount: number;
+  approvedScriptCount: number;
+  completedVideoCount: number;
   latestRunId: string | null;
   latestRunStatus: WorkflowStatus | null;
   activeRunId: string | null;
   activeRunStatus: WorkflowStatus | null;
+  activeVideoRunId: string | null;
+  activeVideoRunStatus: WorkflowStatus | null;
+  primaryCta: SeriesPrimaryCta;
   canEdit: boolean;
   lastActivityAt: string;
   createdAt: string;
@@ -214,6 +231,33 @@ export interface SeriesSummary extends SeriesInput {
 }
 
 export interface SeriesDetail extends SeriesSummary {}
+
+export interface SeriesRevisionSummary {
+  id: string;
+  seriesScriptId: string;
+  revisionNumber: number;
+  approvalState: SeriesApprovalState;
+  title: string;
+  summary: string;
+  estimatedDurationSeconds: number;
+  readingTimeLabel: string;
+  totalWords: number;
+  lines: ScriptLine[];
+  videoTitle: string;
+  videoDescription: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeriesPublishedVideo {
+  projectId: string | null;
+  renderJobId: string | null;
+  exportId: string | null;
+  downloadUrl: string | null;
+  title: string;
+  description: string;
+  completedAt: string | null;
+}
 
 export interface SeriesScript {
   id: string;
@@ -227,8 +271,54 @@ export interface SeriesScript {
   readingTimeLabel: string;
   totalWords: number;
   lines: ScriptLine[];
+  approvalState: SeriesApprovalState;
+  videoStatus: WorkflowStatus | null;
+  videoPhase: SeriesVideoPhase | "completed" | null;
+  videoCurrentSceneIndex: number | null;
+  videoCurrentSceneCount: number | null;
+  videoRenderJobId: string | null;
+  videoHiddenProjectId: string | null;
+  currentRevision: SeriesRevisionSummary | null;
+  approvedRevision: SeriesRevisionSummary | null;
+  publishedRevision: SeriesRevisionSummary | null;
+  publishedVideo: SeriesPublishedVideo | null;
+  canApprove: boolean;
+  canReject: boolean;
+  canRegenerate: boolean;
+  canCreateVideo: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SeriesSceneAsset {
+  assetId: string;
+  downloadUrl: string | null;
+}
+
+export interface SeriesScenePreview {
+  sceneSegmentId: string;
+  sceneIndex: number;
+  title: string;
+  beat: string;
+  narrationText: string;
+  captionText: string;
+  targetDurationSeconds: number;
+  visualPrompt: string;
+  startImagePrompt: string;
+  endImagePrompt: string;
+  startFrameAsset: SeriesSceneAsset | null;
+  endFrameAsset: SeriesSceneAsset | null;
+  narrationAsset: SeriesSceneAsset | null;
+  slideAsset: SeriesSceneAsset | null;
+}
+
+export interface SeriesScriptDetail {
+  script: SeriesScript;
+  revisions: SeriesRevisionSummary[];
+  scenes: SeriesScenePreview[];
+  latestRenderJobId: string | null;
+  latestRenderStatus: WorkflowStatus | null;
+  latestScenePlanId: string | null;
 }
 
 export interface SeriesRunStep {
@@ -270,6 +360,55 @@ export interface SeriesRun {
   createdAt: string;
   updatedAt: string;
   steps: SeriesRunStep[];
+  currentStep: number | null;
+}
+
+export interface SeriesVideoRunStep {
+  id: string;
+  seriesVideoRunId: string;
+  seriesId: string;
+  seriesScriptId: string;
+  seriesScriptRevisionId: string;
+  stepIndex: number;
+  sequenceNumber: number;
+  status: WorkflowStatus;
+  phase: SeriesVideoPhase;
+  hiddenProjectId: string | null;
+  renderJobId: string | null;
+  lastRenderEventSequence: number;
+  currentSceneIndex: number | null;
+  currentSceneCount: number | null;
+  inputPayload: Record<string, unknown>;
+  outputPayload: Record<string, unknown> | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeriesVideoRun {
+  id: string;
+  seriesId: string;
+  workspaceId: string;
+  createdByUserId: string;
+  status: WorkflowStatus;
+  requestedVideoCount: number;
+  completedVideoCount: number;
+  failedVideoCount: number;
+  idempotencyKey: string;
+  requestHash: string;
+  payload: Record<string, unknown>;
+  errorCode: string | null;
+  errorMessage: string | null;
+  retryCount: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  steps: SeriesVideoRunStep[];
   currentStep: number | null;
 }
 
