@@ -52,8 +52,8 @@ class Settings(BaseSettings):
     jwt_private_key: str | None = None
     jwt_public_key: str | None = None
     app_encryption_key: str | None = None
-    jwt_access_token_ttl_minutes: int = 15
-    jwt_refresh_token_ttl_days: int = 180
+    jwt_access_token_ttl_minutes: int = 43200  # 30 days — no auto-logout
+    jwt_refresh_token_ttl_days: int = 365
     access_cookie_name: str = "rg_access_token"
     refresh_cookie_name: str = "rg_refresh_token"
     azure_openai_endpoint: str | None = None

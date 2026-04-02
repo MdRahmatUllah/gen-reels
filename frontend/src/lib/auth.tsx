@@ -5,7 +5,7 @@ import { mockLogin, mockLogout, mockGetSession } from "./mock-service";
 import { isMockMode, config } from "./config";
 import { liveSelectWorkspace } from "./live-api";
 
-const REFRESH_INTERVAL_MS = 12 * 60 * 1000; // 12 minutes – well before the 15-min access token expiry
+const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours — token is 30 days, no need to refresh often
 
 interface AuthContextValue {
   user: UserProfile | null;

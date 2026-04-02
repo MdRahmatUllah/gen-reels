@@ -75,6 +75,16 @@ def create_project(
     return VideoLibraryService(db, settings).create_project(auth, payload)
 
 
+@router.delete("/projects/{project_id}", status_code=204)
+def delete_project(
+    project_id: str,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    VideoLibraryService(db, settings).delete_project(auth, project_id)
+
+
 @router.get("/browse", response_model=BrowseFolderResponse)
 def browse_folder(
     path: str = Query(..., description="Absolute folder path on the server"),

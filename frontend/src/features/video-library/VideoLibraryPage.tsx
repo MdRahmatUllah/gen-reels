@@ -6,6 +6,7 @@ import { EmptyState, LoadingPage, PageFrame, SectionCard } from "../../component
 import {
   mockBrowseFolder,
   mockCreateVideoLibraryProject,
+  mockDeleteVideoLibraryProject,
   mockDeleteUploadedVideo,
   mockGetStreamUrl,
   mockGetUploadedVideos,
@@ -1234,40 +1235,60 @@ function ProjectFolderCard({
   description,
   count,
   onClick,
+  onDelete,
 }: {
   name: string;
   description?: string | null;
   count: number;
   onClick: () => void;
+  onDelete?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex flex-col gap-2 rounded-xl bg-glass border border-border-subtle p-4 text-left transition-all hover:border-accent/50 hover:bg-primary-bg/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-    >
-      {/* Folder icon */}
-      <div className="flex items-center justify-between w-full">
-        <svg
-          viewBox="0 0 24 24"
-          className="w-10 h-10 text-accent/70 group-hover:text-accent transition-colors"
-          fill="currentColor"
+    <div className="group relative flex flex-col gap-2 rounded-xl bg-glass border border-border-subtle p-4 transition-all hover:border-accent/50 hover:bg-primary-bg/30">
+      {/* Delete button */}
+      {onDelete && (
+        <button
+          type="button"
+          className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md text-muted hover:text-error hover:bg-error/10"
+          title="Delete project"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
         >
-          <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
-        </svg>
-        <span className="text-xs font-semibold text-muted bg-primary-bg/50 rounded-full px-2 py-0.5">
-          {count} {count === 1 ? "video" : "videos"}
-        </span>
-      </div>
-      <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-semibold text-primary group-hover:text-accent transition-colors line-clamp-1">
-          {name}
-        </span>
-        {description && (
-          <span className="text-xs text-muted line-clamp-2">{description}</span>
-        )}
-      </div>
-    </button>
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex flex-col gap-2 text-left focus:outline-none"
+      >
+        {/* Folder icon */}
+        <div className="flex items-center justify-between w-full">
+          <svg
+            viewBox="0 0 24 24"
+            className="w-10 h-10 text-accent/70 group-hover:text-accent transition-colors"
+            fill="currentColor"
+          >
+            <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
+          </svg>
+          <span className="text-xs font-semibold text-muted bg-primary-bg/50 rounded-full px-2 py-0.5">
+            {count} {count === 1 ? "video" : "videos"}
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm font-semibold text-primary group-hover:text-accent transition-colors line-clamp-1">
+            {name}
+          </span>
+          {description && (
+            <span className="text-xs text-muted line-clamp-2">{description}</span>
+          )}
+        </div>
+      </button>
+    </div>
   );
 }
 
@@ -1325,6 +1346,20 @@ function UploadedFilesTab({
       void queryClient.invalidateQueries({ queryKey: ["video-library-uploaded"] });
     },
   });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: (projectId: string) => mockDeleteVideoLibraryProject(projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["video-library-projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["video-library-uploaded"] });
+    },
+  });
+
+  function handleDeleteProject(projectId: string, name: string) {
+    if (confirm(`Delete project "${name}" and all its videos? This cannot be undone.`)) {
+      deleteProjectMutation.mutate(projectId);
+    }
+  }
 
   const createProjectMutation = useMutation({
     mutationFn: (payload: { name: string; description: string }) =>
@@ -1543,6 +1578,7 @@ function UploadedFilesTab({
               description={p.description}
               count={countForProject(p.id)}
               onClick={() => setOpenFolderId(p.id)}
+              onDelete={() => handleDeleteProject(p.id, p.name)}
             />
           ))}
           {unassignedCount > 0 && (

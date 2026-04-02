@@ -136,6 +136,7 @@ import {
   liveGetAllVideos,
   liveGetVideoLibraryProjects,
   liveCreateVideoLibraryProject,
+  liveDeleteVideoLibraryProject,
   liveBrowseFolder,
   liveUploadLocalFile,
   liveGetUploadedVideos,
@@ -152,6 +153,7 @@ import {
   liveCreateRemixJob,
   liveGetRemixJob,
   liveListRemixJobs,
+  liveStopRemixJob,
 } from "./live-api";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -2809,6 +2811,16 @@ export async function mockCreateVideoLibraryProject(payload: {
   return project;
 }
 
+export async function mockDeleteVideoLibraryProject(projectId: string): Promise<void> {
+  if (!isMockMode()) return liveDeleteVideoLibraryProject(projectId);
+  await randomDelay(150, 300);
+  const idx = state.videoLibraryProjects.findIndex((p) => p.id === projectId);
+  if (idx === -1) throw new Error("Project not found");
+  state.videoLibraryProjects.splice(idx, 1);
+  // Remove all items in that project
+  state.uploadedVideos = state.uploadedVideos.filter((v) => v.project_id !== projectId);
+}
+
 export async function mockBrowseFolder(folderPath: string): Promise<BrowseFolderResult> {
   if (!isMockMode()) return liveBrowseFolder(folderPath);
   await randomDelay(300, 600);
@@ -3025,4 +3037,15 @@ export async function mockListRemixJobs(projectId: string): Promise<RemixJob[]> 
   if (!isMockMode()) return liveListRemixJobs(projectId);
   await randomDelay(100, 200);
   return state.remixJobs.filter((j) => j.remix_project_id === projectId);
+}
+
+export async function mockStopRemixJob(jobId: string): Promise<RemixJob> {
+  if (!isMockMode()) return liveStopRemixJob(jobId);
+  await randomDelay(100, 200);
+  const job = state.remixJobs.find((j) => j.id === jobId);
+  if (!job) throw new Error("Remix job not found");
+  if (job.status !== "pending" && job.status !== "running") throw new Error("Job is not running.");
+  job.status = "cancelled";
+  job.updated_at = new Date().toISOString();
+  return { ...job };
 }

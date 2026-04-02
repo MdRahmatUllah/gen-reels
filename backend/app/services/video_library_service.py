@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import AuthContext
 from app.core.config import Settings
 from app.core.errors import ApiError
+from app.integrations.media_ops import probe_media_bytes
 from app.integrations.storage import StorageClient, build_storage_client
 from app.models.entities import LocalFolderProject, VideoLibraryItem, VideoLibraryProject
 from app.schemas.video_library import (
@@ -165,6 +166,30 @@ class VideoLibraryService:
         self.db.refresh(project)
         return _project_to_response(project)
 
+    def delete_project(self, auth: AuthContext, project_id: str) -> None:
+        project = self.db.scalar(
+            select(VideoLibraryProject).where(
+                VideoLibraryProject.id == uuid.UUID(project_id),
+                VideoLibraryProject.workspace_id == uuid.UUID(auth.workspace_id),
+            )
+        )
+        if not project:
+            raise ApiError(404, "not_found", "Video library project not found.")
+
+        # Delete all items in this project from storage + DB
+        items = self.db.scalars(
+            select(VideoLibraryItem).where(VideoLibraryItem.project_id == project.id)
+        ).all()
+        for item in items:
+            try:
+                self.storage.delete_object(item.bucket_name, item.object_name)
+            except Exception:
+                pass  # Best-effort; don't block deletion on storage errors
+            self.db.delete(item)
+
+        self.db.delete(project)
+        self.db.commit()
+
     # ── Browse local folder ───────────────────────────────────────────────────
 
     def browse_folder(self, folder_path: str) -> BrowseFolderResponse:
@@ -216,6 +241,20 @@ class VideoLibraryService:
         object_name = f"{auth.workspace_id}/{item_id}/{local_path.name}"
 
         data = local_path.read_bytes()
+
+        # Probe video metadata (duration, dimensions) — best-effort, never blocks upload
+        probe = probe_media_bytes(self.settings, file_name=local_path.name, bytes_payload=data)
+        video_stream = next(
+            (s for s in probe.get("streams", []) if s.get("codec_type") == "video"),
+            {},
+        )
+        duration_ms: int | None = None
+        raw_duration = probe.get("format", {}).get("duration")
+        if raw_duration:
+            duration_ms = int(float(raw_duration) * 1000) or None
+        width: int | None = int(video_stream.get("width") or 0) or None
+        height: int | None = int(video_stream.get("height") or 0) or None
+
         self.storage.ensure_bucket(VIDEO_LIBRARY_BUCKET)
         self.storage.put_bytes(VIDEO_LIBRARY_BUCKET, object_name, data, content_type=content_type)
 
@@ -228,6 +267,9 @@ class VideoLibraryService:
             object_name=object_name,
             content_type=content_type,
             size_bytes=len(data),
+            duration_ms=duration_ms,
+            width=width,
+            height=height,
         )
         self.db.add(item)
         self.db.commit()

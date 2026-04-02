@@ -90,6 +90,7 @@ const icons = {
   workspaces:"M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   arrow:     "M9 18l6-6-6-6",
   library:   "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14 M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z M5 3h2 M9 3h2 M13 3h2",
+  remix:     "M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z",
 };
 
 const navIconMap: Record<string, string> = {
@@ -99,6 +100,7 @@ const navIconMap: Record<string, string> = {
   "Presets":        icons.presets,
   "Templates":      icons.templates,
   "Video Library":  icons.library,
+  "Remix":          icons.remix,
   "Brief":     icons.brief,
   "Ideas":     icons.ideas,
   "Script":    icons.script,
@@ -387,6 +389,7 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
                 { to: "/app/projects", label: "Projects" },
                 { to: "/app/assets", label: "Assets" },
                 { to: "/app/video-library", label: "Video Library" },
+                { to: "/app/remix", label: "Remix" },
                 { to: "/app/presets", label: "Presets" },
                 { to: "/app/templates", label: "Templates" },
               ]}

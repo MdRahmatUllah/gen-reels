@@ -2353,6 +2353,10 @@ export async function liveCreateVideoLibraryProject(payload: {
   return api.post<VideoLibraryProject>("/video-library/projects", payload);
 }
 
+export async function liveDeleteVideoLibraryProject(projectId: string): Promise<void> {
+  return api.delete<void>(`/video-library/projects/${projectId}`);
+}
+
 export async function liveBrowseFolder(folderPath: string): Promise<BrowseFolderResult> {
   return api.get<BrowseFolderResult>(`/video-library/browse?path=${encodeURIComponent(folderPath)}`);
 }
@@ -2424,4 +2428,8 @@ export async function liveGetRemixJob(jobId: string): Promise<RemixJob> {
 
 export async function liveListRemixJobs(projectId: string): Promise<RemixJob[]> {
   return api.get<RemixJob[]>(`/remix/projects/${projectId}/jobs`);
+}
+
+export async function liveStopRemixJob(jobId: string): Promise<RemixJob> {
+  return api.post<RemixJob>(`/remix/jobs/${jobId}/cancel`, {});
 }

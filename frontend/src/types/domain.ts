@@ -817,7 +817,7 @@ export interface RemixAnalysis {
 export interface RemixVideo {
   id: string;
   job_id: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
   clip_ids: string[];
   output_item_id: string | null;
   error_message: string | null;
@@ -828,7 +828,7 @@ export interface RemixJob {
   id: string;
   remix_project_id: string;
   workspace_id: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
   total_videos: number;
   completed_videos: number;
   failed_videos: number;

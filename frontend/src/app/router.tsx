@@ -29,6 +29,7 @@ import { AdminWorkspacesPage } from "../features/admin/AdminWorkspacesPage";
 import { QuickStartProgressPage } from "../features/projects/QuickStartProgressPage";
 import { VideoEditorPage } from "../features/editor/VideoEditorPage";
 import { VideoLibraryPage } from "../features/video-library/VideoLibraryPage";
+import RemixPage from "../features/remix/RemixPage";
 
 export const router = createBrowserRouter([
   {
@@ -114,6 +115,10 @@ export const router = createBrowserRouter([
       {
         path: "video-library",
         element: <VideoLibraryPage />,
+      },
+      {
+        path: "remix",
+        element: <RemixPage />,
       },
       {
         path: "settings/brand",

@@ -92,3 +92,13 @@ def get_job(
     settings=Depends(get_settings_dep),
 ):
     return RemixService(db, settings).get_job(auth, job_id)
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=RemixJobResponse)
+def cancel_job(
+    job_id: str,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db_dep),
+    settings=Depends(get_settings_dep),
+):
+    return RemixService(db, settings).cancel_job(auth, job_id)

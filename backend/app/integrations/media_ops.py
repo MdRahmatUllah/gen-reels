@@ -693,9 +693,9 @@ def concat_video_clips(
 ) -> tuple[bytes, dict[str, object]]:
     """Concatenate multiple video clips into a single portrait MP4.
 
-    Each clip is normalised (scaled to target_height, padded to target_width)
-    before concatenation so that clips with different resolutions merge cleanly.
-    Audio is stripped — the output is video-only.
+    Each clip is normalised (scaled to target_height, padded to target_width,
+    audio re-encoded to AAC) before concatenation so that clips with different
+    resolutions and audio formats merge cleanly.
     """
     runner = FFmpegRunner(settings)
     if not runner.available():
@@ -720,10 +720,10 @@ def concat_video_clips(
                         f"setsar=1"
                     ),
                     "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
-                    "-an",
+                    "-c:a", "aac", "-b:a", "192k",
                     str(out_path),
                 ],
-                cwd=workdir,
+                workdir=workdir,
             )
             norm_paths.append(out_path)
 
@@ -743,7 +743,7 @@ def concat_video_clips(
                 "-c", "copy",
                 "output.mp4",
             ],
-            cwd=workdir,
+            workdir=workdir,
         )
 
         probe = _probe_result(settings, "output.mp4", workdir=workdir)

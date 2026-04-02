@@ -1248,7 +1248,7 @@ class RemixVideo(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("remix_jobs.id"), nullable=False, index=True)
     workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
-    output_item_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("video_library_items.id"), nullable=True)
+    output_item_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("video_library_items.id", ondelete="SET NULL"), nullable=True)
     clip_ids: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
     status: Mapped[str] = mapped_column(sa.String(32), nullable=False, default="pending")
     error_message: Mapped[str | None] = mapped_column(sa.Text)

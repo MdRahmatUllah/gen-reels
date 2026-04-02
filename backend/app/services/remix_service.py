@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import AuthContext
 from app.core.config import Settings
 from app.core.errors import ApiError
-from app.integrations.media_ops import apply_video_effects, concat_video_clips
+from app.integrations.media_ops import apply_video_effects, concat_video_clips, probe_media_bytes
 from app.integrations.storage import StorageClient, build_storage_client
 from app.models.entities import (
     RemixJob,
@@ -239,6 +239,26 @@ class RemixService:
 
     # ── Analysis ──────────────────────────────────────────────────────────────
 
+    def _backfill_clip_duration(self, clip: VideoLibraryItem) -> None:
+        """Probe and persist duration/dimensions for clips uploaded before probing was added."""
+        try:
+            data = self.storage.read_bytes(clip.bucket_name, clip.object_name)
+            probe = probe_media_bytes(self.settings, file_name=clip.file_name, bytes_payload=data)
+            video_stream = next(
+                (s for s in probe.get("streams", []) if s.get("codec_type") == "video"),
+                {},
+            )
+            raw_duration = probe.get("format", {}).get("duration")
+            if raw_duration:
+                clip.duration_ms = int(float(raw_duration) * 1000) or None
+            if video_stream.get("width"):
+                clip.width = int(video_stream["width"])
+            if video_stream.get("height"):
+                clip.height = int(video_stream["height"])
+            self.db.commit()
+        except Exception:
+            pass  # Never fail analysis due to probe errors
+
     def analyze(self, auth: AuthContext, project_id: str) -> RemixAnalyzeResponse:
         project = self._get_project(auth, project_id)
         clips = _get_source_clips(
@@ -246,6 +266,12 @@ class RemixService:
             uuid.UUID(auth.workspace_id),
             project.source_project_id,
         )
+
+        # Backfill duration for clips that were uploaded before probing was added
+        for clip in clips:
+            if not clip.duration_ms:
+                self._backfill_clip_duration(clip)
+
         clips_with_duration = [c for c in clips if (c.duration_ms or 0) > 0]
         total_duration_ms = sum(c.duration_ms or 0 for c in clips_with_duration)
 
@@ -317,6 +343,36 @@ class RemixService:
 
         return _job_to_response(job, self.db)
 
+    def cancel_job(self, auth: AuthContext, job_id: str) -> RemixJobResponse:
+        job = self.db.scalar(
+            select(RemixJob).where(
+                RemixJob.id == uuid.UUID(job_id),
+                RemixJob.workspace_id == uuid.UUID(auth.workspace_id),
+            )
+        )
+        if not job:
+            raise ApiError(404, "not_found", "Remix job not found.")
+        if job.status not in ("pending", "running"):
+            raise ApiError(400, "not_active", "Job is not running.")
+
+        job.status = "cancelled"
+        job.updated_at = datetime.now(timezone.utc)
+
+        # Mark all pending/running videos as cancelled too
+        pending_videos = self.db.scalars(
+            select(RemixVideo).where(
+                RemixVideo.job_id == job.id,
+                RemixVideo.status.in_(["pending", "running"]),
+            )
+        ).all()
+        for v in pending_videos:
+            v.status = "cancelled"
+            v.updated_at = datetime.now(timezone.utc)
+
+        self.db.commit()
+        self.db.refresh(job)
+        return _job_to_response(job, self.db)
+
     def get_job(self, auth: AuthContext, job_id: str) -> RemixJobResponse:
         job = self.db.scalar(
             select(RemixJob).where(
@@ -360,6 +416,11 @@ class RemixService:
         fx = dict(project.visual_effects or {})
 
         for idx, video in enumerate(videos):
+            # Re-fetch job status to detect cancellation
+            self.db.refresh(job)
+            if job.status == "cancelled":
+                break
+
             try:
                 self._process_remix_video(video, project, fx, idx)
                 job.completed_videos += 1
@@ -370,7 +431,8 @@ class RemixService:
             video.updated_at = datetime.now(timezone.utc)
             self.db.commit()
 
-        job.status = "completed" if job.failed_videos == 0 else "failed"
+        if job.status != "cancelled":
+            job.status = "completed" if job.failed_videos == 0 else "failed"
         job.updated_at = datetime.now(timezone.utc)
         self.db.commit()
 
