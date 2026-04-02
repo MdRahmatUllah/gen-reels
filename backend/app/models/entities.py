@@ -1223,7 +1223,7 @@ class RemixProject(Base):
     visual_effects: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
     target_duration_ms: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     clip_mode: Mapped[str] = mapped_column(sa.String(32), nullable=False, default="random")
-    output_project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("video_library_projects.id"), nullable=True)
+    output_project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("video_library_projects.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
