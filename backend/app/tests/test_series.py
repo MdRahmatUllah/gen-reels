@@ -19,6 +19,9 @@ from app.models.entities import (
     JobStatus,
     RenderJob,
     RenderStep,
+    ScenePlan,
+    ScenePlanSource,
+    SceneSegment,
     ScriptSource,
     ScriptVersion,
     Series,
@@ -537,6 +540,130 @@ def test_series_video_run_falls_back_to_stub_narration_when_speech_provider_reje
         session.close()
 
 
+def test_series_audio_mix_profile_follows_music_mode(authenticated_client):
+    preset_series = _create_series(authenticated_client, _preset_series_payload())
+    none_series = _create_series(
+        authenticated_client,
+        {**_custom_series_payload(), "title": "History Is Weird 2"},
+    )
+
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        service = SeriesVideoService(session, settings)
+        preset_record = session.get(Series, UUID(preset_series["id"]))
+        none_record = session.get(Series, UUID(none_series["id"]))
+        assert preset_record is not None
+        assert none_record is not None
+
+        assert service._series_audio_mix_profile(none_record) == {
+            "music_enabled": False,
+            "music_track_name": "",
+            "music_ducking": "-12 dB",
+        }
+        assert service._series_audio_mix_profile(preset_record) == {
+            "music_enabled": True,
+            "music_track_name": "breathing_shadows",
+            "music_ducking": "-12 dB",
+        }
+    finally:
+        session.close()
+
+
+def test_series_video_run_detects_missing_narration_assets(
+    authenticated_client,
+    seeded_auth,
+):
+    series = _create_series(authenticated_client, _preset_series_payload())
+    _start_run(authenticated_client, series["id"], 1, "series-missing-narration-script")
+    script = _list_scripts(authenticated_client, series["id"])[0]
+    script_detail = _get_script_detail(authenticated_client, series["id"], script["id"])
+
+    settings = get_settings()
+    session = get_session_factory(settings.database_url)()
+    try:
+        service = SeriesVideoService(session, settings)
+        series_record = session.get(Series, UUID(series["id"]))
+        script_record = session.get(SeriesScript, UUID(script["id"]))
+        revision = session.get(SeriesScriptRevision, UUID(str(script_detail["script"]["current_revision"]["id"])))
+        assert series_record is not None
+        assert script_record is not None
+        assert revision is not None
+
+        project = service._ensure_hidden_project(series_record, script_record, UUID(seeded_auth["user_id"]))
+        service._sync_hidden_project(
+            series=series_record,
+            slot=script_record,
+            revision=revision,
+            project=project,
+            user_id=UUID(seeded_auth["user_id"]),
+        )
+        session.refresh(project)
+
+        scene_plan = ScenePlan(
+            project_id=project.id,
+            based_on_script_version_id=project.active_script_version_id,
+            created_by_user_id=UUID(seeded_auth["user_id"]),
+            visual_preset_id=project.default_visual_preset_id,
+            voice_preset_id=project.default_voice_preset_id,
+            version_number=1,
+            source_type=ScenePlanSource.generated,
+            approval_state="approved",
+            total_estimated_duration_seconds=12,
+            scene_count=1,
+        )
+        session.add(scene_plan)
+        session.flush()
+        session.add(
+            SceneSegment(
+                scene_plan_id=scene_plan.id,
+                scene_index=1,
+                title="Scene 1",
+                beat="Opening beat",
+                narration_text="A quiet terminal hums in the background.",
+                caption_text="Airports at night",
+                visual_direction="Wide establishing shot.",
+                shot_type="wide",
+                motion="slow push in",
+                target_duration_seconds=12,
+                estimated_voice_duration_seconds=12,
+                visual_prompt="Night airport terminal.",
+                start_image_prompt="Empty gate with blue light.",
+                end_image_prompt="Long corridor vanishing into darkness.",
+            )
+        )
+        render_job = RenderJob(
+            workspace_id=project.workspace_id,
+            project_id=project.id,
+            created_by_user_id=UUID(seeded_auth["user_id"]),
+            script_version_id=project.active_script_version_id,
+            scene_plan_id=scene_plan.id,
+            job_kind=JobKind.render_generation,
+            queue_name="render",
+            status=JobStatus.completed,
+            idempotency_key="series-missing-narration-render",
+            request_hash="series-missing-narration-render",
+            payload={},
+            allow_export_without_music=True,
+        )
+        session.add(render_job)
+        session.commit()
+
+        project = session.get(type(project), project.id)
+        render_job = session.get(RenderJob, render_job.id)
+        assert project is not None
+        assert render_job is not None
+
+        try:
+            service._ensure_render_has_voiceover_assets(render_job=render_job, project=project)
+            raise AssertionError("expected missing narration validation to fail")
+        except AdapterError as error:
+            assert error.code == "series_voiceover_missing"
+            assert "scene(s) 1" in error.message
+    finally:
+        session.close()
+
+
 def test_get_series_video_run_recovers_orphaned_render_step(
     authenticated_client,
     seeded_auth,
@@ -740,11 +867,46 @@ def test_execute_video_run_reuses_existing_render_job_on_resume(
             )
         )
 
+        scene_plan = ScenePlan(
+            project_id=project.id,
+            based_on_script_version_id=original_script.id,
+            created_by_user_id=UUID(seeded_auth["user_id"]),
+            visual_preset_id=project.default_visual_preset_id,
+            voice_preset_id=project.default_voice_preset_id,
+            version_number=1,
+            source_type=ScenePlanSource.generated,
+            approval_state="approved",
+            total_estimated_duration_seconds=61,
+            scene_count=1,
+        )
+        session.add(scene_plan)
+        session.flush()
+        segment = SceneSegment(
+            scene_plan_id=scene_plan.id,
+            scene_index=1,
+            title="Scene 1",
+            beat="Opening beat",
+            narration_text="The terminal feels frozen between destinations.",
+            caption_text="Airport liminal space",
+            visual_direction="Long empty concourse.",
+            shot_type="wide",
+            motion="slow push",
+            target_duration_seconds=61,
+            estimated_voice_duration_seconds=61,
+            visual_prompt="Night airport concourse with fluorescent light.",
+            start_image_prompt="Empty airport gate at night.",
+            end_image_prompt="Shadowy moving walkway under cold lights.",
+        )
+        session.add(segment)
+        session.flush()
+        project.active_scene_plan_id = scene_plan.id
+
         render_job = RenderJob(
             workspace_id=project.workspace_id,
             project_id=project.id,
             created_by_user_id=UUID(seeded_auth["user_id"]),
             script_version_id=original_script.id,
+            scene_plan_id=scene_plan.id,
             job_kind=JobKind.render_generation,
             queue_name="render",
             status=JobStatus.completed,
@@ -776,6 +938,24 @@ def test_execute_video_run_reuses_existing_render_job_on_resume(
         )
         session.add(asset)
         session.flush()
+        session.add(
+            Asset(
+                workspace_id=project.workspace_id,
+                project_id=project.id,
+                render_job_id=render_job.id,
+                scene_segment_id=segment.id,
+                asset_type=AssetType.narration,
+                asset_role=AssetRole.narration_track,
+                status="completed",
+                bucket_name="tests",
+                object_name=f"audio/{render_job.id}.wav",
+                file_name="resume-test.wav",
+                content_type="audio/wav",
+                size_bytes=2048,
+                duration_ms=61000,
+                has_audio_stream=True,
+            )
+        )
         session.add(
             ExportRecord(
                 workspace_id=project.workspace_id,

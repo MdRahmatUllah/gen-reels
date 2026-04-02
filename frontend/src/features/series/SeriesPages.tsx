@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { EmptyState, MetricCard, PageFrame, ProgressBar, SectionCard, StatusBadge } from "../../components/ui";
@@ -24,6 +24,7 @@ import type {
   SeriesCatalogOption,
   SeriesDetail,
   SeriesInput,
+  SeriesSceneAsset,
   SeriesRun,
   SeriesScript,
   SeriesScriptDetail,
@@ -91,6 +92,17 @@ function lookupOption(options: SeriesCatalogOption[], key: string | null | undef
   return options.find((option) => option.key === key) ?? null;
 }
 
+function musicSelectionLabel(
+  catalog: SeriesCatalog,
+  musicMode: SeriesInput["musicMode"] | SeriesDetail["musicMode"],
+  musicKeys: string[],
+): string {
+  if (musicMode !== "preset" || musicKeys.length === 0) {
+    return "None";
+  }
+  return musicKeys.map((key) => lookupOption(catalog.music, key)?.label ?? humanizeKey(key)).join(", ");
+}
+
 function optionButtonClass(selected: boolean) {
   return selected
     ? "rounded-xl border border-border-active bg-primary-bg p-4 text-left shadow-sm transition-all"
@@ -149,6 +161,119 @@ function StepPills({ step }: { step: number }) {
           {index + 1}. {label}
         </div>
       ))}
+    </div>
+  );
+}
+
+function SceneAssetLightbox({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-8 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center gap-3" onClick={(event) => event.stopPropagation()}>
+        <img src={src} alt={alt} className="max-h-[80vh] max-w-[85vw] rounded-xl border border-border-card object-contain shadow-2xl" />
+        <div className="flex items-center gap-3">
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-lg border border-border-card bg-glass px-3 py-1.5 text-xs font-semibold text-primary hover:border-border-active"
+          >
+            Open in new tab
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center rounded-lg border border-border-card bg-glass px-3 py-1.5 text-xs font-semibold text-primary hover:border-border-active"
+          >
+            Close
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full border border-border-card bg-surface text-lg leading-none text-primary shadow-lg hover:bg-glass"
+          aria-label="Close"
+        >
+          &times;
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SceneFrameThumb({
+  asset,
+  alt,
+  placeholder,
+  onOpen,
+}: {
+  asset: SeriesSceneAsset | null;
+  alt: string;
+  placeholder: string;
+  onOpen: (src: string, alt: string) => void;
+}) {
+  if (!asset?.downloadUrl) {
+    return (
+      <div className="mt-3 flex h-44 items-center justify-center rounded-xl border border-dashed border-border-card bg-glass px-4 text-center text-xs text-muted">
+        {placeholder}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(asset.downloadUrl as string, alt)}
+      className="group mt-3 block overflow-hidden rounded-xl border border-border-card bg-black/10 text-left"
+    >
+      <img src={asset.downloadUrl} alt={alt} className="h-44 w-full object-cover transition-transform group-hover:scale-[1.02]" />
+      <div className="flex items-center justify-between border-t border-border-card bg-card px-3 py-2 text-xs text-muted">
+        <span>Generated frame</span>
+        <span className="font-semibold text-primary">View</span>
+      </div>
+    </button>
+  );
+}
+
+function SceneAudioPreview({ asset }: { asset: SeriesSceneAsset | null }) {
+  if (!asset?.downloadUrl) {
+    return <p className="mt-3 text-xs text-muted">Voiceover audio is still being generated.</p>;
+  }
+  return (
+    <div className="mt-3 space-y-2">
+      <audio className="w-full" controls preload="metadata" src={asset.downloadUrl} />
+      <a
+        href={asset.downloadUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center rounded-lg border border-border-card bg-glass px-3 py-1.5 text-xs font-semibold text-primary hover:border-border-active"
+      >
+        Download audio
+      </a>
+    </div>
+  );
+}
+
+function ScenePreviewPanel({
+  title,
+  text,
+  children,
+}: {
+  title: string;
+  text: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border-card bg-card p-4">
+      <p className="text-xs uppercase tracking-widest text-muted">{title}</p>
+      <p className="mt-2 whitespace-pre-line text-sm leading-6 text-secondary">{text}</p>
+      {children}
     </div>
   );
 }
@@ -247,6 +372,8 @@ function SeriesOutlinePreview({
   detail: SeriesScriptDetail | undefined;
   loading: boolean;
 }) {
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+
   if (loading) {
     return <div className="rounded-xl border border-border-card bg-glass p-4 text-sm text-secondary">Loading outline…</div>;
   }
@@ -298,8 +425,37 @@ function SeriesOutlinePreview({
               </strong>
               <span className="text-xs text-muted">{scene.targetDurationSeconds}s</span>
             </div>
-            <p className="mt-2 text-sm leading-6 text-secondary">{scene.narrationText}</p>
             <p className="mt-2 text-xs uppercase tracking-widest text-muted">{scene.captionText}</p>
+            <div className="mt-4 grid gap-3 xl:grid-cols-3">
+              <ScenePreviewPanel
+                title="Voiceover"
+                text={scene.narrationText || "Voiceover text will appear here once scene generation finishes."}
+              >
+                <SceneAudioPreview asset={scene.narrationAsset} />
+              </ScenePreviewPanel>
+              <ScenePreviewPanel
+                title="Start screen"
+                text={scene.startImagePrompt || "Start screen prompt is still being prepared."}
+              >
+                <SceneFrameThumb
+                  asset={scene.startFrameAsset}
+                  alt={`Scene ${scene.sceneIndex} start frame`}
+                  placeholder="Start frame is still being generated."
+                  onOpen={(src, alt) => setLightbox({ src, alt })}
+                />
+              </ScenePreviewPanel>
+              <ScenePreviewPanel
+                title="End screen"
+                text={scene.endImagePrompt || "End screen prompt is still being prepared."}
+              >
+                <SceneFrameThumb
+                  asset={scene.endFrameAsset}
+                  alt={`Scene ${scene.sceneIndex} end frame`}
+                  placeholder="End frame is still being generated."
+                  onOpen={(src, alt) => setLightbox({ src, alt })}
+                />
+              </ScenePreviewPanel>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
               {scene.startFrameAsset ? <span className="rounded-full bg-card px-3 py-1">Start frame ready</span> : null}
               {scene.endFrameAsset ? <span className="rounded-full bg-card px-3 py-1">End frame ready</span> : null}
@@ -321,6 +477,7 @@ function SeriesOutlinePreview({
           </div>
         </div>
       ) : null}
+      {lightbox ? <SceneAssetLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} /> : null}
     </div>
   );
 }
@@ -645,6 +802,7 @@ export function SeriesEditorPage() {
     return [
       lookupOption(catalog.contentPresets, form.presetKey)?.label || "Custom topic",
       lookupOption(catalog.voices, form.voiceKey)?.label || "Voice",
+      `Music: ${musicSelectionLabel(catalog, form.musicMode, form.musicKeys)}`,
       lookupOption(catalog.artStyles, form.artStyleKey)?.label || "Art style",
       lookupOption(catalog.captionStyles, form.captionStyleKey)?.label || "Caption style",
     ];
@@ -1091,6 +1249,7 @@ export function SeriesDetailPage() {
               <div className="inspector-list">
                 <div><span>Topic</span><strong>{contentOption?.label ?? "Custom niche"}</strong></div>
                 <div><span>Voice</span><strong>{lookupOption(catalog.voices, series.voiceKey)?.label ?? series.voiceKey}</strong></div>
+                <div><span>Background music</span><strong>{musicSelectionLabel(catalog, series.musicMode, series.musicKeys)}</strong></div>
                 <div><span>Art style</span><strong>{lookupOption(catalog.artStyles, series.artStyleKey)?.label ?? series.artStyleKey}</strong></div>
                 <div><span>Caption style</span><strong>{lookupOption(catalog.captionStyles, series.captionStyleKey)?.label ?? series.captionStyleKey}</strong></div>
               </div>

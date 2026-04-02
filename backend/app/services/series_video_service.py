@@ -12,6 +12,8 @@ from app.api.deps import AuthContext
 from app.core.config import Settings
 from app.core.errors import AdapterError, ApiError
 from app.models.entities import (
+    Asset,
+    AssetRole,
     ExportRecord,
     IdeaCandidate,
     IdeaCandidateStatus,
@@ -24,6 +26,7 @@ from app.models.entities import (
     RenderJob,
     RenderStep,
     ScenePlan,
+    SceneSegment,
     ScriptSource,
     ScriptVersion,
     Series,
@@ -373,6 +376,66 @@ class SeriesVideoService(QuickStartService):
     def _step_job_key(self, step: SeriesVideoRunStep, kind: str) -> str:
         return f"series-video-{kind}-{step.id}"
 
+    def _series_audio_mix_profile(self, series: Series) -> dict[str, object]:
+        if series.music_mode == "preset" and list(series.music_keys or []):
+            return {
+                "music_enabled": True,
+                "music_track_name": str(series.music_keys[0]),
+                "music_ducking": "-12 dB",
+            }
+        return {
+            "music_enabled": False,
+            "music_track_name": "",
+            "music_ducking": "-12 dB",
+        }
+
+    def _ensure_render_has_voiceover_assets(
+        self,
+        *,
+        render_job: RenderJob,
+        project: Project,
+    ) -> None:
+        scene_plan_id = render_job.scene_plan_id or project.active_scene_plan_id
+        if not scene_plan_id:
+            raise AdapterError(
+                "internal",
+                "series_voiceover_validation_unavailable",
+                "Series render completed without a scene plan, so voiceover coverage could not be verified.",
+            )
+
+        segments = self.db.scalars(
+            select(SceneSegment)
+            .where(SceneSegment.scene_plan_id == scene_plan_id)
+            .order_by(SceneSegment.scene_index.asc())
+        ).all()
+        if not segments:
+            raise AdapterError(
+                "internal",
+                "series_voiceover_validation_unavailable",
+                "Series render completed without any scenes, so voiceover coverage could not be verified.",
+            )
+
+        narration_scene_ids = {
+            scene_segment_id
+            for scene_segment_id in self.db.scalars(
+                select(Asset.scene_segment_id).where(
+                    Asset.render_job_id == render_job.id,
+                    Asset.asset_role == AssetRole.narration_track,
+                )
+            ).all()
+            if scene_segment_id is not None
+        }
+        missing_indices = [
+            segment.scene_index for segment in segments if segment.id not in narration_scene_ids
+        ]
+        if missing_indices:
+            scene_list = ", ".join(str(index) for index in missing_indices)
+            raise AdapterError(
+                "internal",
+                "series_voiceover_missing",
+                f"Voiceover was not generated for scene(s) {scene_list}.",
+            )
+
     def _find_step_job(
         self,
         *,
@@ -717,7 +780,7 @@ class SeriesVideoService(QuickStartService):
                         allow_export_without_music=True,
                         render_mode="slide",
                         subtitle_style_profile={"burn_in": False, "preset": "off"},
-                        audio_mix_profile={"music_enabled": False, "music_track_name": "", "music_ducking": "-12 dB"},
+                        audio_mix_profile=self._series_audio_mix_profile(series),
                     ),
                     idempotency_key=render_job_key,
                     include_internal=True,
@@ -727,6 +790,10 @@ class SeriesVideoService(QuickStartService):
                 self.db.commit()
                 completed_render = self._wait_for_render(auth, render_job_id, step)
 
+            self._ensure_render_has_voiceover_assets(
+                render_job=completed_render,
+                project=project,
+            )
             export = self.db.scalar(
                 select(ExportRecord)
                 .where(
