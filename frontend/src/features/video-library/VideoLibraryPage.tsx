@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Dialog } from "../../components/Dialog";
-import { EmptyState, LoadingPage, PageFrame, SectionCard } from "../../components/ui";
+import { LoadingPage, PageFrame, SectionCard } from "../../components/ui";
 import {
   mockBrowseFolder,
   mockCreateVideoLibraryProject,

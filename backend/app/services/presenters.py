@@ -14,6 +14,10 @@ from app.models.entities import (
     ReviewRequest,
     RenderJob,
     RenderStep,
+    Series,
+    SeriesRun,
+    SeriesRunStep,
+    SeriesScript,
     ScenePlan,
     SceneSegment,
     ScriptVersion,
@@ -256,6 +260,120 @@ def subtitle_preset_to_dict(preset: SubtitlePreset) -> dict[str, object]:
         "is_archived": preset.is_archived,
         "created_at": preset.created_at,
         "updated_at": preset.updated_at,
+    }
+
+
+def series_to_dict(
+    series: Series,
+    *,
+    total_script_count: int = 0,
+    latest_run: SeriesRun | None = None,
+    active_run: SeriesRun | None = None,
+    last_activity_at=None,
+    can_edit: bool = True,
+) -> dict[str, object]:
+    return {
+        "id": series.id,
+        "workspace_id": series.workspace_id,
+        "owner_user_id": series.owner_user_id,
+        "title": series.title,
+        "description": series.description,
+        "content_mode": series.content_mode,
+        "preset_key": series.preset_key,
+        "custom_topic": series.custom_topic,
+        "custom_example_script": series.custom_example_script,
+        "language_key": series.language_key,
+        "voice_key": series.voice_key,
+        "music_mode": series.music_mode,
+        "music_keys": list(series.music_keys or []),
+        "art_style_key": series.art_style_key,
+        "caption_style_key": series.caption_style_key,
+        "effect_keys": list(series.effect_keys or []),
+        "total_script_count": total_script_count,
+        "latest_run_id": latest_run.id if latest_run else None,
+        "latest_run_status": (
+            latest_run.status.value if latest_run and isinstance(latest_run.status, JobStatus) else None
+        ),
+        "active_run_id": active_run.id if active_run else None,
+        "active_run_status": (
+            active_run.status.value if active_run and isinstance(active_run.status, JobStatus) else None
+        ),
+        "can_edit": can_edit,
+        "last_activity_at": last_activity_at or series.updated_at,
+        "created_at": series.created_at,
+        "updated_at": series.updated_at,
+    }
+
+
+def series_script_to_dict(script: SeriesScript) -> dict[str, object]:
+    return {
+        "id": script.id,
+        "series_id": script.series_id,
+        "series_run_id": script.series_run_id,
+        "created_by_user_id": script.created_by_user_id,
+        "sequence_number": script.sequence_number,
+        "title": script.title,
+        "summary": script.summary,
+        "estimated_duration_seconds": script.estimated_duration_seconds,
+        "reading_time_label": script.reading_time_label,
+        "total_words": script.total_words,
+        "lines": script.lines,
+        "created_at": script.created_at,
+        "updated_at": script.updated_at,
+    }
+
+
+def series_run_step_to_dict(step: SeriesRunStep) -> dict[str, object]:
+    return {
+        "id": step.id,
+        "series_run_id": step.series_run_id,
+        "series_id": step.series_id,
+        "series_script_id": step.series_script_id,
+        "step_index": step.step_index,
+        "sequence_number": step.sequence_number,
+        "status": step.status.value if isinstance(step.status, JobStatus) else str(step.status),
+        "input_payload": step.input_payload,
+        "output_payload": step.output_payload,
+        "error_code": step.error_code,
+        "error_message": step.error_message,
+        "started_at": step.started_at,
+        "completed_at": step.completed_at,
+        "created_at": step.created_at,
+        "updated_at": step.updated_at,
+    }
+
+
+def series_run_to_dict(run: SeriesRun, steps: list[SeriesRunStep] | None = None) -> dict[str, object]:
+    current_step = next(
+        (
+            step.step_index
+            for step in (steps or [])
+            if step.status in {JobStatus.queued, JobStatus.running, JobStatus.failed}
+        ),
+        None,
+    )
+    return {
+        "id": run.id,
+        "series_id": run.series_id,
+        "workspace_id": run.workspace_id,
+        "created_by_user_id": run.created_by_user_id,
+        "status": run.status.value if isinstance(run.status, JobStatus) else str(run.status),
+        "requested_script_count": run.requested_script_count,
+        "completed_script_count": run.completed_script_count,
+        "failed_script_count": run.failed_script_count,
+        "idempotency_key": run.idempotency_key,
+        "request_hash": run.request_hash,
+        "payload": run.payload,
+        "error_code": run.error_code,
+        "error_message": run.error_message,
+        "retry_count": run.retry_count,
+        "started_at": run.started_at,
+        "completed_at": run.completed_at,
+        "cancelled_at": run.cancelled_at,
+        "created_at": run.created_at,
+        "updated_at": run.updated_at,
+        "steps": [series_run_step_to_dict(step) for step in (steps or [])],
+        "current_step": current_step,
     }
 
 

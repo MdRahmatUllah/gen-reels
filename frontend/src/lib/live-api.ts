@@ -5,7 +5,7 @@ import {
   getProviderCatalogOption,
   providerLabelFromKey,
 } from "./provider-catalog";
-import type {
+import {
   AdminQueueItem,
   AdminRenderRow,
   AdminWorkspaceRow,

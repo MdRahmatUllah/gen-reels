@@ -16,6 +16,7 @@ from app.api.routes import (
     renders,
     reviews,
     scene_plans,
+    series,
     scripts,
     templates,
     usage,
@@ -26,6 +27,7 @@ from app.api.routes import (
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
+api_router.include_router(series.router, prefix="/series", tags=["series"])
 api_router.include_router(ideas.router, prefix="/projects", tags=["ideas"])
 api_router.include_router(scripts.router, prefix="/projects", tags=["scripts"])
 api_router.include_router(scene_plans.router, prefix="/projects", tags=["scene-plans"])

@@ -17,7 +17,8 @@ export type WorkflowStatus =
   | "approved"
   | "completed"
   | "blocked"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export type GenerationStatus = "idle" | "queued" | "running" | "completed" | "failed";
 
@@ -157,6 +158,119 @@ export interface IdeaSet {
   status: GenerationStatus;
   ideas: IdeaCandidate[];
   generatedAt: string | null;
+}
+
+/* Series */
+export type SeriesContentMode = "preset" | "custom";
+export type SeriesMusicMode = "none" | "preset";
+
+export interface SeriesCatalogOption {
+  key: string;
+  label: string;
+  description: string;
+  gender?: string | null;
+  badge?: string | null;
+}
+
+export interface SeriesCatalog {
+  contentPresets: SeriesCatalogOption[];
+  languages: SeriesCatalogOption[];
+  voices: SeriesCatalogOption[];
+  music: SeriesCatalogOption[];
+  artStyles: SeriesCatalogOption[];
+  captionStyles: SeriesCatalogOption[];
+  effects: SeriesCatalogOption[];
+}
+
+export interface SeriesInput {
+  title: string;
+  description: string;
+  contentMode: SeriesContentMode;
+  presetKey: string | null;
+  customTopic: string;
+  customExampleScript: string;
+  languageKey: string;
+  voiceKey: string;
+  musicMode: SeriesMusicMode;
+  musicKeys: string[];
+  artStyleKey: string;
+  captionStyleKey: string;
+  effectKeys: string[];
+}
+
+export interface SeriesSummary extends SeriesInput {
+  id: string;
+  workspaceId: string;
+  ownerUserId: string;
+  totalScriptCount: number;
+  latestRunId: string | null;
+  latestRunStatus: WorkflowStatus | null;
+  activeRunId: string | null;
+  activeRunStatus: WorkflowStatus | null;
+  canEdit: boolean;
+  lastActivityAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeriesDetail extends SeriesSummary {}
+
+export interface SeriesScript {
+  id: string;
+  seriesId: string;
+  seriesRunId: string;
+  createdByUserId: string | null;
+  sequenceNumber: number;
+  title: string;
+  summary: string;
+  estimatedDurationSeconds: number;
+  readingTimeLabel: string;
+  totalWords: number;
+  lines: ScriptLine[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeriesRunStep {
+  id: string;
+  seriesRunId: string;
+  seriesId: string;
+  seriesScriptId: string | null;
+  stepIndex: number;
+  sequenceNumber: number;
+  status: WorkflowStatus;
+  inputPayload: Record<string, unknown>;
+  outputPayload: Record<string, unknown> | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeriesRun {
+  id: string;
+  seriesId: string;
+  workspaceId: string;
+  createdByUserId: string;
+  status: WorkflowStatus;
+  requestedScriptCount: number;
+  completedScriptCount: number;
+  failedScriptCount: number;
+  idempotencyKey: string;
+  requestHash: string;
+  payload: Record<string, unknown>;
+  errorCode: string | null;
+  errorMessage: string | null;
+  retryCount: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  steps: SeriesRunStep[];
+  currentStep: number | null;
 }
 
 /* ─── Scripts ─────────────────────────────────────────────────────────────── */

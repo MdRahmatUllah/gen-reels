@@ -2047,7 +2047,7 @@ export async function mockStartRender(
   const previousFrameAssets = previousJob?.frameAssets ?? [];
   const previousSteps = previousJob?.steps ?? [];
 
-  const steps: RenderStep[] = planSet.scenes.map((scene, i) => {
+  const steps: RenderStep[] = planSet.scenes.map((scene) => {
     const prevStep = previousSteps.find(
       (s) => s.sceneId === scene.id && s.stepKind === "frame_pair_generation",
     );
@@ -2818,7 +2818,7 @@ export async function mockDeleteVideoLibraryProject(projectId: string): Promise<
   if (idx === -1) throw new Error("Project not found");
   state.videoLibraryProjects.splice(idx, 1);
   // Remove all items in that project
-  state.uploadedVideos = state.uploadedVideos.filter((v) => v.project_id !== projectId);
+  state.videoLibraryItems = state.videoLibraryItems.filter((video) => video.project_id !== projectId);
 }
 
 export async function mockBrowseFolder(folderPath: string): Promise<BrowseFolderResult> {
@@ -2998,7 +2998,7 @@ export async function mockCreateRemixJob(projectId: string): Promise<RemixJob> {
     total_videos: analysis.possible_videos,
     completed_videos: 0,
     failed_videos: 0,
-    videos: Array.from({ length: analysis.possible_videos }, (_, i) => ({
+    videos: Array.from({ length: analysis.possible_videos }, () => ({
       id: nextId("rv"),
       job_id: "",
       status: "pending" as const,

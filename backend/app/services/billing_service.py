@@ -467,6 +467,8 @@ class BillingService:
             estimate = ProviderUsageEstimate("planning_idea_job", 1, -1, 15)
         elif operation == "script_generation":
             estimate = ProviderUsageEstimate("planning_script_job", 1, -2, 25)
+        elif operation == "series_script_generation":
+            estimate = ProviderUsageEstimate("planning_script_job", 1, -2, 25)
         elif operation == "scene_plan_generation":
             estimate = ProviderUsageEstimate("scene_plan_job", 1, -2, 30)
         elif operation == "prompt_pair_generation":

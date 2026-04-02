@@ -15,33 +15,38 @@ branch_labels = None
 depends_on = None
 
 
+def _is_sqlite() -> bool:
+    return op.get_bind().dialect.name == "sqlite"
+
+
 def upgrade() -> None:
-    # Drop old constraint (no ON DELETE action) and recreate with SET NULL
-    op.drop_constraint(
-        "remix_videos_output_item_id_fkey",
-        "remix_videos",
-        type_="foreignkey",
-    )
-    op.create_foreign_key(
-        "remix_videos_output_item_id_fkey",
-        "remix_videos",
-        "video_library_items",
-        ["output_item_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    if _is_sqlite():
+        return
+    with op.batch_alter_table("remix_videos") as batch_op:
+        batch_op.drop_constraint(
+            "remix_videos_output_item_id_fkey",
+            type_="foreignkey",
+        )
+        batch_op.create_foreign_key(
+            "remix_videos_output_item_id_fkey",
+            "video_library_items",
+            ["output_item_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "remix_videos_output_item_id_fkey",
-        "remix_videos",
-        type_="foreignkey",
-    )
-    op.create_foreign_key(
-        "remix_videos_output_item_id_fkey",
-        "remix_videos",
-        "video_library_items",
-        ["output_item_id"],
-        ["id"],
-    )
+    if _is_sqlite():
+        return
+    with op.batch_alter_table("remix_videos") as batch_op:
+        batch_op.drop_constraint(
+            "remix_videos_output_item_id_fkey",
+            type_="foreignkey",
+        )
+        batch_op.create_foreign_key(
+            "remix_videos_output_item_id_fkey",
+            "video_library_items",
+            ["output_item_id"],
+            ["id"],
+        )

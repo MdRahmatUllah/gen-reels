@@ -439,6 +439,93 @@ class SubtitlePreset(Base, TimestampMixin):
     is_archived: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
 
 
+class Series(Base, TimestampMixin):
+    __tablename__ = "series"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    description: Mapped[str] = mapped_column(sa.String(500), default="", nullable=False)
+    content_mode: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    preset_key: Mapped[str | None] = mapped_column(sa.String(64))
+    custom_topic: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    custom_example_script: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    language_key: Mapped[str] = mapped_column(sa.String(32), default="en", nullable=False)
+    voice_key: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    music_mode: Mapped[str] = mapped_column(sa.String(32), default="none", nullable=False)
+    music_keys: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
+    art_style_key: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    caption_style_key: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    effect_keys: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
+
+
+class SeriesRun(Base, TimestampMixin):
+    __tablename__ = "series_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "created_by_user_id",
+            "series_id",
+            "idempotency_key",
+            name="uq_series_run_idempotency",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    series_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series.id"), nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[JobStatus] = mapped_column(sa.Enum(JobStatus), default=JobStatus.queued, nullable=False)
+    requested_script_count: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    completed_script_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    failed_script_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(sa.String(64))
+    error_message: Mapped[str | None] = mapped_column(sa.Text)
+    retry_count: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
+class SeriesScript(Base, TimestampMixin):
+    __tablename__ = "series_scripts"
+    __table_args__ = (UniqueConstraint("series_id", "sequence_number", name="uq_series_script_sequence"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    series_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series.id"), nullable=False, index=True)
+    series_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series_runs.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    sequence_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(sa.Text, default="", nullable=False)
+    estimated_duration_seconds: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    reading_time_label: Mapped[str] = mapped_column(sa.String(64), default="0s draft narration", nullable=False)
+    total_words: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    lines: Mapped[list[dict[str, object]]] = mapped_column(json_type(), default=list, nullable=False)
+
+
+class SeriesRunStep(Base, TimestampMixin):
+    __tablename__ = "series_run_steps"
+    __table_args__ = (UniqueConstraint("series_run_id", "step_index", name="uq_series_run_step_index"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    series_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series_runs.id"), nullable=False, index=True)
+    series_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("series.id"), nullable=False, index=True)
+    series_script_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("series_scripts.id"))
+    step_index: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    sequence_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    status: Mapped[JobStatus] = mapped_column(sa.Enum(JobStatus), default=JobStatus.queued, nullable=False)
+    input_payload: Mapped[dict[str, object]] = mapped_column(json_type(), default=dict, nullable=False)
+    output_payload: Mapped[dict[str, object] | None] = mapped_column(json_type())
+    error_code: Mapped[str | None] = mapped_column(sa.String(64))
+    error_message: Mapped[str | None] = mapped_column(sa.Text)
+    started_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
+
 class ScenePlan(Base, TimestampMixin):
     __tablename__ = "scene_plans"
     __table_args__ = (UniqueConstraint("project_id", "version_number", name="uq_scene_plan_version"),)

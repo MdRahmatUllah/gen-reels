@@ -30,6 +30,7 @@ import { QuickStartProgressPage } from "../features/projects/QuickStartProgressP
 import { VideoEditorPage } from "../features/editor/VideoEditorPage";
 import { VideoLibraryPage } from "../features/video-library/VideoLibraryPage";
 import RemixPage from "../features/remix/RemixPage";
+import { SeriesDetailPage, SeriesEditorPage, SeriesListPage } from "../features/series/SeriesPages";
 
 export const router = createBrowserRouter([
   {
@@ -59,6 +60,22 @@ export const router = createBrowserRouter([
       {
         path: "projects",
         element: <ProjectsPage />,
+      },
+      {
+        path: "series",
+        element: <SeriesListPage />,
+      },
+      {
+        path: "series/new",
+        element: <SeriesEditorPage />,
+      },
+      {
+        path: "series/:seriesId",
+        element: <SeriesDetailPage />,
+      },
+      {
+        path: "series/:seriesId/edit",
+        element: <SeriesEditorPage />,
       },
       {
         path: "projects/:projectId",

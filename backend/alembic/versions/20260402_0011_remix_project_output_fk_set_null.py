@@ -14,32 +14,38 @@ branch_labels = None
 depends_on = None
 
 
+def _is_sqlite() -> bool:
+    return op.get_bind().dialect.name == "sqlite"
+
+
 def upgrade() -> None:
-    op.drop_constraint(
-        "remix_projects_output_project_id_fkey",
-        "remix_projects",
-        type_="foreignkey",
-    )
-    op.create_foreign_key(
-        "remix_projects_output_project_id_fkey",
-        "remix_projects",
-        "video_library_projects",
-        ["output_project_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    if _is_sqlite():
+        return
+    with op.batch_alter_table("remix_projects") as batch_op:
+        batch_op.drop_constraint(
+            "remix_projects_output_project_id_fkey",
+            type_="foreignkey",
+        )
+        batch_op.create_foreign_key(
+            "remix_projects_output_project_id_fkey",
+            "video_library_projects",
+            ["output_project_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "remix_projects_output_project_id_fkey",
-        "remix_projects",
-        type_="foreignkey",
-    )
-    op.create_foreign_key(
-        "remix_projects_output_project_id_fkey",
-        "remix_projects",
-        "video_library_projects",
-        ["output_project_id"],
-        ["id"],
-    )
+    if _is_sqlite():
+        return
+    with op.batch_alter_table("remix_projects") as batch_op:
+        batch_op.drop_constraint(
+            "remix_projects_output_project_id_fkey",
+            type_="foreignkey",
+        )
+        batch_op.create_foreign_key(
+            "remix_projects_output_project_id_fkey",
+            "video_library_projects",
+            ["output_project_id"],
+            ["id"],
+        )

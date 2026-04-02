@@ -67,6 +67,15 @@ class TextProvider:
     ) -> dict[str, Any]:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def generate_series_script(
+        self,
+        *,
+        series_payload: dict[str, Any],
+        sequence_number: int,
+        prior_scripts: list[dict[str, Any]],
+    ) -> dict[str, Any]:  # pragma: no cover - interface
+        raise NotImplementedError
+
 
 def _distribute_duration(total_duration: int, parts: int) -> list[int]:
     base = max(1, total_duration // parts)
@@ -376,6 +385,65 @@ class StubTextProvider(TextProvider):
             )
         return {"segments": regenerated_segments}
 
+    def generate_series_script(
+        self,
+        *,
+        series_payload: dict[str, Any],
+        sequence_number: int,
+        prior_scripts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        del prior_scripts
+        preset = series_payload.get("content_preset") or {}
+        voice = series_payload.get("voice") or {}
+        art_style = series_payload.get("art_style") or {}
+        caption_style = series_payload.get("caption_style") or {}
+        topic = str(
+            preset.get("label")
+            or series_payload.get("custom_topic")
+            or series_payload.get("title")
+            or "Series"
+        ).strip()
+        title = f"{topic} Episode {sequence_number}"
+        beats = [
+            "Hook",
+            "Setup",
+            "Twist",
+            "Deepen",
+            "Payoff",
+            "Close",
+        ]
+        lines = []
+        for index, beat in enumerate(beats, start=1):
+            lines.append(
+                {
+                    "id": f"line_{index:02d}",
+                    "scene_id": f"scene_{index:02d}",
+                    "beat": beat,
+                    "narration": (
+                        f"{title} beat {index}: tell a fresh {topic.lower()} moment in the style of "
+                        f"{voice.get('label') or series_payload.get('voice_key') or 'the selected voice'}."
+                    ),
+                    "caption": f"{beat} caption",
+                    "duration_sec": 10,
+                    "status": "draft",
+                    "visual_direction": (
+                        f"Use {art_style.get('label') or series_payload.get('art_style_key') or 'the selected art style'} "
+                        f"with {caption_style.get('label') or series_payload.get('caption_style_key') or 'captions'}."
+                    ),
+                    "voice_pacing": "Measured and scroll-stopping",
+                }
+            )
+        return {
+            "title": title,
+            "summary": (
+                f"A one-minute {topic.lower()} script generated for series episode {sequence_number}, "
+                f"keeping the tone concise and social-first."
+            ),
+            "estimated_duration_seconds": 60,
+            "reading_time_label": "60s draft narration",
+            "lines": lines,
+        }
+
 
 class AzureContentSafetyProvider(ModerationProvider):
     def __init__(
@@ -599,6 +667,34 @@ class AzureOpenAITextProvider(TextProvider):
             ]
         )["output"]
 
+    def generate_series_script(
+        self,
+        *,
+        series_payload: dict[str, Any],
+        sequence_number: int,
+        prior_scripts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys title, summary, estimated_duration_seconds, reading_time_label, and lines. "
+            "lines must be an ordered list of beat objects for roughly a 60-second video. "
+            "Each line requires id, scene_id, beat, narration, caption, duration_sec, status, visual_direction, "
+            "and voice_pacing. Keep the script fresh relative to prior_scripts by avoiding duplicate topics, titles, "
+            "and angles. If an example script is provided, match its tone without copying it."
+        )
+        user_prompt = json.dumps(
+            {
+                "series": series_payload,
+                "sequence_number": sequence_number,
+                "prior_scripts": prior_scripts,
+            }
+        )
+        return self._request_json(
+            [
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": user_prompt},
+            ]
+        )["output"]
+
 
 class OllamaTextProvider(TextProvider):
     def __init__(self, *, endpoint: str, model_name: str) -> None:
@@ -718,6 +814,29 @@ class OllamaTextProvider(TextProvider):
         return self._request_json([
             {"role": "system", "content": instruction},
             {"role": "user", "content": json.dumps({"scene_plan": scene_plan_payload, "visual_preset": visual_preset})},
+        ])["output"]
+
+    def generate_series_script(
+        self,
+        *,
+        series_payload: dict[str, Any],
+        sequence_number: int,
+        prior_scripts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys title, summary, estimated_duration_seconds, reading_time_label, and lines. "
+            "lines must be an ordered list of beat objects for roughly a 60-second video. "
+            "Each line requires id, scene_id, beat, narration, caption, duration_sec, status, visual_direction, "
+            "and voice_pacing. Keep the script fresh relative to prior_scripts by avoiding duplicate topics, titles, "
+            "and angles. If an example script is provided, match its tone without copying it."
+        )
+        return self._request_json([
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": json.dumps({
+                "series": series_payload,
+                "sequence_number": sequence_number,
+                "prior_scripts": prior_scripts,
+            })},
         ])["output"]
 
 

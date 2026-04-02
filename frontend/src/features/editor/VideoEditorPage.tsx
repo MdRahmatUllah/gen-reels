@@ -5,7 +5,6 @@ import {
   PageFrame,
   SectionCard,
   StatusBadge,
-  EmptyState,
   LoadingPage,
 } from "../../components/ui";
 import { useProject } from "../../hooks/use-projects";
@@ -283,6 +282,7 @@ function VideoPreview({
 
   const filterCss = useMemo(() => buildCssFilter(effects), [effects]);
   const effectsActive = hasActiveEffects(effects);
+  const sceneCount = scenes.length;
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -312,6 +312,11 @@ function VideoPreview({
     <div className="flex flex-col gap-3">
       {/* Effects active indicator */}
       {effectsActive && <ActiveEffectsPills effects={effects} />}
+
+      <div className="flex items-center justify-between text-[0.7rem] font-medium uppercase tracking-[0.18em] text-secondary">
+        <span>{sceneCount} scenes loaded</span>
+        <span>{effectsActive ? "Effects active" : "Effects off"}</span>
+      </div>
 
       <div className="relative rounded-xl overflow-hidden border border-border-card bg-black" style={{ maxHeight: "480px" }}>
         {content}
