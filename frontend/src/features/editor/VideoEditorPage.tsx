@@ -591,6 +591,7 @@ export function VideoEditorPage() {
     try {
       await startRender({
         subtitleStyle: subtitleEnabled ? subtitleStyle : "none",
+        subtitlePosition: subtitlePosition,
         musicDucking: musicEnabled ? musicDucking : "0 dB",
         musicTrack: musicEnabled ? musicTrack : "none",
         animationEffect: "ken_burns",
@@ -601,7 +602,7 @@ export function VideoEditorPage() {
     } catch {
       // mutation error handled by react-query
     }
-  }, [project?.id, subtitleEnabled, subtitleStyle, musicEnabled, musicDucking, musicTrack, effects, startRender, queryClient, navigate]);
+  }, [project?.id, subtitleEnabled, subtitleStyle, subtitlePosition, musicEnabled, musicDucking, musicTrack, effects, startRender, queryClient, navigate]);
 
   if (projectLoading || !project) {
     return <LoadingPage />;

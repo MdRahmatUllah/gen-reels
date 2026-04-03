@@ -45,6 +45,7 @@ export function useStartRender(projectId: string) {
   return useMutation({
     mutationFn: (settings?: {
       subtitleStyle: string;
+      subtitlePosition?: "top" | "center" | "bottom";
       musicDucking: string;
       musicTrack: string;
       animationEffect: string;

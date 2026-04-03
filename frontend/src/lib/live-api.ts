@@ -1707,6 +1707,7 @@ export async function liveStartRender(
   projectId: string,
   settings?: {
     subtitleStyle: string;
+    subtitlePosition?: "top" | "center" | "bottom";
     musicDucking: string;
     musicTrack: string;
     animationEffect: string;
@@ -1730,6 +1731,7 @@ export async function liveStartRender(
         preset: burnInSubtitles ? subtitleStyle.toLowerCase().replace(/\s+/g, "_") : "off",
         // style maps to captions.CAPTION_STYLES key — used by the ASS subtitle renderer
         style: burnInSubtitles ? subtitleStyle.toLowerCase().replace(/\s+/g, "_") : "capcut",
+        position: settings?.subtitlePosition ?? "bottom",
       },
       audio_mix_profile: {
         music_enabled: musicEnabled,

@@ -490,6 +490,7 @@ def generate_ass(
     video_width: int = 1080,
     video_height: int = 1920,
     words_per_group: int | None = None,
+    position: str = "bottom",
 ) -> str:
     """Generate an ASS subtitle file string from word-level timestamps.
 
@@ -500,6 +501,7 @@ def generate_ass(
         style_name: One of CAPTION_STYLES keys
         video_width / video_height: Target video dimensions
         words_per_group: Override from style (None = use style default)
+        position: Vertical position — "top", "center", or "bottom" (default)
 
     Returns:
         ASS file content as a string.
@@ -507,6 +509,17 @@ def generate_ass(
     style = CAPTION_STYLES.get(style_name, CAPTION_STYLES[DEFAULT_STYLE])
     wpg = words_per_group if words_per_group is not None else style["words_per_group"]
     groups = _group_words(words, wpg)
+
+    # ASS alignment uses numpad layout: 2=bottom-center, 5=middle-center, 8=top-center
+    if position == "top":
+        alignment = 8
+        margin_v = max(80, int(video_height * 0.06))  # ~6% from top edge
+    elif position == "center":
+        alignment = 5
+        margin_v = 0
+    else:  # "bottom" or anything else
+        alignment = 2
+        margin_v = style["margin_v"]
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -516,7 +529,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{style["font_name"]},{style["font_size"]},{style["primary_color"]},{style["secondary_color"]},{style["outline_color"]},{style["shadow_color"]},{style["bold"]},0,0,0,100,100,0,0,1,{style["outline"]},{style["shadow"]},2,10,10,{style["margin_v"]},1
+Style: Default,{style["font_name"]},{style["font_size"]},{style["primary_color"]},{style["secondary_color"]},{style["outline_color"]},{style["shadow_color"]},{style["bold"]},0,0,0,100,100,0,0,1,{style["outline"]},{style["shadow"]},{alignment},10,10,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

@@ -3290,6 +3290,7 @@ class RenderService(GenerationService):
             style_name = str(subtitle_style_profile.get("style") or "capcut")
             words_per_group = subtitle_style_profile.get("words_per_group")
             words_per_group_int: int | None = int(words_per_group) if words_per_group is not None else None
+            subtitle_position = str(subtitle_style_profile.get("position") or "bottom")
 
             all_words = self._collect_word_timestamps(
                 segments=segments,
@@ -3302,13 +3303,13 @@ class RenderService(GenerationService):
                 [(w.word, round(w.start, 2)) for w in all_words[:5]],
             )
 
-            # Offset each word by its scene timeline position (already done inside _collect_word_timestamps)
             ass_text = generate_ass(
                 all_words,
                 style_name=style_name,
                 video_width=1080,
                 video_height=1920,
                 words_per_group=words_per_group_int,
+                position=subtitle_position,
             )
             # Log first ASS dialogue line to confirm content source
             first_dialogue = next((l for l in ass_text.splitlines() if l.startswith("Dialogue:")), "")
