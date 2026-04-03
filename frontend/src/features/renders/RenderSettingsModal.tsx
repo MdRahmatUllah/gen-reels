@@ -345,18 +345,29 @@ export function RenderSettingsModal({
                   onChange={(e) => setSubtitleStyle(e.target.value)}
                 >
                   <option value="none">No Subtitles</option>
-                  <option value="Karaoke Bold">Karaoke Bold</option>
-                  <option value="Minimalist White">Minimalist White</option>
-                  <option value="Burned-in Default">Burned-in Default</option>
+                  <option value="capcut">CapCut</option>
+                  <option value="mrbeast">Mr. Beast</option>
+                  <option value="bold_stroke">Bold Stroke</option>
+                  <option value="karaoke">Karaoke</option>
+                  <option value="red_highlight">Red Highlight</option>
+                  <option value="majestic">Majestic</option>
+                  <option value="neon">Neon</option>
+                  <option value="subtitle">Subtitle</option>
+                  <option value="sleek">Sleek</option>
+                  <option value="elegant">Elegant</option>
+                  <option value="clarity">Clarity</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="pixel">Pixel</option>
+                  <option value="beast">Beast</option>
                 </select>
               </div>
               {subtitleStyle !== "none" && (
                 <div className="rounded-xl border border-border-subtle bg-glass/50 p-3">
                   <p className="text-[0.7rem] text-secondary leading-snug">
-                    Subtitles will be burned into the video with the{" "}
-                    <strong className="text-primary">{subtitleStyle}</strong>{" "}
-                    style. Font, size, and placement use the project defaults
-                    from your subtitle profile.
+                    Subtitles are transcribed with Whisper and burned in
+                    word-by-word in the{" "}
+                    <strong className="text-primary capitalize">{subtitleStyle.replace(/_/g, " ")}</strong>{" "}
+                    style — matching the voiceover exactly.
                   </p>
                 </div>
               )}

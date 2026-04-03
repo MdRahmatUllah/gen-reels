@@ -21,6 +21,10 @@ class QuickStartCreateRequest(BaseModel):
     idea_prompt: str = Field(min_length=1, max_length=4000)
     starter_mode: str = Field(default="studio_default", pattern="^(studio_default|template)$")
     template_id: str | None = None
+    # Caption style key — if provided, enables burn-in with this style.
+    # Must match a key in captions.CAPTION_STYLES (e.g. "capcut", "mrbeast", "subtitle").
+    # None means use the starter/template default (which defaults to burn_in=False).
+    caption_style: str | None = None
 
 
 class ProjectUpdateRequest(BaseModel):

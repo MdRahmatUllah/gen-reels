@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from app.api.deps import AuthContext
 from app.core.errors import AdapterError, ApiError
 from app.integrations.azure import ModerationProvider
+from app.integrations.captions import generate_ass, transcribe_audio_bytes
 from app.integrations.media import (
     AzureOpenAITranscriptionProvider,
     GeneratedMedia,
@@ -3272,31 +3273,56 @@ class RenderService(GenerationService):
             return self._latest_asset(render_job.id, asset_role=AssetRole.subtitle_file)
 
         self._set_step_running(step)
+        import logging as _slog
+        _slog = _slog.getLogger(__name__)
+        _slog.info(
+            "subtitle_stage_start burn_in=%s style=%s words_per_group=%s",
+            subtitle_style_profile.get("burn_in"),
+            subtitle_style_profile.get("style"),
+            subtitle_style_profile.get("words_per_group"),
+        )
         if not bool(subtitle_style_profile.get("burn_in")):
+            _slog.warning("subtitle_stage_skipped reason=burn_in_disabled")
             self._complete_step(step, output_payload={"skipped": True, "reason": "burn_in_disabled"})
             return None
         try:
-            all_entries = self._transcribe_narration_for_subtitles(
+            from app.integrations.captions import WordEntry as CaptionWord
+            style_name = str(subtitle_style_profile.get("style") or "capcut")
+            words_per_group = subtitle_style_profile.get("words_per_group")
+            words_per_group_int: int | None = int(words_per_group) if words_per_group is not None else None
+
+            all_words = self._collect_word_timestamps(
                 segments=segments,
                 narration_assets=narration_assets,
             )
-            lines: list[str] = []
-            for index, entry in enumerate(all_entries, start=1):
-                lines.extend([
-                    str(index),
-                    f"{self._format_srt_timestamp(entry.start_ms)} --> {self._format_srt_timestamp(entry.end_ms)}",
-                    entry.word,
-                    "",
-                ])
-            subtitle_bytes = "\n".join(lines).encode("utf-8")
-            provider_model = "whisper-srt-v1" if self.settings.azure_openai_whisper_deployment else "text-split-srt-v1"
+
+            _slog.info(
+                "subtitle_words_collected total=%d first_5=%s",
+                len(all_words),
+                [(w.word, round(w.start, 2)) for w in all_words[:5]],
+            )
+
+            # Offset each word by its scene timeline position (already done inside _collect_word_timestamps)
+            ass_text = generate_ass(
+                all_words,
+                style_name=style_name,
+                video_width=1080,
+                video_height=1920,
+                words_per_group=words_per_group_int,
+            )
+            # Log first ASS dialogue line to confirm content source
+            first_dialogue = next((l for l in ass_text.splitlines() if l.startswith("Dialogue:")), "")
+            _slog.info("subtitle_ass_first_line %s", first_dialogue)
+
+            subtitle_bytes = ass_text.encode("utf-8")
+            provider_model = "whisper-ass-v1"
             generated = GeneratedMedia(
                 provider_name="auto_subtitle_generator",
                 provider_model=provider_model,
                 content_type="text/plain",
-                file_extension="srt",
+                file_extension="ass",
                 bytes_payload=subtitle_bytes,
-                metadata={"scene_count": len(segments), "entry_count": len(all_entries)},
+                metadata={"scene_count": len(segments), "word_count": len(all_words), "style": style_name},
             )
             subtitle_asset = self._store_generated_asset(
                 render_job=render_job,
@@ -3306,15 +3332,16 @@ class RenderService(GenerationService):
                 bucket_name=self.settings.minio_bucket_assets,
                 object_name=(
                     f"workspace/{render_job.workspace_id}/project/{render_job.project_id}/"
-                    f"render/{render_job.id}/subtitles/reel.srt"
+                    f"render/{render_job.id}/subtitles/reel.ass"
                 ),
-                file_name="reel.srt",
+                file_name="reel.ass",
                 asset_type=AssetType.subtitle,
                 asset_role=AssetRole.subtitle_file,
             )
             subtitle_asset.metadata_payload = {
                 **dict(subtitle_asset.metadata_payload or {}),
                 "subtitle_style_profile": subtitle_style_profile,
+                "format": "ass",
             }
         except Exception as exc:  # pragma: no cover - defensive guard
             step.status = JobStatus.failed
@@ -3326,54 +3353,107 @@ class RenderService(GenerationService):
         self._complete_step(step, output_payload={"asset_id": str(subtitle_asset.id)})
         return subtitle_asset
 
-    def _transcribe_narration_for_subtitles(
+    def _collect_word_timestamps(
         self,
         *,
         segments: list[SceneSegment],
         narration_assets: list[Asset],
-    ) -> list[TranscriptionWord]:
-        """Try Whisper transcription, fall back to proportional text splitting."""
-        transcription_provider: AzureOpenAITranscriptionProvider | None = None
-        if self.settings.azure_openai_whisper_deployment:
-            transcription_provider = AzureOpenAITranscriptionProvider(self.settings)
+    ):
+        """Collect word-level timestamps across all narration segments.
 
-        all_entries: list[TranscriptionWord] = []
-        timeline_offset_ms = 0
+        Concatenates all narration files into a single audio track (mirroring
+        what compose_reel_export does) and transcribes it in one Whisper pass.
+        This produces absolute timestamps that exactly match the composed video
+        timeline, eliminating per-segment offset accumulation errors.
 
-        for segment, narration_asset in zip(segments, narration_assets):
-            duration_ms = int(
-                (segment.actual_voice_duration_seconds or segment.target_duration_seconds) * 1000
-            )
-            words: list[TranscriptionWord] = []
+        Falls back to per-segment text-split if Whisper is unavailable.
+        """
+        import logging as _logging
+        import tempfile as _tempfile
+        _log = _logging.getLogger(__name__)
+        from app.integrations.captions import WordEntry as CaptionWord
+        from app.integrations.ffmpeg import FFmpegRunner
 
-            if transcription_provider:
-                try:
-                    audio_bytes = self.storage.read_bytes(
-                        narration_asset.bucket_name, narration_asset.object_name
+        runner = FFmpegRunner(self.settings)
+
+        # ── Full-audio Whisper pass ────────────────────────────────────────────
+        if runner.available():
+            try:
+                with _tempfile.TemporaryDirectory() as tmp:
+                    workdir = Path(tmp)
+                    narration_wavs: list[str] = []
+                    for i, narration_asset in enumerate(narration_assets):
+                        audio_bytes = self.storage.read_bytes(
+                            narration_asset.bucket_name, narration_asset.object_name
+                        )
+                        suffix = Path(narration_asset.file_name or "narration.wav").suffix or ".wav"
+                        src_name = f"narration_src_{i:02d}{suffix}"
+                        wav_name = f"narration_{i:02d}.wav"
+                        (workdir / src_name).write_bytes(audio_bytes)
+                        runner.run(
+                            "ffmpeg",
+                            ["-y", "-i", src_name, "-ar", "16000", "-ac", "1", wav_name],
+                            workdir=workdir,
+                        )
+                        narration_wavs.append(wav_name)
+
+                    (workdir / "narrations.txt").write_text(
+                        "".join(f"file '{f}'\n" for f in narration_wavs),
+                        encoding="utf-8",
                     )
-                    result: TranscriptionResult = transcription_provider.transcribe(
-                        audio_bytes=audio_bytes,
-                        content_type=narration_asset.content_type or "audio/wav",
+                    runner.run(
+                        "ffmpeg",
+                        [
+                            "-y", "-f", "concat", "-safe", "0",
+                            "-i", "narrations.txt",
+                            "-ar", "16000", "-ac", "1",
+                            "full_narration.wav",
+                        ],
+                        workdir=workdir,
                     )
-                    words = result.words
-                except Exception:
-                    words = []
+                    full_audio_bytes = (workdir / "full_narration.wav").read_bytes()
 
-            if not words:
-                words = generate_subtitles_from_text(
-                    segment.narration_text, duration_ms
+                words = transcribe_audio_bytes(full_audio_bytes, settings=self.settings)
+                if words:
+                    _log.info(
+                        "subtitle_full_transcription word_count=%d first_5=%s",
+                        len(words),
+                        [(w.word, round(w.start, 2)) for w in words[:5]],
+                    )
+                    return words
+                _log.warning(
+                    "subtitle_full_transcription_empty — falling back to per-segment text-split"
+                )
+            except Exception as exc:
+                _log.warning(
+                    "subtitle_full_transcription_error error=%s — falling back to per-segment text-split",
+                    exc,
                 )
 
-            grouped = group_words_into_subtitle_entries(words)
-            for entry in grouped:
-                all_entries.append(TranscriptionWord(
-                    word=entry.word,
-                    start_ms=entry.start_ms + timeline_offset_ms,
-                    end_ms=entry.end_ms + timeline_offset_ms,
+        # ── Text-split fallback (no Whisper / Whisper returned nothing) ────────
+        all_words: list[CaptionWord] = []
+        timeline_offset_sec = 0.0
+        for segment, narration_asset in zip(segments, narration_assets):
+            duration_sec = float(narration_asset.duration_ms or 0) / 1000.0
+            if not duration_sec:
+                duration_sec = float(
+                    segment.actual_voice_duration_seconds or segment.target_duration_seconds or 1.0
+                )
+            _log.warning(
+                "subtitle_transcription_fallback scene=%d duration_sec=%.3f text=%r — timing will be approximate",
+                segment.scene_index, duration_sec, (segment.narration_text or "")[:60],
+            )
+            duration_ms = int(duration_sec * 1000)
+            tw_list = generate_subtitles_from_text(segment.narration_text, duration_ms)
+            for tw in tw_list:
+                all_words.append(CaptionWord(
+                    word=tw.word,
+                    start=tw.start_ms / 1000.0 + timeline_offset_sec,
+                    end=tw.end_ms / 1000.0 + timeline_offset_sec,
                 ))
-            timeline_offset_ms += duration_ms
+            timeline_offset_sec += duration_sec
 
-        return all_entries
+        return all_words
 
     def _should_hold_export_for_moderation(self, render_job: RenderJob) -> tuple[bool, int, str]:
         lookback = datetime.now(timezone.utc) - timedelta(days=self.settings.export_moderation_lookback_days)
@@ -3442,11 +3522,27 @@ class RenderService(GenerationService):
         self._set_step_running(step)
         export_slug = self._slugify_title(project_title) if project_title else "reel"
         export_file_name = f"{export_slug}.mp4"
-        subtitle_text = (
-            self.storage.read_bytes(subtitle_asset.bucket_name, subtitle_asset.object_name).decode("utf-8")
-            if subtitle_asset
-            else None
-        )
+        import logging as _clog
+        _clog = _clog.getLogger(__name__)
+        subtitle_text: str | None = None
+        subtitle_ass: str | None = None
+        if subtitle_asset:
+            raw = self.storage.read_bytes(subtitle_asset.bucket_name, subtitle_asset.object_name).decode("utf-8")
+            meta = dict(subtitle_asset.metadata_payload or {})
+            if meta.get("format") == "ass" or (subtitle_asset.file_name or "").endswith(".ass"):
+                subtitle_ass = raw
+                _clog.info(
+                    "composition_subtitle_path=ass file=%s format_meta=%s lines=%d",
+                    subtitle_asset.file_name, meta.get("format"), raw.count("\nDialogue:"),
+                )
+            else:
+                subtitle_text = raw
+                _clog.warning(
+                    "composition_subtitle_path=srt file=%s format_meta=%s — ASS not detected, using SRT path",
+                    subtitle_asset.file_name, meta.get("format"),
+                )
+        else:
+            _clog.warning("composition_subtitle_path=none — no subtitle asset, skipping burn")
         export_bytes, manifest_bytes, export_metadata = compose_reel_export(
             self.settings,
             clip_files=[
@@ -3466,6 +3562,7 @@ class RenderService(GenerationService):
                 else None
             ),
             subtitle_text=subtitle_text,
+            subtitle_ass=subtitle_ass,
         )
 
         fx = video_effects_profile or {}

@@ -22,6 +22,25 @@ import type {
 } from "../../types/domain";
 import { DEFAULT_VIDEO_EFFECTS } from "../../types/domain";
 
+/* ─── Caption style options ──────────────────────────────────────────────── */
+// Keys must match captions.CAPTION_STYLES in backend/app/integrations/captions.py
+const CAPTION_STYLE_OPTIONS: { value: string; label: string; preview: string }[] = [
+  { value: "capcut",       label: "CapCut",        preview: "bg-black/70 text-white font-black uppercase tracking-wide" },
+  { value: "mrbeast",     label: "Mr. Beast",      preview: "bg-black/75 text-white font-black uppercase text-lg" },
+  { value: "bold_stroke",  label: "Bold Stroke",   preview: "bg-black/80 text-white font-black uppercase tracking-widest" },
+  { value: "karaoke",     label: "Karaoke",        preview: "bg-black/65 text-orange-300 font-bold" },
+  { value: "red_highlight",label: "Red Highlight", preview: "bg-black/70 text-red-400 font-black uppercase" },
+  { value: "majestic",    label: "Majestic",       preview: "bg-black/75 text-yellow-300 font-black uppercase tracking-wider" },
+  { value: "neon",        label: "Neon",           preview: "bg-black/60 text-cyan-300 font-bold uppercase" },
+  { value: "subtitle",    label: "Subtitle",       preview: "bg-black/60 text-white font-semibold" },
+  { value: "sleek",       label: "Sleek",          preview: "text-white/90 font-medium drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]" },
+  { value: "elegant",     label: "Elegant",        preview: "text-white font-light drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" },
+  { value: "clarity",     label: "Clarity",        preview: "bg-black/55 text-white font-medium" },
+  { value: "minimal",     label: "Minimal",        preview: "bg-black/50 text-white/85 text-sm font-medium" },
+  { value: "pixel",       label: "Pixel",          preview: "bg-black text-green-400 font-mono font-bold uppercase" },
+  { value: "beast",       label: "Beast",          preview: "bg-black/80 text-white font-black uppercase text-xl tracking-wide" },
+];
+
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
 function formatTime(sec: number): string {
@@ -334,16 +353,13 @@ function VideoPreview({
         {/* Subtitle preview overlay */}
         {subtitleEnabled && (
           <div className={`absolute left-0 right-0 ${subtitlePosClass} flex justify-center pointer-events-none px-4`}>
-            <div className={`rounded-lg px-4 py-2 max-w-[85%] text-center ${
-              subtitleStyle === "Karaoke Bold"
-                ? "bg-black/70 text-white text-base font-bold"
-                : subtitleStyle === "Minimalist White"
-                  ? "text-white text-sm font-medium drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
-                  : "bg-black/50 text-yellow-100 text-sm font-semibold"
+            <div className={`rounded-lg px-4 py-2 max-w-[85%] text-center text-sm ${
+              CAPTION_STYLE_OPTIONS.find((o) => o.value === subtitleStyle)?.preview
+              ?? "bg-black/70 text-white font-bold"
             }`}>
               {activeScene?.narration
-                ? activeScene.narration.split(" ").slice(0, 8).join(" ") + "..."
-                : "Sample subtitle text preview"}
+                ? activeScene.narration.split(" ").slice(0, 6).join(" ") + "..."
+                : "Word-by-word caption preview"}
             </div>
           </div>
         )}
@@ -497,7 +513,7 @@ export function VideoEditorPage() {
 
   /* ─── Editor State ─── */
   const [subtitleEnabled, setSubtitleEnabled] = useState(false);
-  const [subtitleStyle, setSubtitleStyle] = useState("Karaoke Bold");
+  const [subtitleStyle, setSubtitleStyle] = useState("capcut");
   const [subtitlePosition, setSubtitlePosition] = useState<"top" | "center" | "bottom">("bottom");
 
   const [musicEnabled, setMusicEnabled] = useState(false);
@@ -516,7 +532,7 @@ export function VideoEditorPage() {
 
   const applyPreset = useCallback((preset: RenderPreset) => {
     setSubtitleEnabled(preset.settings.subtitleStyle !== "none");
-    setSubtitleStyle(preset.settings.subtitleStyle === "none" ? "Karaoke Bold" : preset.settings.subtitleStyle);
+    setSubtitleStyle(preset.settings.subtitleStyle === "none" ? "capcut" : preset.settings.subtitleStyle);
     setMusicEnabled(preset.settings.musicTrack !== "none");
     setMusicTrack(preset.settings.musicTrack === "none" ? "Ambient Corporate 1" : preset.settings.musicTrack);
     setMusicDucking(preset.settings.musicDucking);
@@ -549,7 +565,11 @@ export function VideoEditorPage() {
     const hasSubs = latestRender.metrics.subtitleState === "Burned";
     setSubtitleEnabled(hasSubs);
     if (hasSubs && latestRender.metrics.subtitleStyle && latestRender.metrics.subtitleStyle !== "Off") {
-      setSubtitleStyle(latestRender.metrics.subtitleStyle);
+      // Normalize to lowercase_underscore key (matches CAPTION_STYLES keys)
+      const rawStyle = latestRender.metrics.subtitleStyle;
+      const normalizedKey = rawStyle.toLowerCase().replace(/\s+/g, "_");
+      const isKnown = CAPTION_STYLE_OPTIONS.some((o) => o.value === normalizedKey);
+      setSubtitleStyle(isKnown ? normalizedKey : "capcut");
     }
 
     const hasMusic = latestRender.musicTrack !== "none";
@@ -622,7 +642,11 @@ export function VideoEditorPage() {
             <div className="inspector-list">
               <div>
                 <span>Subtitles</span>
-                <strong>{subtitleEnabled ? subtitleStyle : "Off"}</strong>
+                <strong>
+                  {subtitleEnabled
+                    ? (CAPTION_STYLE_OPTIONS.find((o) => o.value === subtitleStyle)?.label ?? subtitleStyle)
+                    : "Off"}
+                </strong>
               </div>
               {subtitleEnabled && (
                 <div>
@@ -896,9 +920,9 @@ export function VideoEditorPage() {
                       value={subtitleStyle}
                       onChange={(e) => setSubtitleStyle(e.target.value)}
                     >
-                      <option value="Karaoke Bold">Karaoke Bold</option>
-                      <option value="Minimalist White">Minimalist White</option>
-                      <option value="Burned-in Default">Burned-in Default</option>
+                      {CAPTION_STYLE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="form-field">
@@ -920,6 +944,15 @@ export function VideoEditorPage() {
                           {pos}
                         </button>
                       ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border-subtle bg-glass p-3">
+                    <p className="text-[0.7rem] text-muted mb-1 font-semibold uppercase tracking-wider">Preview</p>
+                    <div className={`rounded px-3 py-1.5 text-xs text-center ${
+                      CAPTION_STYLE_OPTIONS.find((o) => o.value === subtitleStyle)?.preview
+                      ?? "bg-black/70 text-white font-bold"
+                    }`}>
+                      Word · by · word
                     </div>
                   </div>
                 </>

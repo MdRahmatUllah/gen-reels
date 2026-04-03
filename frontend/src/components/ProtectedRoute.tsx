@@ -1,8 +1,13 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { config } from "../lib/config";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
+
+  if (config.disableBrowserAuth) {
+    return <>{children}</>;
+  }
 
   if (isLoading) {
     return (

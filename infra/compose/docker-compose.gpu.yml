@@ -8,7 +8,7 @@ services:
     env_file:
       - ../env/common.env
       - ../env/backend.env
-    command: uv run celery -A app.workers.celery_app.celery_app worker -Q frame --loglevel=info
+    command: python -m celery -A app.workers.celery_app.celery_app worker -Q frame --loglevel=info
     volumes:
       - ../../backend:/workspace/backend
       - ../../models:/models
@@ -41,7 +41,7 @@ services:
     env_file:
       - ../env/common.env
       - ../env/backend.env
-    command: uv run celery -A app.workers.celery_app.celery_app worker -Q video --loglevel=info
+    command: python -m celery -A app.workers.celery_app.celery_app worker -Q video --loglevel=info
     volumes:
       - ../../backend:/workspace/backend
       - ../../models:/models
@@ -74,7 +74,7 @@ services:
     env_file:
       - ../env/common.env
       - ../env/backend.env
-    command: uv run celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=info
+    command: python -m celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=info
     volumes:
       - ../../backend:/workspace/backend
       - ../../models:/models
@@ -138,4 +138,3 @@ networks:
   reels-net:
     external: true
     name: reels-net
-

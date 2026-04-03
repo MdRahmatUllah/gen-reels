@@ -1378,6 +1378,7 @@ export async function liveQuickCreateProject(
       idea_prompt: payload.ideaPrompt,
       starter_mode: payload.starterMode,
       ...(payload.templateId ? { template_id: payload.templateId } : {}),
+      ...(payload.captionStyle ? { caption_style: payload.captionStyle } : {}),
     },
     idempotencyHeaders(),
   );
@@ -1727,6 +1728,8 @@ export async function liveStartRender(
       subtitle_style_profile: {
         burn_in: burnInSubtitles,
         preset: burnInSubtitles ? subtitleStyle.toLowerCase().replace(/\s+/g, "_") : "off",
+        // style maps to captions.CAPTION_STYLES key — used by the ASS subtitle renderer
+        style: burnInSubtitles ? subtitleStyle.toLowerCase().replace(/\s+/g, "_") : "capcut",
       },
       audio_mix_profile: {
         music_enabled: musicEnabled,
@@ -1941,13 +1944,13 @@ export async function liveGetRenderPresets(): Promise<RenderPreset[]> {
       {
         id: "rp_social_reel", name: "Social Reel", description: "Bold captions & upbeat energy for social media",
         category: "social", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", icon: "social",
-        settings: { animationEffect: "ken_burns", subtitleStyle: "Karaoke Bold", musicTrack: "Upbeat Electronic", musicDucking: "-12 dB", transitionMode: "crossfade", videoEffects: { ...DEFAULT_VIDEO_EFFECTS, saturation: 15, contrast: 8, vignetteStrength: 20 } },
+        settings: { animationEffect: "ken_burns", subtitleStyle: "capcut", musicTrack: "Upbeat Electronic", musicDucking: "-12 dB", transitionMode: "crossfade", videoEffects: { ...DEFAULT_VIDEO_EFFECTS, saturation: 15, contrast: 8, vignetteStrength: 20 } },
         tags: ["instagram", "tiktok"], recommended: true,
       },
       {
         id: "rp_corporate", name: "Corporate Clean", description: "Professional with subtle motion",
         category: "corporate", gradient: "linear-gradient(135deg, #2c3e50 0%, #3498db 100%)", icon: "corporate",
-        settings: { animationEffect: "zoom_in", subtitleStyle: "Minimalist White", musicTrack: "Ambient Corporate 1", musicDucking: "-18 dB", transitionMode: "crossfade", videoEffects: { ...DEFAULT_VIDEO_EFFECTS, contrast: 5 } },
+        settings: { animationEffect: "zoom_in", subtitleStyle: "clarity", musicTrack: "Ambient Corporate 1", musicDucking: "-18 dB", transitionMode: "crossfade", videoEffects: { ...DEFAULT_VIDEO_EFFECTS, contrast: 5 } },
         tags: ["professional", "business"],
       },
       {

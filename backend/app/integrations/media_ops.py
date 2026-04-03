@@ -492,6 +492,7 @@ def compose_reel_export(
     narration_files: list[tuple[str, bytes]],
     music_file: tuple[str, bytes] | None,
     subtitle_text: str | None,
+    subtitle_ass: str | None = None,
 ) -> tuple[bytes, bytes, dict[str, object]]:
     runner = FFmpegRunner(settings)
     manifest = {
@@ -654,7 +655,10 @@ def compose_reel_export(
             "aac",
             "-shortest",
         ]
-        if subtitle_text:
+        if subtitle_ass:
+            (workdir / "subtitles.ass").write_text(subtitle_ass, encoding="utf-8")
+            final_args.extend(["-vf", "ass=subtitles.ass"])
+        elif subtitle_text:
             (workdir / "subtitles.srt").write_text(subtitle_text, encoding="utf-8")
             final_args.extend(["-vf", "subtitles=subtitles.srt"])
         final_args.append("final.mp4")

@@ -13,6 +13,7 @@ from app.core.jwt import decode_token
 from app.core.security import hash_token
 from app.db.session import get_db
 from app.models.entities import LocalWorker, LocalWorkerStatus, WorkspaceApiKey, WorkspaceRole
+from app.services.browser_auth_service import BrowserAuthService
 
 
 @dataclass
@@ -56,7 +57,21 @@ def get_db_dep() -> Generator[Session, None, None]:
 def require_auth(
     request: Request,
     settings=Depends(get_settings_dep),
+    db: Session = Depends(get_db_dep),
 ) -> AuthContext:
+    if settings.disable_browser_auth_resolved:
+        browser_auth = BrowserAuthService(db, settings)
+        state = browser_auth.resolve_state(request.cookies.get(settings.dev_workspace_cookie_name))
+        auth_context = AuthContext(
+            user_id=str(state.user.id),
+            email=state.user.email,
+            workspace_id=str(state.active_workspace.id),
+            workspace_role=state.active_membership.role,
+            session_id="browser-auth-disabled",
+        )
+        request.state.auth_context = auth_context
+        return auth_context
+
     token = request.cookies.get(settings.access_cookie_name)
     if not token:
         raise ApiError(401, "unauthorized", "Authentication required.")

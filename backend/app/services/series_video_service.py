@@ -253,7 +253,9 @@ class SeriesVideoService(QuickStartService):
             client=None,
             aspect_ratio="9:16",
             duration_target_sec=90,
-            subtitle_style_profile=normalize_subtitle_style_profile(None),
+            subtitle_style_profile=normalize_subtitle_style_profile(
+                {"burn_in": True, "style": series.caption_style_key}
+            ),
             export_profile=normalize_export_profile(None),
             audio_mix_profile=normalize_audio_mix_profile(None),
             stage=ProjectStage.brief,
@@ -779,7 +781,7 @@ class SeriesVideoService(QuickStartService):
                         scene_plan_id=str(scene_plan_id),
                         allow_export_without_music=True,
                         render_mode="slide",
-                        subtitle_style_profile={"burn_in": False, "preset": "off"},
+                        subtitle_style_profile={"burn_in": True, "style": series.caption_style_key},
                         audio_mix_profile=self._series_audio_mix_profile(series),
                     ),
                     idempotency_key=render_job_key,

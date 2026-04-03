@@ -320,7 +320,7 @@ const seedRenderPresets: RenderPreset[] = [
     icon: "social",
     settings: {
       animationEffect: "ken_burns",
-      subtitleStyle: "Karaoke Bold",
+      subtitleStyle: "capcut",
       musicTrack: "Upbeat Electronic",
       musicDucking: "-12 dB",
       transitionMode: "crossfade",
@@ -338,7 +338,7 @@ const seedRenderPresets: RenderPreset[] = [
     icon: "corporate",
     settings: {
       animationEffect: "zoom_in",
-      subtitleStyle: "Minimalist White",
+      subtitleStyle: "clarity",
       musicTrack: "Ambient Corporate 1",
       musicDucking: "-18 dB",
       transitionMode: "crossfade",
@@ -389,7 +389,7 @@ const seedRenderPresets: RenderPreset[] = [
     icon: "podcast",
     settings: {
       animationEffect: "zoom_out",
-      subtitleStyle: "Burned-in Default",
+      subtitleStyle: "bold_stroke",
       musicTrack: "none",
       musicDucking: "0 dB",
       transitionMode: "hard_cut",
@@ -406,7 +406,7 @@ const seedRenderPresets: RenderPreset[] = [
     icon: "product",
     settings: {
       animationEffect: "zoom_in",
-      subtitleStyle: "Minimalist White",
+      subtitleStyle: "sleek",
       musicTrack: "Ambient Corporate 1",
       musicDucking: "-12 dB",
       transitionMode: "crossfade",
@@ -2944,6 +2944,7 @@ export async function mockCreateRemixProject(payload: RemixProjectCreatePayload)
     name: payload.name,
     source_project_id: payload.source_project_id,
     visual_effects: payload.visual_effects,
+    subtitle_config: payload.subtitle_config ?? {},
     target_duration_ms: payload.target_duration_ms,
     clip_mode: payload.clip_mode,
     output_project_id: null,

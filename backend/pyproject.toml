@@ -22,6 +22,7 @@ dependencies = [
   "redis>=5.2.1",
   "sqlalchemy>=2.0.38",
   "uvicorn[standard]>=0.34.0",
+  "faster-whisper>=1.0.3",
 ]
 
 [project.optional-dependencies]

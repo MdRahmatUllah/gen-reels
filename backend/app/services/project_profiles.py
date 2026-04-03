@@ -6,6 +6,11 @@ from typing import Any
 _DEFAULT_SUBTITLE_STYLE_PROFILE: dict[str, Any] = {
     "preset": "clean_bold",
     "burn_in": False,
+    # Viral caption style — maps to keys in captions.CAPTION_STYLES
+    # Options: capcut, mrbeast, subtitle, neon, minimal, bold_stroke, red_highlight,
+    #          sleek, karaoke, majestic, beast, elegant, pixel, clarity
+    "style": "capcut",
+    "words_per_group": 1,  # 1 = word-by-word (most viral); 3-5 = phrase mode
     "font_family": "Montserrat SemiBold",
     "font_size": 56,
     "max_width_pct": 82,

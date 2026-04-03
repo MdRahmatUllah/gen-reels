@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { mockGetShellData } from "../lib/mock-service";
 import { useAuth } from "../lib/auth";
+import { config } from "../lib/config";
 import { useTheme } from "../lib/theme";
 import { formatDuration, formatPercent, titleFromStatus } from "../lib/format";
 import { useStudioUiStore } from "../state/ui-store";
@@ -488,13 +489,15 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
                 <p className="text-[0.7rem] text-muted">{data.user.role}</p>
               </div>
             </div>
-            <button
-              className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded-md font-medium text-[0.75rem] transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active"
-              onClick={() => logout()}
-              type="button"
-            >
-              Sign out
-            </button>
+            {!config.disableBrowserAuth ? (
+              <button
+                className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded-md font-medium text-[0.75rem] transition-all duration-200 cursor-pointer overflow-hidden relative bg-glass hover:bg-glass-hover text-primary border border-border-subtle hover:border-border-active"
+                onClick={() => logout()}
+                type="button"
+              >
+                Sign out
+              </button>
+            ) : null}
           </div>
         </header>
 

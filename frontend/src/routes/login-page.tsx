@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 
 import { FormInput } from "../components/FormField";
 import { useAuth } from "../lib/auth";
+import { config } from "../lib/config";
 import { useTheme } from "../lib/theme";
 
 export function LoginPage() {
@@ -11,6 +12,10 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("ChangeMe123!");
+
+  if (config.disableBrowserAuth) {
+    return <Navigate to="/app" replace />;
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

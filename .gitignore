@@ -36,6 +36,9 @@ temp/
 *.tmp
 *.pyc
 
+# Local model downloads
+models/
+
 # /.claude
 # */alembic
 # alembic/

@@ -10,6 +10,7 @@ x-backend-service: &backend-service
     - ../env/backend.env
   volumes:
     - ../../backend:/workspace/backend
+    - ../../models:/models
     # Windows host drives — accessible inside the container at /mnt/<drive>.
     # Add or remove drive letters to match the drives on your machine.
     # Docker Desktop on Windows: enable "File sharing" for these drives in
@@ -110,7 +111,15 @@ services:
 
   worker-frame:
     <<: *backend-service
-    command: uv run celery -A app.workers.celery_app.celery_app worker -Q frame --loglevel=info
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend/Dockerfile.gpu
+    environment:
+      HF_HOME: /models/huggingface
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    command: python -m celery -A app.workers.celery_app.celery_app worker -Q frame --loglevel=info
+    gpus: all
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -8,7 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     ffmpeg \
-    libpq-dev && \
+    libpq-dev \
+    fonts-dejavu-core \
+    fonts-liberation && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

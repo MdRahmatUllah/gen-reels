@@ -111,7 +111,22 @@ function RemixProgressBar({ value, max }: { value: number; max: number }) {
 }
 
 /* ─── Create Wizard Dialog ───────────────────────────────────────────────── */
-type WizardStep = "name" | "source" | "effects" | "duration" | "mode";
+type WizardStep = "name" | "source" | "effects" | "duration" | "mode" | "captions";
+
+const CAPTION_STYLES = [
+  { value: "capcut", label: "CapCut", desc: "Bold white text, gold word highlight — most viral" },
+  { value: "mrbeast", label: "Mr. Beast", desc: "Yellow highlight, heavy stroke, all caps" },
+  { value: "subtitle", label: "Subtitle", desc: "Clean semi-transparent box, multi-word phrases" },
+  { value: "neon", label: "Neon", desc: "Cyan + pink glow, eye-catching aesthetic" },
+  { value: "minimal", label: "Minimal", desc: "Small, elegant, dark background pill" },
+];
+
+const CAPTION_MODEL_SIZES = [
+  { value: "tiny", label: "Tiny", desc: "Fastest, ~75 MB" },
+  { value: "base", label: "Base", desc: "Good balance, ~150 MB" },
+  { value: "small", label: "Small ✓", desc: "Recommended, ~500 MB" },
+  { value: "medium", label: "Medium", desc: "High accuracy, ~1.5 GB" },
+];
 
 interface WizardState {
   name: string;
@@ -125,6 +140,9 @@ interface WizardState {
   vignette_strength: number;
   target_duration_ms: number;
   clip_mode: "random" | "unique";
+  captions_enabled: boolean;
+  captions_style: string;
+  captions_model_size: string;
 }
 
 const DEFAULT_WIZARD: WizardState = {
@@ -139,6 +157,9 @@ const DEFAULT_WIZARD: WizardState = {
   vignette_strength: 0,
   target_duration_ms: 30_000,
   clip_mode: "random",
+  captions_enabled: false,
+  captions_style: "capcut",
+  captions_model_size: "small",
 };
 
 function CreateWizardDialog({
@@ -178,6 +199,9 @@ function CreateWizardDialog({
           fade_out_sec: form.fade_out_sec,
           vignette_strength: form.vignette_strength,
         },
+        subtitle_config: form.captions_enabled
+          ? { enabled: true, style: form.captions_style, model_size: form.captions_model_size }
+          : { enabled: false },
         target_duration_ms: form.target_duration_ms,
         clip_mode: form.clip_mode,
       }),
@@ -185,9 +209,9 @@ function CreateWizardDialog({
     onError: (e: Error) => setError(e.message),
   });
 
-  const STEPS: WizardStep[] = ["name", "source", "effects", "duration", "mode"];
+  const STEPS: WizardStep[] = ["name", "source", "effects", "duration", "mode", "captions"];
   const stepIndex = STEPS.indexOf(step);
-  const isLast = step === "mode";
+  const isLast = step === "captions";
 
   function next() {
     if (step === "name" && !form.name.trim()) {
@@ -215,6 +239,7 @@ function CreateWizardDialog({
     effects: "Visual Effects",
     duration: "Target Duration",
     mode: "Clip Mode",
+    captions: "Captions",
   };
 
   return (
@@ -414,6 +439,90 @@ function CreateWizardDialog({
         </div>
       )}
 
+      {/* Step: Captions */}
+      {step === "captions" && (
+        <div className="flex flex-col gap-4">
+          {/* Enable/Disable toggle */}
+          <button
+            type="button"
+            className={`remix-option ${form.captions_enabled ? "remix-option--active" : "remix-option--inactive"}`}
+            style={{ padding: "1rem" }}
+            onClick={() => setForm({ ...form, captions_enabled: !form.captions_enabled })}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-semibold text-sm text-primary">Auto-generate captions</div>
+                <div className="text-xs text-secondary mt-0.5">
+                  Transcribes audio with Whisper and burns word-by-word viral captions
+                </div>
+              </div>
+              <div className={`w-10 h-5.5 rounded-full flex items-center transition-colors px-0.5 ${form.captions_enabled ? "bg-accent justify-end" : "bg-border-subtle justify-start"}`}>
+                <div className="w-4 h-4 rounded-full bg-white shadow" />
+              </div>
+            </div>
+          </button>
+
+          {form.captions_enabled && (
+            <>
+              {/* Style picker */}
+              <div>
+                <p className="text-[0.6875rem] tracking-widest uppercase font-bold text-muted mb-2">Caption Style</p>
+                <div className="flex flex-col gap-2">
+                  {CAPTION_STYLES.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`remix-option ${form.captions_style === opt.value ? "remix-option--active" : "remix-option--inactive"}`}
+                      style={{ padding: "0.75rem 1rem" }}
+                      onClick={() => setForm({ ...form, captions_style: opt.value })}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm text-primary">{opt.label}</span>
+                        {form.captions_style === opt.value && (
+                          <span className="inline-flex items-center gap-1 text-success text-xs font-bold">
+                            <CheckIcon size={12} />
+                            Selected
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-secondary mt-0.5 text-left">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Model size picker */}
+              <div>
+                <p className="text-[0.6875rem] tracking-widest uppercase font-bold text-muted mb-2">Transcription Model</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {CAPTION_MODEL_SIZES.map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      className={`chip-button ${form.captions_model_size === m.value ? "chip-button--active" : ""}`}
+                      onClick={() => setForm({ ...form, captions_model_size: m.value })}
+                    >
+                      <div className="font-semibold">{m.label}</div>
+                      <div className="text-[0.65rem] opacity-70 font-normal">{m.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-xs text-muted">
+                The Whisper model downloads once and is cached. Larger models are more accurate but slower.
+              </p>
+            </>
+          )}
+
+          {!form.captions_enabled && (
+            <p className="text-xs text-muted">
+              Skip captions and generate plain videos. You can always add captions manually later.
+            </p>
+          )}
+        </div>
+      )}
+
       {error && <p className="text-xs text-error mt-3">{error}</p>}
 
       {/* Footer nav */}
@@ -444,7 +553,7 @@ function CreateWizardDialog({
 }
 
 /* ─── Job Row ─────────────────────────────────────────────────────────────── */
-const STALE_PENDING_MS = 5 * 60 * 1000;
+const STALE_INACTIVE_MS = 10 * 60 * 1000;
 
 function JobRow({ initialJob }: { initialJob: RemixJob }) {
   const qc = useQueryClient();
@@ -457,11 +566,11 @@ function JobRow({ initialJob }: { initialJob: RemixJob }) {
   const isActive = job.status === "running" || job.status === "pending";
   const isStale =
     isActive &&
-    Date.now() - new Date(job.created_at).getTime() > STALE_PENDING_MS &&
+    Date.now() - new Date(job.updated_at).getTime() > STALE_INACTIVE_MS &&
     job.completed_videos === 0;
 
   useEffect(() => {
-    if (!isActive || isStale) return;
+    if (!isActive) return;
     const id = setInterval(async () => {
       try {
         const updated = await mockGetRemixJob(job.id);
@@ -475,7 +584,7 @@ function JobRow({ initialJob }: { initialJob: RemixJob }) {
       }
     }, 2000);
     return () => clearInterval(id);
-  }, [job.id, isActive, isStale, qc]);
+  }, [job.id, isActive, qc]);
 
   const stopMutation = useMutation({
     mutationFn: () => mockStopRemixJob(job.id),
@@ -488,7 +597,7 @@ function JobRow({ initialJob }: { initialJob: RemixJob }) {
   return (
     <div className="remix-job">
       <div className="flex items-center justify-between">
-        <StatusBadge status={isStale ? "failed" : job.status} />
+        <StatusBadge status={job.status} />
         <div className="flex items-center gap-2">
           {isActive && !isStale && (
             <button
@@ -511,7 +620,7 @@ function JobRow({ initialJob }: { initialJob: RemixJob }) {
       )}
       {isStale && (
         <p className="text-xs text-warning">
-          Job stalled -- worker may not have been running. Click Generate Videos to retry.
+          No recent worker activity detected. Still checking automatically while the job runs.
         </p>
       )}
       {job.status === "completed" && (
@@ -573,11 +682,7 @@ function ProjectDetailPanel({
 
   const analysis = analysisQuery.data;
   const jobs = jobsQuery.data ?? [];
-  const hasActiveJob = jobs.some((j) => {
-    const active = j.status === "running" || j.status === "pending";
-    const stale = active && Date.now() - new Date(j.created_at).getTime() > STALE_PENDING_MS && j.completed_videos === 0;
-    return active && !stale;
-  });
+  const hasActiveJob = jobs.some((j) => j.status === "running" || j.status === "pending");
 
   const fx = project.visual_effects as Record<string, unknown>;
   const fxParts = [
@@ -630,6 +735,14 @@ function ProjectDetailPanel({
           <div>
             <span>Effects</span>
             <strong className="capitalize">{fxSummary}</strong>
+          </div>
+          <div>
+            <span>Captions</span>
+            <strong className="capitalize">
+              {(project.subtitle_config as Record<string, unknown>)?.enabled
+                ? `${(project.subtitle_config as Record<string, unknown>).style ?? "capcut"} style`
+                : "Off"}
+            </strong>
           </div>
         </div>
       </SectionCard>

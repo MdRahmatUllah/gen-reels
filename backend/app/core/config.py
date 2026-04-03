@@ -52,10 +52,13 @@ class Settings(BaseSettings):
     jwt_private_key: str | None = None
     jwt_public_key: str | None = None
     app_encryption_key: str | None = None
+    disable_browser_auth: bool | None = None
     jwt_access_token_ttl_minutes: int = 43200  # 30 days — no auto-logout
     jwt_refresh_token_ttl_days: int = 365
     access_cookie_name: str = "rg_access_token"
     refresh_cookie_name: str = "rg_refresh_token"
+    dev_workspace_cookie_name: str = "rg_dev_workspace_id"
+    dev_browser_auth_email: str = "admin@example.com"
     azure_openai_endpoint: str | None = None
     azure_openai_api_key: str | None = None
     azure_openai_api_version: str = "2024-10-21"
@@ -98,6 +101,11 @@ class Settings(BaseSettings):
     ffmpeg_bin: str = "ffmpeg"
     ffprobe_bin: str = "ffprobe"
     ffmpeg_docker_image: str = "jrottenberg/ffmpeg:6.1-alpine"
+    model_cache_root: str = "/models"
+    faster_whisper_cache_dir: str | None = None
+    faster_whisper_device: Literal["auto", "cpu", "cuda"] = "auto"
+    faster_whisper_cpu_compute_type: str = "int8"
+    faster_whisper_cuda_compute_type: str = "float16"
     allow_export_without_music: bool = True
     use_stub_providers: bool = False
 
@@ -130,6 +138,13 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
+    def disable_browser_auth_resolved(self) -> bool:
+        if self.disable_browser_auth is not None:
+            return self.disable_browser_auth
+        return self.environment == "development"
+
+    @computed_field
+    @property
     def cookie_secure(self) -> bool:
         return self.environment not in {"development", "test"}
 
@@ -137,6 +152,13 @@ class Settings(BaseSettings):
     @property
     def cookie_samesite(self) -> str:
         return "strict" if self.cookie_secure else "lax"
+
+    @computed_field
+    @property
+    def faster_whisper_cache_dir_resolved(self) -> str:
+        if self.faster_whisper_cache_dir:
+            return self.faster_whisper_cache_dir.rstrip("/\\")
+        return self.model_cache_root.rstrip("/\\") + "/faster-whisper"
 
 
 @lru_cache(maxsize=1)

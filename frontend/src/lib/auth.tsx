@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const silentRefresh = useCallback(async () => {
-    if (isMockMode()) return;
+    if (isMockMode() || config.disableBrowserAuth) return;
     try {
       await fetch(`${config.apiBaseUrl}/api/v1/auth/refresh`, {
         method: "POST",
@@ -59,16 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session) {
           setUser(session.user);
           setWorkspaceId(session.workspaceId);
-          startRefreshTimer();
+          if (!config.disableBrowserAuth) {
+            startRefreshTimer();
+          }
         }
       })
       .finally(() => setIsLoading(false));
     return () => stopRefreshTimer();
-  }, []);
+  }, [startRefreshTimer, stopRefreshTimer]);
 
   // Also refresh when the tab regains visibility (user returns after being away)
   useEffect(() => {
-    if (isMockMode()) return;
+    if (isMockMode() || config.disableBrowserAuth) return;
     const handleVisibility = () => {
       if (document.visibilityState === "visible" && user) {
         silentRefresh();
@@ -85,7 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const session: AuthSession = await mockLogin(credentials);
       setUser(session.user);
       setWorkspaceId(session.workspaceId);
-      startRefreshTimer();
+      if (!config.disableBrowserAuth) {
+        startRefreshTimer();
+      }
       await queryClient.invalidateQueries();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
@@ -101,9 +105,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     stopRefreshTimer();
     try {
       await mockLogout();
-      setUser(null);
-      setWorkspaceId(null);
-      await queryClient.clear();
+      if (config.disableBrowserAuth && !isMockMode()) {
+        const session = await mockGetSession();
+        setUser(session?.user ?? null);
+        setWorkspaceId(session?.workspaceId ?? null);
+        await queryClient.invalidateQueries();
+      } else {
+        setUser(null);
+        setWorkspaceId(null);
+        await queryClient.clear();
+      }
     } finally {
       setIsLoading(false);
     }

@@ -400,6 +400,9 @@ class QuickStartService(ContentPlanningService):
             }
 
         starter_state = self._resolve_starter_state(auth, payload)
+        base_subtitle = dict(starter_state["subtitle_style_profile"] or {})
+        if payload.caption_style:
+            base_subtitle = {**base_subtitle, "burn_in": True, "style": payload.caption_style}
         project = Project(
             workspace_id=workspace_id,
             owner_user_id=user_id,
@@ -409,7 +412,7 @@ class QuickStartService(ContentPlanningService):
             client=None,
             aspect_ratio=str(starter_state["aspect_ratio"]),
             duration_target_sec=int(starter_state["duration_target_sec"]),
-            subtitle_style_profile=normalize_subtitle_style_profile(starter_state["subtitle_style_profile"]),
+            subtitle_style_profile=normalize_subtitle_style_profile(base_subtitle),
             export_profile=normalize_export_profile(starter_state["export_profile"]),
             audio_mix_profile=normalize_audio_mix_profile(starter_state["audio_mix_profile"]),
             stage=ProjectStage.brief,

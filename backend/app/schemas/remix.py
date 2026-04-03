@@ -9,6 +9,7 @@ class RemixProjectCreate(BaseModel):
     name: str
     source_project_id: str | None = None  # video_library_projects.id; None = "No Project"
     visual_effects: dict[str, object] = {}
+    subtitle_config: dict[str, object] = {}
     target_duration_ms: int
     clip_mode: str = "random"  # "random" | "unique"
 
@@ -19,6 +20,7 @@ class RemixProjectResponse(BaseModel):
     name: str
     source_project_id: str | None
     visual_effects: dict[str, object]
+    subtitle_config: dict[str, object]
     target_duration_ms: int
     clip_mode: str
     output_project_id: str | None

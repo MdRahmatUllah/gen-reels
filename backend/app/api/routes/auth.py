@@ -13,6 +13,7 @@ from app.schemas.auth import (
 )
 from app.schemas.common import MessageResponse
 from app.services.auth_service import AuthService
+from app.services.browser_auth_service import BrowserAuthService
 
 router = APIRouter()
 
@@ -26,6 +27,12 @@ def login(
     settings=Depends(get_settings_dep),
     redis_client=Depends(get_redis_dep),
 ):
+    if settings.disable_browser_auth_resolved:
+        browser_auth = BrowserAuthService(db, settings)
+        state = browser_auth.resolve_state(request.cookies.get(settings.dev_workspace_cookie_name))
+        browser_auth.set_workspace_cookie(response, str(state.active_workspace.id))
+        return browser_auth.session_payload(state)
+
     service = AuthService(db, settings, redis_client)
     session_payload, access_token, refresh_token = service.login(
         email=payload.email,
@@ -46,6 +53,10 @@ def logout(
     settings=Depends(get_settings_dep),
     redis_client=Depends(get_redis_dep),
 ):
+    if settings.disable_browser_auth_resolved:
+        BrowserAuthService(db, settings).clear_workspace_cookie(response)
+        return {"message": "Logged out."}
+
     service = AuthService(db, settings, redis_client)
     service.logout(request.cookies.get(settings.refresh_cookie_name))
     service.clear_auth_cookies(response)
@@ -54,11 +65,17 @@ def logout(
 
 @router.get("/session", response_model=SessionResponse)
 def get_session(
+    request: Request,
     auth: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db_dep),
     settings=Depends(get_settings_dep),
     redis_client=Depends(get_redis_dep),
 ):
+    if settings.disable_browser_auth_resolved:
+        browser_auth = BrowserAuthService(db, settings)
+        state = browser_auth.resolve_state(request.cookies.get(settings.dev_workspace_cookie_name))
+        return browser_auth.session_payload(state)
+
     service = AuthService(db, settings, redis_client)
     return service.session_snapshot(auth)
 
@@ -71,6 +88,12 @@ def refresh(
     settings=Depends(get_settings_dep),
     redis_client=Depends(get_redis_dep),
 ):
+    if settings.disable_browser_auth_resolved:
+        browser_auth = BrowserAuthService(db, settings)
+        state = browser_auth.resolve_state(request.cookies.get(settings.dev_workspace_cookie_name))
+        browser_auth.set_workspace_cookie(response, str(state.active_workspace.id))
+        return browser_auth.session_payload(state)
+
     refresh_token = request.cookies.get(settings.refresh_cookie_name)
     service = AuthService(db, settings, redis_client)
     session_payload, access_token, new_refresh_token = service.refresh(refresh_token or "")
@@ -111,6 +134,12 @@ def select_workspace(
     settings=Depends(get_settings_dep),
     redis_client=Depends(get_redis_dep),
 ):
+    if settings.disable_browser_auth_resolved:
+        browser_auth = BrowserAuthService(db, settings)
+        state = browser_auth.resolve_state(payload.workspace_id, strict_workspace=True)
+        browser_auth.set_workspace_cookie(response, str(state.active_workspace.id))
+        return browser_auth.session_payload(state)
+
     service = AuthService(db, settings, redis_client)
     session_payload, access_token = service.select_workspace(auth, payload.workspace_id)
     service.set_auth_cookies(response, access_token=access_token, refresh_token=None)

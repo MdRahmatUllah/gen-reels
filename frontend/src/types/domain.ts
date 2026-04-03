@@ -66,6 +66,7 @@ export interface QuickCreateProjectPayload {
   ideaPrompt: string;
   starterMode: QuickCreateStarterMode;
   templateId?: string | null;
+  captionStyle?: string | null;
 }
 
 export interface QuickCreateJobSummary {
@@ -1053,6 +1054,7 @@ export interface RemixProject {
   name: string;
   source_project_id: string | null;
   visual_effects: Record<string, unknown>;
+  subtitle_config: Record<string, unknown>;
   target_duration_ms: number;
   clip_mode: "random" | "unique";
   output_project_id: string | null;
@@ -1094,6 +1096,7 @@ export interface RemixProjectCreatePayload {
   name: string;
   source_project_id: string | null;
   visual_effects: Record<string, unknown>;
+  subtitle_config: Record<string, unknown>;
   target_duration_ms: number;
   clip_mode: "random" | "unique";
 }

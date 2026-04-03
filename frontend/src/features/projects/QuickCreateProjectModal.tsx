@@ -5,6 +5,23 @@ import { Dialog } from "../../components/Dialog";
 import { useQuickCreateProject } from "../../hooks/use-projects";
 import { useTemplates } from "../../hooks/use-templates";
 
+const CAPTION_STYLE_OPTIONS = [
+  { value: "", label: "Off (no captions)" },
+  { value: "capcut", label: "CapCut — bold white, gold highlight" },
+  { value: "mrbeast", label: "Mr. Beast — yellow highlight, heavy stroke" },
+  { value: "bold_stroke", label: "Bold Stroke — maximum legibility" },
+  { value: "karaoke", label: "Karaoke — word-by-word, orange glow" },
+  { value: "subtitle", label: "Subtitle — clean multi-word box" },
+  { value: "red_highlight", label: "Red Highlight — dramatic news style" },
+  { value: "majestic", label: "Majestic — gold cinematic" },
+  { value: "neon", label: "Neon — cyan + pink glow" },
+  { value: "sleek", label: "Sleek — minimal, modern" },
+  { value: "elegant", label: "Elegant — refined lowercase" },
+  { value: "clarity", label: "Clarity — high legibility" },
+  { value: "minimal", label: "Minimal — small dark pill" },
+  { value: "pixel", label: "Pixel — retro gaming" },
+];
+
 export function QuickCreateProjectModal({
   open,
   onClose,
@@ -17,11 +34,13 @@ export function QuickCreateProjectModal({
   const quickCreateProject = useQuickCreateProject();
   const [ideaPrompt, setIdeaPrompt] = useState("");
   const [starterValue, setStarterValue] = useState("studio_default");
+  const [captionStyle, setCaptionStyle] = useState("");
 
   useEffect(() => {
     if (!open) {
       setIdeaPrompt("");
       setStarterValue("studio_default");
+      setCaptionStyle("");
     }
   }, [open]);
 
@@ -66,6 +85,7 @@ export function QuickCreateProjectModal({
                   ideaPrompt: ideaPrompt.trim(),
                   starterMode,
                   templateId,
+                  captionStyle: captionStyle || null,
                 },
                 {
                   onSuccess: (result) => {
@@ -130,6 +150,30 @@ export function QuickCreateProjectModal({
                 : isLoading
                   ? "Loading reusable starters..."
                   : "Template-backed starters apply project defaults without copying the old brief verbatim."}
+          </p>
+        </div>
+
+        <div className="form-field">
+          <label
+            className="text-[0.6875rem] leading-[1.4] tracking-widest uppercase font-bold text-muted block mb-1"
+            htmlFor="quick-create-caption"
+          >
+            Caption style
+          </label>
+          <select
+            id="quick-create-caption"
+            className="w-full px-3.5 py-2.5 rounded-md border border-border-card bg-glass text-primary outline-none transition-all duration-200 focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-glow-sm)]"
+            value={captionStyle}
+            onChange={(event) => setCaptionStyle(event.target.value)}
+          >
+            {CAPTION_STYLE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <p className="text-[0.82rem] text-secondary mt-2">
+            {captionStyle
+              ? "Captions are transcribed with Whisper and burned in word-by-word — matching the voiceover exactly."
+              : "Captions are disabled. You can enable them on the render settings page later."}
           </p>
         </div>
 

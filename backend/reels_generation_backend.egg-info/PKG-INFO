@@ -21,6 +21,7 @@ Requires-Dist: python-multipart>=0.0.20
 Requires-Dist: redis>=5.2.1
 Requires-Dist: sqlalchemy>=2.0.38
 Requires-Dist: uvicorn[standard]>=0.34.0
+Requires-Dist: faster-whisper>=1.0.3
 Provides-Extra: dev
 Requires-Dist: fakeredis>=2.28.1; extra == "dev"
 Requires-Dist: pytest>=8.3.4; extra == "dev"

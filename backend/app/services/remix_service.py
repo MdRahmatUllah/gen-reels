@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import AuthContext
 from app.core.config import Settings
 from app.core.errors import ApiError
+from app.integrations.captions import burn_captions
 from app.integrations.media_ops import apply_video_effects, concat_video_clips, probe_media_bytes
 from app.integrations.storage import StorageClient, build_storage_client
 from app.models.entities import (
@@ -38,6 +39,7 @@ def _project_to_response(p: RemixProject) -> RemixProjectResponse:
         name=p.name,
         source_project_id=str(p.source_project_id) if p.source_project_id else None,
         visual_effects=dict(p.visual_effects or {}),
+        subtitle_config=dict(p.subtitle_config or {}),
         target_duration_ms=p.target_duration_ms,
         clip_mode=p.clip_mode,
         output_project_id=str(p.output_project_id) if p.output_project_id else None,
@@ -176,6 +178,13 @@ class RemixService:
             self._storage = build_storage_client(self.settings)
         return self._storage
 
+    def _touch_job_activity(self, job: RemixJob, video: RemixVideo | None = None) -> None:
+        now = datetime.now(timezone.utc)
+        job.updated_at = now
+        if video is not None:
+            video.updated_at = now
+        self.db.commit()
+
     # ── Projects ──────────────────────────────────────────────────────────────
 
     def list_projects(self, auth: AuthContext) -> list[RemixProjectResponse]:
@@ -209,6 +218,7 @@ class RemixService:
             name=payload.name.strip(),
             source_project_id=source_project_id,
             visual_effects=payload.visual_effects,
+            subtitle_config=payload.subtitle_config,
             target_duration_ms=payload.target_duration_ms,
             clip_mode=payload.clip_mode,
         )
@@ -441,7 +451,7 @@ class RemixService:
                 break
 
             try:
-                self._process_remix_video(video, project, fx, idx)
+                self._process_remix_video(video, project, fx, idx, job)
                 job.completed_videos += 1
             except Exception as exc:
                 video.status = "failed"
@@ -461,9 +471,10 @@ class RemixService:
         project: RemixProject,
         fx: dict[str, object],
         index: int,
+        job: RemixJob,
     ) -> None:
         video.status = "running"
-        self.db.commit()
+        self._touch_job_activity(job, video)
 
         # Fetch clip bytes from storage
         clip_ids = [uuid.UUID(cid) for cid in video.clip_ids]
@@ -477,6 +488,7 @@ class RemixService:
             self.storage.read_bytes(c.bucket_name, c.object_name)
             for c in clips
         ]
+        self._touch_job_activity(job, video)
 
         # Concatenate
         result_bytes, concat_meta = concat_video_clips(
@@ -485,6 +497,7 @@ class RemixService:
             target_width=1080,
             target_height=1920,
         )
+        self._touch_job_activity(job, video)
 
         # Apply visual effects if any are set
         has_fx = (
@@ -510,6 +523,27 @@ class RemixService:
                 color_filter=str(fx.get("color_filter", "none")),
                 vignette_strength=float(fx.get("vignette_strength", 0)),
             )
+            self._touch_job_activity(job, video)
+
+        # Burn captions if configured
+        subtitle_cfg = dict(project.subtitle_config or {})
+        if subtitle_cfg.get("enabled"):
+            try:
+                def _caption_progress(_phase: str) -> None:
+                    self._touch_job_activity(job, video)
+
+                result_bytes = burn_captions(
+                    self.settings,
+                    video_bytes=result_bytes,
+                    style_name=str(subtitle_cfg.get("style", "capcut")),
+                    model_size=str(subtitle_cfg.get("model_size", "small")),
+                    progress_callback=_caption_progress,
+                )
+            except Exception as exc:
+                # Caption burning is non-fatal — log and continue with uncaptioned video
+                import logging
+                logging.getLogger(__name__).warning("Caption burning failed: %s", exc)
+            self._touch_job_activity(job, video)
 
         # Upload to MinIO
         file_name = f"{_slugify(project.name)}-{index + 1:04d}.mp4"
@@ -518,6 +552,7 @@ class RemixService:
         )
         self.storage.ensure_bucket(REMIX_BUCKET)
         self.storage.put_bytes(REMIX_BUCKET, object_name, result_bytes, content_type="video/mp4")
+        self._touch_job_activity(job, video)
 
         # Create VideoLibraryItem
         item = VideoLibraryItem(
