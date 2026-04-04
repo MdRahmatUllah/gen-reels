@@ -8,6 +8,7 @@ yarn.lock
 .env.local
 .env.*.local
 infra/env/*.local.env
+infra/env/*.env
 
 # IDE
 .vscode/
@@ -42,6 +43,9 @@ models/
 
 # Local Google OAuth files
 backend/client-secret/client_secret.json
+infra/env/backend.env
+infra/env/common.env
+infra/env/frontend.env
 
 # /.claude
 # */alembic
