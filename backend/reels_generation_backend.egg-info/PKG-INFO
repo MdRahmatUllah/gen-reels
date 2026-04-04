@@ -22,6 +22,9 @@ Requires-Dist: redis>=5.2.1
 Requires-Dist: sqlalchemy>=2.0.38
 Requires-Dist: uvicorn[standard]>=0.34.0
 Requires-Dist: faster-whisper>=1.0.3
+Requires-Dist: google-api-python-client>=2.169.0
+Requires-Dist: google-auth>=2.40.1
+Requires-Dist: google-auth-oauthlib>=1.2.2
 Provides-Extra: dev
 Requires-Dist: fakeredis>=2.28.1; extra == "dev"
 Requires-Dist: pytest>=8.3.4; extra == "dev"
@@ -105,6 +108,15 @@ Notes:
 
 - In `development`, the app auto-generates JWT keys and the app encryption key if they are blank.
 - If you want real provider calls, leave `USE_STUB_PROVIDERS=false` and fill the Azure / Vertex variables from [`.env.example`](./.env.example).
+- For YouTube publishing, also fill:
+
+```env
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/integrations/youtube/callback
+FRONTEND_URL=http://localhost:5173
+YOUTUBE_SCOPES=openid,email,profile,https://www.googleapis.com/auth/youtube,https://www.googleapis.com/auth/youtube.upload
+```
 
 ### 2. Start local dependencies
 
@@ -168,6 +180,7 @@ uv run celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=in
 uv run celery -A app.workers.celery_app.celery_app worker -Q composition --loglevel=info
 uv run celery -A app.workers.celery_app.celery_app worker -Q notifications --loglevel=info
 uv run celery -A app.workers.celery_app.celery_app worker -Q maintenance --loglevel=info
+uv run celery -A app.workers.celery_app.celery_app worker -Q publishing --loglevel=info
 uv run celery -A app.workers.celery_app.celery_app beat --loglevel=info
 ```
 
@@ -180,6 +193,15 @@ Queues currently used by the backend:
 - `composition`
 - `notifications`
 - `maintenance`
+- `publishing`
+
+## YouTube Publishing Notes
+
+- The YouTube connection flow uses Google OAuth 2.0 web-server flow on the FastAPI backend.
+- Tokens are stored encrypted at rest with the app encryption key.
+- The publishing pipeline uses the local Whisper small model for transcription, then generates metadata from the transcript.
+- Scheduled uploads are sent to YouTube as `private` with `publishAt` in UTC.
+- Full manual Google Console setup is documented in [../docs/manual-google-youtube-local-setup.md](../docs/manual-google-youtube-local-setup.md).
 
 ## Full Docker Option
 

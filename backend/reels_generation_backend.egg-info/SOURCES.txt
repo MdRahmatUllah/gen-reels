@@ -27,7 +27,9 @@ app/api/routes/series.py
 app/api/routes/templates.py
 app/api/routes/usage.py
 app/api/routes/video_library.py
+app/api/routes/videos.py
 app/api/routes/workspace.py
+app/api/routes/youtube.py
 app/core/__init__.py
 app/core/config.py
 app/core/crypto.py
@@ -49,8 +51,14 @@ app/integrations/media.py
 app/integrations/media_ops.py
 app/integrations/storage.py
 app/integrations/third_party.py
+app/integrations/youtube/__init__.py
+app/integrations/youtube/client.py
+app/integrations/youtube/oauth.py
+app/integrations/youtube/scheduler.py
+app/integrations/youtube/service.py
 app/models/__init__.py
 app/models/entities.py
+app/models/youtube.py
 app/schemas/__init__.py
 app/schemas/admin.py
 app/schemas/assets.py
@@ -72,7 +80,9 @@ app/schemas/scripts.py
 app/schemas/series.py
 app/schemas/templates.py
 app/schemas/video_library.py
+app/schemas/videos.py
 app/schemas/workspace.py
+app/schemas/youtube.py
 app/services/__init__.py
 app/services/admin_service.py
 app/services/asset_service.py
@@ -96,6 +106,9 @@ app/services/project_profiles.py
 app/services/project_service.py
 app/services/provider_capabilities.py
 app/services/provider_credential_service.py
+app/services/publish_job_service.py
+app/services/publish_schedule_service.py
+app/services/publishing_presenters.py
 app/services/quick_start_service.py
 app/services/remix_service.py
 app/services/render_service.py
@@ -107,10 +120,13 @@ app/services/series_service.py
 app/services/series_video_service.py
 app/services/template_service.py
 app/services/video_library_service.py
+app/services/video_service.py
 app/services/workspace_service.py
+app/services/youtube_account_service.py
 app/tests/conftest.py
 app/tests/test_auth.py
 app/tests/test_backend_completion.py
+app/tests/test_captions.py
 app/tests/test_generation.py
 app/tests/test_migrations.py
 app/tests/test_phase2_content_planning.py
@@ -125,6 +141,8 @@ app/tests/test_series.py
 app/workers/__init__.py
 app/workers/celery_app.py
 app/workers/tasks.py
+app/workers/video_processing.py
+app/workers/youtube_publish.py
 reels_generation_backend.egg-info/PKG-INFO
 reels_generation_backend.egg-info/SOURCES.txt
 reels_generation_backend.egg-info/dependency_links.txt

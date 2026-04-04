@@ -76,6 +76,14 @@ class TextProvider:
     ) -> dict[str, Any]:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def generate_video_metadata(
+        self,
+        *,
+        transcript_text: str,
+        video_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:  # pragma: no cover - interface
+        raise NotImplementedError
+
 
 def _distribute_duration(total_duration: int, parts: int) -> list[int]:
     base = max(1, total_duration // parts)
@@ -444,6 +452,41 @@ class StubTextProvider(TextProvider):
             "lines": lines,
         }
 
+    def generate_video_metadata(
+        self,
+        *,
+        transcript_text: str,
+        video_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        del video_context
+        words = transcript_text.split()
+        subject = " ".join(words[:8]).strip() or "Short-form story"
+        recommended_title = f"{subject.title()} | Watch Before It Peaks"[:100]
+        return {
+            "title_options": [
+                recommended_title,
+                f"What Happens Next In {subject.title()}"[:100],
+                f"{subject.title()} In 60 Seconds"[:100],
+            ],
+            "recommended_title": recommended_title,
+            "description": (
+                "Generated from the uploaded video's transcript.\n\n"
+                f"{transcript_text[:1200].strip()}\n\n"
+                "TODO: refine the description prompt for your preferred LLM voice and CTA strategy."
+            )[:5000],
+            "tags": [
+                tag
+                for tag in [
+                    "shorts",
+                    "viral",
+                    "storytelling",
+                    *[word.lower() for word in words[:4]],
+                ]
+                if tag
+            ][:8],
+            "hook_summary": "Transcript-driven short-form metadata draft.",
+        }
+
 
 class AzureContentSafetyProvider(ModerationProvider):
     def __init__(
@@ -695,6 +738,34 @@ class AzureOpenAITextProvider(TextProvider):
             ]
         )["output"]
 
+    def generate_video_metadata(
+        self,
+        *,
+        transcript_text: str,
+        video_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys title_options, recommended_title, description, tags, and hook_summary. "
+            "title_options must contain 3-5 distinct, non-clickbait but high-performing YouTube title options, "
+            "each 100 characters or fewer. recommended_title must be one of the title_options. description must be "
+            "ready for YouTube, concise but informative, and stay under 5000 characters. tags must be a list of "
+            "short YouTube tag strings. hook_summary should be a one or two sentence short summary. "
+            "Avoid hashtags in tags unless the transcript strongly implies they are useful. "
+            "TODO: adapt the final metadata style guide for your preferred brand voice and LLM provider."
+        )
+        user_prompt = json.dumps(
+            {
+                "transcript_text": transcript_text,
+                "video_context": video_context or {},
+            }
+        )
+        return self._request_json(
+            [
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": user_prompt},
+            ]
+        )["output"]
+
 
 class OllamaTextProvider(TextProvider):
     def __init__(self, *, endpoint: str, model_name: str) -> None:
@@ -836,6 +907,27 @@ class OllamaTextProvider(TextProvider):
                 "series": series_payload,
                 "sequence_number": sequence_number,
                 "prior_scripts": prior_scripts,
+            })},
+        ])["output"]
+
+    def generate_video_metadata(
+        self,
+        *,
+        transcript_text: str,
+        video_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        instruction = (
+            "Return JSON with keys title_options, recommended_title, description, tags, and hook_summary. "
+            "title_options must contain 3-5 YouTube title options. recommended_title must be one of those options. "
+            "description must be ready for a YouTube upload. tags must be a list of short strings. "
+            "hook_summary should summarize the video in one or two sentences. "
+            "TODO: refine this prompt for your preferred LLM tone and metadata style."
+        )
+        return self._request_json([
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": json.dumps({
+                "transcript_text": transcript_text,
+                "video_context": video_context or {},
             })},
         ])["output"]
 

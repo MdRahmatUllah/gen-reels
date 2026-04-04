@@ -76,6 +76,20 @@ from app.models.entities import (
     WorkspaceProviderCredential,
     WorkspaceRole,
 )
+from app.models.youtube import (
+    AuditLog,
+    PublishJob,
+    PublishJobStatus,
+    PublishMode,
+    PublishSchedule,
+    PublishVisibility,
+    Video,
+    VideoLifecycleStatus,
+    VideoMetadataSource,
+    VideoMetadataVersion,
+    VideoTranscript,
+    YouTubeAccount,
+)
 
 __all__ = [
     "AuditEvent",
@@ -83,6 +97,7 @@ __all__ = [
     "AssetRole",
     "AssetType",
     "AssetVariant",
+    "AuditLog",
     "BrandEnforcementMode",
     "BrandKit",
     "BrandKitStatus",
@@ -109,6 +124,11 @@ __all__ = [
     "NotificationPreference",
     "PasswordResetToken",
     "Plan",
+    "PublishJob",
+    "PublishJobStatus",
+    "PublishMode",
+    "PublishSchedule",
+    "PublishVisibility",
     "ProjectTemplate",
     "Project",
     "ProjectBrief",
@@ -141,6 +161,11 @@ __all__ = [
     "SubscriptionStatus",
     "TemplateVersion",
     "User",
+    "Video",
+    "VideoLifecycleStatus",
+    "VideoMetadataSource",
+    "VideoMetadataVersion",
+    "VideoTranscript",
     "VisualPreset",
     "VoicePreset",
     "WebhookDelivery",
@@ -154,4 +179,5 @@ __all__ = [
     "WorkspaceMember",
     "WorkspaceProviderCredential",
     "WorkspaceRole",
+    "YouTubeAccount",
 ]

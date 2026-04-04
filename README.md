@@ -196,16 +196,54 @@ npm run dev
 
 More details are in [frontend/README.md](./frontend/README.md).
 
+## YouTube Publishing Local Setup
+
+The YouTube publishing flow adds Google OAuth, a dedicated publishing worker queue, and live frontend screens under `Publishing`.
+
+### Backend env additions
+
+Add these values to `backend/.env`:
+
+```env
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/integrations/youtube/callback
+FRONTEND_URL=http://localhost:5173
+YOUTUBE_SCOPES=openid,email,profile,https://www.googleapis.com/auth/youtube,https://www.googleapis.com/auth/youtube.upload
+```
+
+### Required local processes
+
+For YouTube publishing you should run:
+
+- FastAPI backend
+- Redis
+- Postgres
+- Celery beat
+- at least one worker for `audio`
+- one worker for `publishing`
+
+Manual worker examples:
+
+```bash
+cd backend
+uv run celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=info
+uv run celery -A app.workers.celery_app.celery_app worker -Q publishing --loglevel=info
+uv run celery -A app.workers.celery_app.celery_app beat --loglevel=info
+```
+
+The Google Console setup steps are documented in [docs/manual-google-youtube-local-setup.md](./docs/manual-google-youtube-local-setup.md).
+
 ## Current Frontend Caveat
 
-The frontend dev server works, but the production build still has outstanding TypeScript issues. If you run:
+The frontend TypeScript build now passes in live mode. In this sandbox environment, `vite build` can still fail because `esbuild` process spawning is restricted, so validate a full production bundle on your local machine when needed. If you run:
 
 ```bash
 cd frontend
 npm run build
 ```
 
-it is expected to fail until the remaining frontend cleanup work is finished. The review is documented in [frontend-report.md](./frontend-report.md).
+it may fail here because of sandbox `EPERM`, not necessarily because of project TypeScript errors. The earlier review is documented in [frontend-report.md](./frontend-report.md).
 
 ## Docker Commands
 
@@ -310,3 +348,5 @@ docker compose exec api uv run reels-cli seed
 - Product and architecture docs: [docs/README.md](./docs/README.md)
 - Infra details: [infra/README.md](./infra/README.md)
 - Frontend implementation review: [frontend-report.md](./frontend-report.md)
+- Google OAuth local setup: [docs/manual-google-youtube-local-setup.md](./docs/manual-google-youtube-local-setup.md)
+- Publishing implementation plan: [docs/youtube-publishing-implementation-plan.md](./docs/youtube-publishing-implementation-plan.md)

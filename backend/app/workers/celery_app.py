@@ -39,6 +39,10 @@ celery_app.conf.update(
         "maintenance.cleanup_expired_assets": {"queue": "maintenance"},
         "maintenance.archive_old_quarantine_records": {"queue": "maintenance"},
         "maintenance.refresh_provider_health": {"queue": "maintenance"},
+        "video.process_upload": {"queue": "audio"},
+        "video.generate_metadata": {"queue": "audio"},
+        "youtube.publish_job": {"queue": "publishing"},
+        "youtube.enqueue_due_jobs": {"queue": "maintenance"},
     },
     beat_schedule={
         "expire-stale-planning-jobs": {
@@ -72,6 +76,10 @@ celery_app.conf.update(
         "refresh-provider-health": {
             "task": "maintenance.refresh_provider_health",
             "schedule": crontab(minute="*/5"),
+        },
+        "enqueue-due-youtube-publish-jobs": {
+            "task": "youtube.enqueue_due_jobs",
+            "schedule": crontab(minute="*"),
         },
     },
 )

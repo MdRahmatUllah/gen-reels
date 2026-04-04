@@ -19,6 +19,8 @@ from app.services.remix_service import RemixService as RemixServiceClass
 from app.services.render_service import RenderService
 from app.services.workspace_service import WorkspaceService
 from app.workers.celery_app import celery_app
+from app.workers import video_processing as _video_processing  # noqa: F401
+from app.workers import youtube_publish as _youtube_publish  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

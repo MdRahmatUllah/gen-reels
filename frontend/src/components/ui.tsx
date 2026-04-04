@@ -102,6 +102,11 @@ const navIconMap: Record<string, string> = {
   "Presets":        icons.presets,
   "Templates":      icons.templates,
   "Video Library":  icons.library,
+  "Publishing Videos": icons.library,
+  "YouTube Accounts": icons.admin,
+  "Schedules": icons.queue,
+  "Batch Scheduler": icons.queue,
+  "Publish Queue": icons.queue,
   "Series":         icons.series,
   "Remix":          icons.remix,
   "Brief":     icons.brief,
@@ -396,6 +401,17 @@ export function ShellLayout({ mode }: { mode: "app" | "admin" }) {
                 { to: "/app/remix", label: "Remix" },
                 { to: "/app/presets", label: "Presets" },
                 { to: "/app/templates", label: "Templates" },
+              ]}
+            />
+
+            <NavGroup
+              label="Publishing"
+              items={[
+                { to: "/app/publishing/accounts", label: "YouTube Accounts" },
+                { to: "/app/publishing/videos", label: "Publishing Videos" },
+                { to: "/app/publishing/schedules", label: "Schedules" },
+                { to: "/app/publishing/batch", label: "Batch Scheduler" },
+                { to: "/app/publishing/queue", label: "Publish Queue" },
               ]}
             />
 

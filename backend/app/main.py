@@ -5,8 +5,8 @@ from contextlib import asynccontextmanager
 
 import redis
 import uvicorn
-from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,7 +14,7 @@ from sqlalchemy import text
 
 from app.api.router import api_router
 from app.core.config import get_settings
-from app.core.errors import ApiError
+from app.core.errors import AdapterError, ApiError
 from app.core.jwt import decode_token
 from app.core.logging import CorrelationIdMiddleware, configure_logging
 from app.core.rate_limit import RateLimitMiddleware
@@ -35,6 +35,14 @@ def _error_payload(message: str, code: str, correlation_id: str | None) -> dict[
     }
 
 
+def _adapter_status_code(exc: AdapterError) -> int:
+    if exc.category == "deterministic_input":
+        return 422
+    if exc.category in {"configuration", "transient"}:
+        return 503
+    return 500
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -43,10 +51,12 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.redis = redis.Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.storage = build_storage_client(settings)
-    engine = get_engine(settings.database_url)
-    if settings.environment in {"development", "test"}:
+    if settings.environment == "test":
+        engine = get_engine(settings.database_url)
         from app.db.base import Base
-        import app.models.entities as _models  # noqa: F401 – ensure all models are registered
+        import app.models.entities as _models  # noqa: F401 - ensure all models are registered
+        import app.models.youtube as _youtube_models  # noqa: F401
+
         Base.metadata.create_all(bind=engine)
     logger.info("app_startup_complete")
     yield
@@ -56,11 +66,12 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Reels Generation Backend", version="0.1.0", lifespan=lifespan)
-    allowed_origins = {settings.frontend_base_url.rstrip("/")}
-    if settings.frontend_base_url.startswith("http://localhost:"):
-        allowed_origins.add(settings.frontend_base_url.replace("localhost", "127.0.0.1", 1).rstrip("/"))
-    if settings.frontend_base_url.startswith("http://127.0.0.1:"):
-        allowed_origins.add(settings.frontend_base_url.replace("127.0.0.1", "localhost", 1).rstrip("/"))
+    frontend_origin = settings.frontend_url_resolved
+    allowed_origins = {frontend_origin}
+    if frontend_origin.startswith("http://localhost:"):
+        allowed_origins.add(frontend_origin.replace("localhost", "127.0.0.1", 1).rstrip("/"))
+    if frontend_origin.startswith("http://127.0.0.1:"):
+        allowed_origins.add(frontend_origin.replace("127.0.0.1", "localhost", 1).rstrip("/"))
     app.add_middleware(
         CORSMiddleware,
         allow_origins=sorted(allowed_origins),
@@ -107,15 +118,30 @@ def create_app() -> FastAPI:
             content=jsonable_encoder(payload),
         )
 
+    @app.exception_handler(AdapterError)
+    async def adapter_error_handler(request: Request, exc: AdapterError) -> JSONResponse:
+        correlation_id = getattr(request.state, "correlation_id", None)
+        return JSONResponse(
+            status_code=_adapter_status_code(exc),
+            content=jsonable_encoder(
+                {
+                    **_error_payload(exc.message, exc.code, correlation_id),
+                    "details": {"category": exc.category},
+                }
+            ),
+        )
+
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         correlation_id = getattr(request.state, "correlation_id", None)
         return JSONResponse(
             status_code=422,
-            content=jsonable_encoder({
-                **_error_payload("Request validation failed.", "validation_error", correlation_id),
-                "details": exc.errors(),
-            }),
+            content=jsonable_encoder(
+                {
+                    **_error_payload("Request validation failed.", "validation_error", correlation_id),
+                    "details": exc.errors(),
+                }
+            ),
         )
 
     @app.get("/health")

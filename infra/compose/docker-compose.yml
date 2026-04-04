@@ -8,6 +8,7 @@ x-backend-service: &backend-service
   env_file:
     - ../env/common.env
     - ../env/backend.env
+    - ../env/backend.local.env
   volumes:
     - ../../backend:/workspace/backend
     - ../../models:/models
@@ -155,6 +156,13 @@ services:
   worker-maintenance:
     <<: *backend-service
     command: uv run celery -A app.workers.celery_app.celery_app worker -Q maintenance --loglevel=info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker-publishing:
+    <<: *backend-service
+    command: uv run celery -A app.workers.celery_app.celery_app worker -Q publishing --loglevel=info
     depends_on:
       migrate:
         condition: service_completed_successfully

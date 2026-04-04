@@ -31,6 +31,12 @@ import { VideoEditorPage } from "../features/editor/VideoEditorPage";
 import { VideoLibraryPage } from "../features/video-library/VideoLibraryPage";
 import RemixPage from "../features/remix/RemixPage";
 import { SeriesDetailPage, SeriesEditorPage, SeriesListPage } from "../features/series/SeriesPages";
+import { BatchSchedulerPage } from "../features/publishing/BatchSchedulerPage";
+import { ConnectedYouTubeAccountsPage } from "../features/publishing/ConnectedYouTubeAccountsPage";
+import { PublishQueueMonitorPage } from "../features/publishing/PublishQueueMonitorPage";
+import { PublishingVideosPage } from "../features/publishing/PublishingVideosPage";
+import { ScheduleSettingsPage } from "../features/publishing/ScheduleSettingsPage";
+import { VideoMetadataReviewPage } from "../features/publishing/VideoMetadataReviewPage";
 
 export const router = createBrowserRouter([
   {
@@ -132,6 +138,30 @@ export const router = createBrowserRouter([
       {
         path: "video-library",
         element: <VideoLibraryPage />,
+      },
+      {
+        path: "publishing/accounts",
+        element: <ConnectedYouTubeAccountsPage />,
+      },
+      {
+        path: "publishing/videos",
+        element: <PublishingVideosPage />,
+      },
+      {
+        path: "publishing/videos/:videoId/review",
+        element: <VideoMetadataReviewPage />,
+      },
+      {
+        path: "publishing/schedules",
+        element: <ScheduleSettingsPage />,
+      },
+      {
+        path: "publishing/batch",
+        element: <BatchSchedulerPage />,
+      },
+      {
+        path: "publishing/queue",
+        element: <PublishQueueMonitorPage />,
       },
       {
         path: "remix",

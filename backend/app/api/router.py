@@ -19,7 +19,9 @@ from app.api.routes import (
     series,
     scripts,
     templates,
+    youtube,
     usage,
+    videos,
     video_library,
     workspace,
 )
@@ -48,3 +50,7 @@ api_router.include_router(local_workers.router, prefix="/workers", tags=["worker
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(video_library.router, prefix="/video-library", tags=["video-library"])
 api_router.include_router(remix.router, prefix="/remix", tags=["remix"])
+api_router.include_router(youtube.integration_router, prefix="/integrations/youtube", tags=["youtube-integrations"])
+api_router.include_router(youtube.schedule_router, prefix="/youtube", tags=["youtube-schedules"])
+api_router.include_router(youtube.publish_jobs_router, tags=["publish-jobs"])
+api_router.include_router(videos.router, prefix="/videos", tags=["videos"])

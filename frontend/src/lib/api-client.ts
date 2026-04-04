@@ -64,7 +64,7 @@ async function rawFetch(
   method: string,
   url: string,
   headers: Record<string, string>,
-  body: string | undefined,
+  body: BodyInit | undefined,
 ): Promise<Response> {
   return fetch(url, { method, headers, credentials: "include", body });
 }
@@ -83,11 +83,13 @@ async function request<T>(
   const headers: Record<string, string> = {
     ...options.headers,
   };
-  if (options.body !== undefined) {
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (options.body !== undefined && !isFormData) {
     headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
   }
 
-  const serializedBody = options.body !== undefined ? JSON.stringify(options.body) : undefined;
+  const serializedBody =
+    options.body === undefined ? undefined : isFormData ? (options.body as FormData) : JSON.stringify(options.body);
 
   let response = await rawFetch(method, url, headers, serializedBody);
 

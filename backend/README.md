@@ -74,7 +74,17 @@ USE_STUB_PROVIDERS=true
 Notes:
 
 - In `development`, the app auto-generates JWT keys and the app encryption key if they are blank.
+- Database schema is migration-managed. Run `uv run alembic upgrade head` before starting the API.
 - If you want real provider calls, leave `USE_STUB_PROVIDERS=false` and fill the Azure / Vertex variables from [`.env.example`](./.env.example).
+- For YouTube publishing, also fill:
+
+```env
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/integrations/youtube/callback
+FRONTEND_URL=http://localhost:5173
+YOUTUBE_SCOPES=openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/userinfo.profile,https://www.googleapis.com/auth/youtube,https://www.googleapis.com/auth/youtube.upload
+```
 
 ### 2. Start local dependencies
 
@@ -138,6 +148,7 @@ uv run celery -A app.workers.celery_app.celery_app worker -Q audio --loglevel=in
 uv run celery -A app.workers.celery_app.celery_app worker -Q composition --loglevel=info
 uv run celery -A app.workers.celery_app.celery_app worker -Q notifications --loglevel=info
 uv run celery -A app.workers.celery_app.celery_app worker -Q maintenance --loglevel=info
+uv run celery -A app.workers.celery_app.celery_app worker -Q publishing --loglevel=info
 uv run celery -A app.workers.celery_app.celery_app beat --loglevel=info
 ```
 
@@ -150,6 +161,15 @@ Queues currently used by the backend:
 - `composition`
 - `notifications`
 - `maintenance`
+- `publishing`
+
+## YouTube Publishing Notes
+
+- The YouTube connection flow uses Google OAuth 2.0 web-server flow on the FastAPI backend.
+- Tokens are stored encrypted at rest with the app encryption key.
+- The publishing pipeline uses the local Whisper small model for transcription, then generates metadata from the transcript.
+- Scheduled uploads are sent to YouTube as `private` with `publishAt` in UTC.
+- Full manual Google Console setup is documented in [../docs/manual-google-youtube-local-setup.md](../docs/manual-google-youtube-local-setup.md).
 
 ## Full Docker Option
 
@@ -207,6 +227,24 @@ python -m compileall app alembic
 ### `alembic upgrade head` fails against Postgres
 
 Make sure your `DATABASE_URL` points at `postgres`, not `localhost`, when running inside Docker. For local non-Docker execution, `localhost` is correct.
+
+If the API previously booted while development startup was auto-creating tables, you may have tables that exist before Alembic records the revision. Pull the latest code and rerun `uv run alembic upgrade head`. Only reset volumes if you want a full local wipe.
+
+### YouTube OAuth returns `google_client_libraries_missing`
+
+Your backend environment was created before the Google client dependencies were added. Reinstall backend dependencies:
+
+```bash
+cd backend
+uv sync --extra dev
+```
+
+For Docker Compose, rebuild the backend-based services afterward:
+
+```bash
+docker compose build api migrate worker-video worker-publishing beat
+docker compose up
+```
 
 ### Backend starts but provider-backed generation fails
 

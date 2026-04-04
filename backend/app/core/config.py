@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     app_base_url: str = "http://localhost:8000"
     frontend_base_url: str = "http://localhost:5173"
+    frontend_url: str | None = None
     database_url: str = "sqlite:///./reels.db"
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/1"
@@ -106,6 +107,14 @@ class Settings(BaseSettings):
     faster_whisper_device: Literal["auto", "cpu", "cuda"] = "auto"
     faster_whisper_cpu_compute_type: str = "int8"
     faster_whisper_cuda_compute_type: str = "float16"
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    youtube_scopes: str = (
+        "openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/userinfo.profile,"
+        "https://www.googleapis.com/auth/youtube,"
+        "https://www.googleapis.com/auth/youtube.upload"
+    )
     allow_export_without_music: bool = True
     use_stub_providers: bool = False
 
@@ -152,6 +161,11 @@ class Settings(BaseSettings):
     @property
     def cookie_samesite(self) -> str:
         return "strict" if self.cookie_secure else "lax"
+
+    @computed_field
+    @property
+    def frontend_url_resolved(self) -> str:
+        return (self.frontend_url or self.frontend_base_url).rstrip("/")
 
     @computed_field
     @property

@@ -23,6 +23,9 @@ dependencies = [
   "sqlalchemy>=2.0.38",
   "uvicorn[standard]>=0.34.0",
   "faster-whisper>=1.0.3",
+  "google-api-python-client>=2.169.0",
+  "google-auth>=2.40.1",
+  "google-auth-oauthlib>=1.2.2",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +55,7 @@ packages = [
   "app.schemas",
   "app.services",
   "app.integrations",
+  "app.integrations.youtube",
   "app.workers",
   "app.tests",
 ]
